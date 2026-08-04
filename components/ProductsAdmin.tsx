@@ -11,14 +11,15 @@ type InvItem = { name: string; qty: number; status: "ok" | "low" | "out" };
 
 interface Override {
   name?: string;
-  image?: string;
+  image?: string; // legacy 1 ảnh
+  images?: string[]; // tối đa 4 ảnh
   cost?: number;
   priceVn?: number;
   priceKr?: number;
   discount?: number; // %
   stock?: string; // tên mặt hàng kho
   active?: boolean;
-  flavorIds?: string[]; // combo
+  flavorIds?: string[]; // bánh trong set (Hộp/Combo)
 }
 
 interface Product {
@@ -30,10 +31,10 @@ interface Product {
   priceKr: number;
   cost: number;
   discount: number;
-  image?: string;
+  images: string[];
   stock?: string;
   active: boolean;
-  flavorIds?: string[]; // combo
+  flavorIds?: string[]; // bánh trong set
 }
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
@@ -63,10 +64,11 @@ export default function ProductsAdmin({
   }, []);
 
   // sản phẩm gốc từ catalog
-  const base: Product[] = [
+  const base: Omit<Product, "images">[] = [
     ...boxes.map((b) => ({
       key: `box:${b.id}`, type: "Hộp" as const, name: b.name,
       priceVn: b.price_vn, priceKr: b.price_kr, cost: 0, discount: 0, active: b.active,
+      flavorIds: [] as string[],
     })),
     ...combos.map((c) => {
       const bx = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
@@ -85,14 +87,15 @@ export default function ProductsAdmin({
 
   const merged: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
+    const images = o.images ?? (o.image ? [o.image] : []);
     return {
       ...p,
+      images,
       name: o.name ?? p.name,
       priceVn: o.priceVn ?? p.priceVn,
       priceKr: o.priceKr ?? p.priceKr,
       cost: o.cost ?? p.cost,
       discount: o.discount ?? p.discount,
-      image: o.image ?? p.image,
       stock: o.stock ?? p.stock,
       active: o.active ?? p.active,
       flavorIds: o.flavorIds ?? p.flavorIds,
@@ -147,12 +150,19 @@ export default function ProductsAdmin({
                 return (
                   <tr key={p.key} className="cursor-pointer hover:bg-slate-50" onClick={() => setEditKey(p.key)}>
                     <td className="px-4 py-2">
-                      {p.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.image} alt="" className="h-10 w-10 rounded-lg object-cover" />
-                      ) : (
-                        <div className="grid h-10 w-10 place-items-center rounded-lg bg-cream-soft text-gold/50"><TypeIcon t={p.type} /></div>
-                      )}
+                      <div className="relative">
+                        {p.images[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.images[0]} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                        ) : (
+                          <div className="grid h-10 w-10 place-items-center rounded-lg bg-cream-soft text-gold/50"><TypeIcon t={p.type} /></div>
+                        )}
+                        {p.images.length > 1 && (
+                          <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-slate-800 px-1 text-[9px] font-medium text-white">
+                            {p.images.length}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-2 font-medium text-slate-800">{p.name}</td>
                     <td className="px-4 py-2 text-slate-500">{p.type}{p.premium ? " · Premium" : ""}</td>
@@ -215,7 +225,8 @@ function EditModal({
   onClose: () => void;
 }) {
   const [name, setName] = useState(product.name);
-  const [image, setImage] = useState(product.image ?? "");
+  const [images, setImages] = useState<string[]>(product.images ?? []);
+  const [url, setUrl] = useState("");
   const [cost, setCost] = useState(product.cost);
   const [priceVn, setPriceVn] = useState(product.priceVn);
   const [priceKr, setPriceKr] = useState(product.priceKr);
@@ -224,19 +235,30 @@ function EditModal({
   const [active, setActive] = useState(product.active);
   const [flavorIds, setFlavorIds] = useState<string[]>(product.flavorIds ?? []);
   const fileRef = useRef<HTMLInputElement>(null);
-  const isCombo = product.type === "Combo";
+  const hasSet = product.type === "Hộp" || product.type === "Combo";
+  const MAX = 4;
 
-  const pickFile = (f: File | undefined) => {
-    if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => setImage(String(rd.result));
-    rd.readAsDataURL(f);
+  const pickFiles = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).slice(0, MAX).forEach((f) => {
+      const rd = new FileReader();
+      rd.onload = () => setImages((cur) => (cur.length >= MAX ? cur : [...cur, String(rd.result)]));
+      rd.readAsDataURL(f);
+    });
   };
+  const addUrl = () => {
+    const u = url.trim();
+    if (u && images.length < MAX) {
+      setImages((cur) => [...cur, u]);
+      setUrl("");
+    }
+  };
+  const removeImg = (i: number) => setImages((cur) => cur.filter((_, j) => j !== i));
   const toggleFlavor = (id: string) =>
     setFlavorIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   const submit = () =>
-    onSave({ name, image: image || undefined, cost, priceVn, priceKr, discount, stock: stock || undefined, active, flavorIds: isCombo ? flavorIds : undefined });
+    onSave({ name, images, image: images[0] || undefined, cost, priceVn, priceKr, discount, stock: stock || undefined, active, flavorIds: hasSet ? flavorIds : undefined });
 
   const inp = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
 
@@ -252,24 +274,41 @@ function EditModal({
         </div>
 
         <div className="max-h-[72vh] space-y-4 overflow-y-auto p-5">
-          {/* ảnh */}
-          <div className="flex items-center gap-3">
-            {image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={image} alt="" className="h-16 w-16 rounded-lg object-cover" />
-            ) : (
-              <div className="grid h-16 w-16 place-items-center rounded-lg bg-slate-100 text-2xl text-slate-300">❋</div>
-            )}
-            <div className="flex-1">
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
-              <button onClick={() => fileRef.current?.click()} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50">
-                Tải ảnh lên
-              </button>
-              {image && (
-                <button onClick={() => setImage("")} className="ml-2 text-[12px] text-rose-500 hover:underline">Xoá ảnh</button>
+          {/* ảnh — tối đa 4 */}
+          <div>
+            <span className="mb-1.5 block text-[12px] font-medium text-slate-500">Ảnh sản phẩm ({images.length}/{MAX})</span>
+            <div className="flex flex-wrap gap-2">
+              {images.map((src, i) => (
+                <div key={i} className="relative h-16 w-16">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />
+                  <button
+                    onClick={() => removeImg(i)}
+                    className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-rose-500 text-[11px] text-white shadow"
+                  >
+                    ×
+                  </button>
+                  {i === 0 && (
+                    <span className="absolute bottom-0 left-0 rounded-br rounded-tl bg-slate-800/80 px-1 text-[8px] text-white">Ảnh bìa</span>
+                  )}
+                </div>
+              ))}
+              {images.length < MAX && (
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="grid h-16 w-16 place-items-center rounded-lg border-2 border-dashed border-slate-300 text-[11px] text-slate-400 hover:border-blue-400 hover:text-blue-500"
+                >
+                  + Ảnh
+                </button>
               )}
-              <input value={image.startsWith("data:") ? "" : image} onChange={(e) => setImage(e.target.value)} placeholder="hoặc dán URL ảnh" className={`${inp} mt-2`} />
             </div>
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => pickFiles(e.target.files)} />
+            {images.length < MAX && (
+              <div className="mt-2 flex gap-2">
+                <input value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addUrl()} placeholder="hoặc dán URL ảnh rồi Enter" className={inp} />
+                <button onClick={addUrl} className="flex-none rounded-lg border border-slate-200 px-3 text-[12px] font-medium text-slate-600 hover:bg-slate-50">Thêm</button>
+              </div>
+            )}
           </div>
 
           <L label="Tên sản phẩm"><input value={name} onChange={(e) => setName(e.target.value)} className={inp} /></L>
@@ -302,9 +341,9 @@ function EditModal({
             </select>
           </L>
 
-          {/* combo: sửa vị */}
-          {isCombo && (
-            <L label={`Vị trong combo (${flavorIds.length})`}>
+          {/* biến thể: bánh cho vào set (Hộp / Combo) */}
+          {hasSet && (
+            <L label={`Bánh cho vào set — biến thể (${flavorIds.length})`}>
               <div className="flex flex-wrap gap-1.5">
                 {flavors.map((f) => {
                   const on = flavorIds.includes(f.id);
@@ -312,13 +351,14 @@ function EditModal({
                     <button
                       key={f.id}
                       onClick={() => toggleFlavor(f.id)}
-                      className={`rounded-full border px-2.5 py-1 text-[12px] ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"}`}
+                      className={`rounded-full border px-2.5 py-1 text-[12px] ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"} ${f.premium ? (on ? "" : "border-gold text-gold-deep") : ""}`}
                     >
-                      {on ? "✓ " : "+ "}{f.name}
+                      {on ? "✓ " : "+ "}{f.name}{f.premium ? " ★" : ""}
                     </button>
                   );
                 })}
               </div>
+              <p className="mt-1.5 text-[11px] text-slate-400">Chọn các vị bánh được phép cho vào set này.</p>
             </L>
           )}
 
