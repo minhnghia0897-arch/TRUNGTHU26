@@ -42,6 +42,14 @@ export interface OrderRow {
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;
+  // tuỳ chọn — cho popup chi tiết
+  created?: string;
+  assignee?: string;
+  product?: string;
+  expected?: string;
+  gender?: "Nữ" | "Nam";
+  successOrders?: string; // "1/1 đơn"
+  lastBuy?: string;
 }
 
 // màu pill theo trạng thái (giống Pancake)
