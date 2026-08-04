@@ -131,6 +131,13 @@ webhook_event    { id, provider, external_id(unique), payload(jsonb), processed_
 - **Ca chéo vùng** (tiền tệ người đặt ≠ tiền tệ kho): phí ship của kho ở tiền tệ local → **quy đổi về tiền tệ người đặt theo `fx_rate_snapshot` đã chốt trên `web_order`** (không đọc tỉ giá live lúc render lại). `fx_rate` gốc lưu ở `app_config.fx_rate(krw↔vnd)`; đơn snapshot lúc tạo.
 - `shipping_total = Σ shipping_fee (đã quy đổi về currency người đặt)`; `handling_total = Σ handling_fee`.
 
+### 6.1 Tồn kho theo thành phần (BOM / định mức)
+- **Đơn vị kho nguyên tử = VỎ HỘP + BÁNH.** Mỗi loại vỏ = 1 SKU; mỗi vị bánh = 1 SKU. Tồn kho chỉ đếm vỏ và bánh.
+- **Set/combo KHÔNG có tồn riêng** — là sản phẩm "ảo" định nghĩa bằng **định mức**: `1 vỏ + các bánh`. Hộp tự chọn: định mức **động** theo `order_line.flavors`; combo: định mức **cố định** (`flavor_ids`).
+- **Tồn set khả dụng** = `min( tồn_vỏ, ⌊ tồn_bánh_i / sl_bánh_i_trong_set ⌋ ∀ i )` → set giới hạn bởi thành phần thiếu nhất (vd yến sào = 0 ⇒ hộp có yến = 0 set dù vỏ còn nhiều).
+- **Trừ kho khi bán:** bán 1 set → trừ 1 vỏ + từng bánh theo định mức; bán 1 bánh lẻ → trừ bánh đó. **Cùng một vị bánh dùng CHUNG một kho** — set và lẻ rút cùng pool (vd bán 1 set 6 vị + 2 thập cẩm lẻ ⇒ thập cẩm −3).
+- **Đẩy Pancake:** "nổ" set thành các dòng thành phần (1 vỏ + các bánh) hoặc dùng tính năng combo/định mức của Pancake để nó tự trừ đúng. Tồn kho vẫn là **mirror từ Pancake** (§15), web không sửa tồn.
+
 ---
 
 ## 7. Đa người nhận / chia quà
