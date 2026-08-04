@@ -29,11 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className={`${playfair.variable} ${lora.variable}`}>
-      <body>
-        <div className="mx-auto min-h-screen max-w-app bg-cream shadow-2xl">
-          {children}
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

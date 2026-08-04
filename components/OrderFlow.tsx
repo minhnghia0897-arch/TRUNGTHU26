@@ -189,7 +189,7 @@ export default function OrderFlow({
   const STEPS = ["Giỏ", "Người đặt", "Người nhận", "Xem lại", "Thanh toán"];
 
   return (
-    <main className="pb-28">
+    <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
       <header className="bg-maroon-deep px-4 py-3.5 text-center">
         <div className="title-heritage text-base tracking-[0.18em] text-cream">Trăng Rằm</div>
       </header>
