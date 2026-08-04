@@ -18,7 +18,7 @@ export default async function Home({
   );
 
   return (
-    <main className="pb-24">
+    <main className="mx-auto min-h-screen max-w-app bg-cream pb-24 shadow-2xl">
       {/* hotline */}
       <div className="bg-maroon-deep px-3 py-2 text-center text-[11.5px] tracking-wide text-cream">
         Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-gold">1900 6060</b>

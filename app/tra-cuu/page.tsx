@@ -1,7 +1,7 @@
 // Trang tra cứu theo SĐT (Phase 4 — bản khung; nối API + rate-limit sau).
 export default function TraCuuPage() {
   return (
-    <main className="px-4 py-6">
+    <main className="mx-auto min-h-screen max-w-app bg-cream px-4 py-6 shadow-2xl">
       <header className="mb-5 text-center">
         <div className="title-heritage text-base tracking-[0.18em]">Trăng Rằm</div>
         <div className="eyebrow mt-2">Tra cứu</div>
