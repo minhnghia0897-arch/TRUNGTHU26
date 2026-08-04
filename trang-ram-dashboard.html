@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trăng Rằm — Bảng điều hành</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#5A1620; --maroon-deep:#3B0E15; --cream:#F7EFE1;
+    --gold:#C6A24C; --ink:#2B1A16; --line:#E7DAC3; --radius:4px;
+    --serif:'Playfair Display',Georgia,serif; --body:'Lora',Georgia,serif;
+    --ok:#3f7d4e; --warn:#b8862f; --danger:#a33; --muted:#8a7d68;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body); color:var(--ink); background:var(--cream); font-size:14px; line-height:1.5}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 16px 60px}
+  .serif{font-family:var(--serif)}
+  /* topbar */
+  .top{background:var(--maroon-deep); color:var(--cream); padding:14px 16px; margin-bottom:18px}
+  .top .in{max-width:1080px; margin:0 auto; display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .top .brand{font-family:var(--serif); letter-spacing:.16em; text-transform:uppercase; font-weight:700; font-size:16px}
+  .top .brand small{display:block; font-family:var(--body); text-transform:none; letter-spacing:.02em; font-size:10px; opacity:.6}
+  .top .sp{flex:1}
+  .top .mirror{font-size:10.5px; opacity:.7; letter-spacing:.04em}
+  .top .mirror b{color:var(--gold)}
+  /* filters */
+  .filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center}
+  .filters select,.filters input{font-family:var(--body); font-size:13px; padding:8px 10px;
+      border:1px solid var(--line); border-radius:var(--radius); background:#fff; color:var(--ink)}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:#fff}
+  .seg button{border:none; background:#fff; padding:8px 12px; font-family:var(--serif); font-size:11px;
+      text-transform:uppercase; letter-spacing:.05em; cursor:pointer; color:var(--maroon)}
+  .seg button.on{background:var(--maroon); color:var(--cream)}
+  .filters .sp{flex:1}
+  /* kpi */
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px}
+  .kpi{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; position:relative}
+  .kpi .lab{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+  .kpi .val{font-family:var(--serif); font-size:24px; color:var(--maroon); font-weight:700; margin-top:4px}
+  .kpi .sub{font-size:11px; margin-top:3px}
+  .kpi.alert{border-color:var(--gold); background:#fffaf0}
+  .kpi.alert .val{color:var(--warn)}
+  .up{color:var(--ok)} .down{color:var(--danger)}
+  .mirror-tag{position:absolute; top:10px; right:10px; font-size:8px; text-transform:uppercase;
+      letter-spacing:.06em; background:var(--cream); border:1px solid var(--line); color:var(--muted);
+      padding:2px 5px; border-radius:2px}
+  /* layout */
+  .cols{display:grid; grid-template-columns:1.4fr 1fr; gap:16px}
+  @media(max-width:820px){ .cols{grid-template-columns:1fr} }
+  .panel{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:16px}
+  .panel h3{font-family:var(--serif); text-transform:uppercase; letter-spacing:.06em; color:var(--maroon);
+      font-size:13px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center}
+  .panel h3 .src{font-size:8.5px; letter-spacing:.06em; background:var(--maroon); color:var(--cream);
+      padding:2px 6px; border-radius:2px; font-family:var(--body)}
+  .panel h3 .src.pc{background:#2c5a8a}
+  /* daily revenue bars */
+  .bars{display:flex; align-items:flex-end; gap:6px; height:130px; padding-top:6px}
+  .bars .b{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px}
+  .bars .bar{width:100%; background:linear-gradient(var(--maroon),var(--gold)); border-radius:2px 2px 0 0; min-height:3px}
+  .bars .d{font-size:9px; color:var(--muted)}
+  /* inventory */
+  .inv{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px dashed var(--line); font-size:13px}
+  .inv:last-child{border:none}
+  .inv .st{font-size:11px; padding:2px 8px; border-radius:2px}
+  .inv .st.ok{background:#eef6ef; color:var(--ok)}
+  .inv .st.low{background:#fff3e0; color:var(--warn)}
+  .inv .st.out{background:#fbeaea; color:var(--danger)}
+  /* orders by customer */
+  .cust{border:1px solid var(--line); border-radius:var(--radius); margin-bottom:10px; overflow:hidden}
+  .cust .ch{display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer; background:var(--cream)}
+  .cust .ch:hover{background:#f2e9d6}
+  .cust .ch .nm{font-family:var(--serif); color:var(--maroon); text-transform:uppercase; letter-spacing:.03em; font-size:13px}
+  .cust .ch .meta{font-size:11px; color:var(--muted)}
+  .cust .ch .sp{flex:1}
+  .cust .ch .amt{font-family:var(--serif); color:var(--maroon-deep); font-weight:600}
+  .cust .ch .chev{color:var(--gold); transition:.2s}
+  .cust.open .chev{transform:rotate(90deg)}
+  .cust .body{display:none; padding:4px 14px 12px}
+  .cust.open .body{display:block}
+  .ship{border-left:3px solid var(--gold); background:#fff; border:1px solid var(--line);
+        border-radius:var(--radius); padding:10px 12px; margin-top:8px}
+  .ship .sr{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px}
+  .ship .to{font-family:var(--serif); color:var(--maroon); font-size:12.5px}
+  .ship .fin{font-size:11px; color:var(--muted); margin-top:6px; display:flex; gap:12px; flex-wrap:wrap}
+  .badge{font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; padding:2px 7px; border-radius:2px; border:1px solid var(--line)}
+  .badge.kr{color:#2c5a8a} .badge.vn{color:#8a2c2c}
+  .pill{font-size:10px; padding:3px 9px; border-radius:20px; letter-spacing:.03em}
+  .pill.new{background:#eee;color:#555}
+  .pill.mid{background:#fff3e0;color:var(--warn)}
+  .pill.ship{background:#e7f0f7;color:#2c5a8a}
+  .pill.done{background:#eef6ef;color:var(--ok)}
+  .pill.late{background:#fbeaea;color:var(--danger)}
+  .pill.fail{background:#fbeaea;color:var(--danger); border:1px solid var(--danger)}
+  .retry{border:none; background:var(--maroon); color:var(--cream); font-size:9.5px; text-transform:uppercase;
+         letter-spacing:.05em; padding:4px 9px; border-radius:var(--radius); cursor:pointer}
+  .warnbar{background:#fffaf0; border:1px solid var(--gold); border-radius:var(--radius);
+           padding:10px 14px; font-size:12.5px; color:var(--warn); margin-bottom:16px; display:flex; gap:10px; align-items:center}
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <div class="brand">Trăng Rằm<small>Bảng điều hành lớp web</small></div>
+  <div class="sp"></div>
+  <div class="mirror">Tồn kho &amp; vận chuyển <b>đọc mirror từ Pancake</b> · web không sửa ops</div>
+</div></div>
+
+<div class="wrap">
+  <div class="filters">
+    <div class="seg" id="rangeSeg">
+      <button data-r="today">Hôm nay</button>
+      <button data-r="7d" class="on">7 ngày</button>
+      <button data-r="month">Tháng</button>
+    </div>
+    <select id="regionF"><option value="all">Tất cả vùng</option><option value="vn">🇻🇳 VN</option><option value="kr">🇰🇷 Hàn</option></select>
+    <select id="curF"><option value="krw">Hiển thị ₩ KRW</option><option value="vnd">Hiển thị đ VND</option></select>
+    <div class="sp"></div>
+    <input id="search" placeholder="Tìm tên / SĐT / mã đơn" style="min-width:200px">
+  </div>
+
+  <div class="warnbar" id="warnbar"></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="cols">
+    <div>
+      <div class="panel">
+        <h3>Đơn theo khách <span class="src">web-native</span></h3>
+        <div id="customers"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h3>Doanh số theo ngày <span class="src">web-native</span></h3>
+        <div class="bars" id="bars"></div>
+      </div>
+      <div class="panel">
+        <h3>Tồn kho <span class="src pc">Pancake · mirror</span></h3>
+        <div id="inventory"></div>
+        <div style="font-size:10.5px; color:var(--muted); margin-top:10px">Nguồn chân lý = Pancake. Web chỉ hiển thị + cảnh báo dưới ngưỡng, không sửa.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   DATA — dashboard. web-native (đơn/doanh số) do web sở hữu;
+   tồn kho + tracking là MIRROR đọc từ Pancake (§15). Money integer.
+   ========================================================================= */
+const DATA = {
+  fx_rate_krw_vnd: 18.5,
+  kpi: {
+    revenue_krw: 4_820_000,     // hợp nhất chéo vùng, quy về ₩
+    orders: 63, packages: 88,
+    pkg_vn: 34, pkg_kr: 54,
+    shipping: 21,               // đang vận chuyển
+    low_stock: 2,               // cảnh báo tồn (từ Pancake)
+    push_failed: 1              // đơn lỗi đẩy Pancake (web-native)
+  },
+  daily: [ // ₩ (nghìn)
+    {d:"T2",v:410},{d:"T3",v:520},{d:"T4",v:690},{d:"T5",v:640},{d:"T6",v:880},{d:"T7",v:1120},{d:"CN",v:560}
+  ],
+  inventory: [ // mirror Pancake
+    {name:"Vỏ hộp gấm 6 vị", qty:120, status:"ok"},
+    {name:"Bánh thập cẩm 150g", qty:38, status:"low"},
+    {name:"Bánh yến sào 150g", qty:0, status:"out"},
+    {name:"Bánh sen trứng 150g", qty:210, status:"ok"},
+    {name:"Vỏ hộp Đoàn Viên", qty:24, status:"low"}
+  ],
+  customers: [
+    { name:"Kim Min-ji", phone:"010-2233-4455", region:"kr", total_krw:186000, code:"TR-8241",
+      shipments:[
+        { to:"Kim Min · Seoul", region:"kr", wh:"Kho Hàn", carrier:"CJ Logistics", vc:"CJ-771182",
+          status:"Đã gửi hàng", pill:"ship", desired:"2026-09-20", cod:0, prepaid:96000, cuoc:3000 },
+        { to:"Mẹ · Hà Nội", region:"vn", wh:"Kho VN", carrier:"GHN", vc:"GHN-55021",
+          status:"Đang đóng hàng", pill:"mid", desired:"2026-09-21", cod:0, prepaid:90000, cuoc:1600 }
+      ]},
+    { name:"Trần Thu Hà", phone:"090-111-2222", region:"vn", total_krw:88000, code:"TR-8236",
+      shipments:[
+        { to:"Cô Lan · Đà Nẵng", region:"vn", wh:"Kho VN", carrier:"GHTK", vc:"GHTK-90233",
+          status:"Đã nhận", pill:"done", desired:"2026-09-18", cod:0, prepaid:88000, cuoc:1600 }
+      ]},
+    { name:"Park Ji-woo", phone:"010-9876-5432", region:"kr", total_krw:142000, code:"TR-8248",
+      shipments:[
+        { to:"Văn phòng · Busan", region:"kr", wh:"Kho Hàn", carrier:"—", vc:"—",
+          status:"Lỗi đẩy Pancake", pill:"fail", desired:"2026-09-22", cod:0, prepaid:142000, cuoc:0 }
+      ]},
+    { name:"Lê Quốc Anh", phone:"010-5555-6666", region:"kr", total_krw:64000, code:"TR-8250",
+      shipments:[
+        { to:"Nhà · Incheon", region:"kr", wh:"Kho Hàn", carrier:"CJ Logistics", vc:"CJ-771190",
+          status:"Trễ giao", pill:"late", desired:"2026-09-15", cod:0, prepaid:64000, cuoc:3000 }
+      ]}
+  ]
+};
+
+/* ---------- helpers ---------- */
+let showCur='krw';
+const fx=DATA.fx_rate_krw_vnd;
+function money(krw){
+  if(showCur==='vnd') return Math.round(krw*fx).toLocaleString('vi-VN')+'đ';
+  return '₩'+Math.round(krw).toLocaleString('en-US');
+}
+
+/* ---------- kpis ---------- */
+function renderKpis(){
+  const k=DATA.kpi;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="lab">Doanh số hợp nhất</div><div class="val">${money(k.revenue_krw)}</div><div class="sub up">▲ 18% vs kỳ trước</div></div>
+    <div class="kpi"><div class="lab">Số đơn web</div><div class="val">${k.orders}</div><div class="sub">${k.packages} kiện</div></div>
+    <div class="kpi"><div class="lab">Kiện theo vùng</div><div class="val">${k.pkg_kr}<span style="font-size:14px">🇰🇷</span> · ${k.pkg_vn}<span style="font-size:14px">🇻🇳</span></div><div class="sub">tách 2 kho</div></div>
+    <div class="kpi"><div class="lab">Đang vận chuyển</div><div class="val">${k.shipping}</div><div class="mirror-tag">Pancake</div><div class="sub">theo webhook</div></div>
+    <div class="kpi alert"><div class="lab">Cảnh báo tồn</div><div class="val">${k.low_stock}</div><div class="mirror-tag">Pancake</div><div class="sub">dưới ngưỡng</div></div>
+    <div class="kpi alert"><div class="lab">Lỗi đẩy Pancake</div><div class="val">${k.push_failed}</div><div class="sub">cần đẩy lại</div></div>`;
+}
+
+/* ---------- warn bar ---------- */
+function renderWarn(){
+  const n=DATA.kpi.push_failed;
+  document.getElementById('warnbar').innerHTML = n
+    ? `⚠ <b>${n} đơn</b> đẩy Pancake thất bại / một phần — đẩy lại bằng đúng <code>idempotency_key</code>, không sinh đơn mới.`
+    : `✓ Tất cả đơn đã đồng bộ Pancake.`;
+  document.getElementById('warnbar').style.display = n? 'flex':'none';
+}
+
+/* ---------- daily bars ---------- */
+function renderBars(){
+  const max=Math.max(...DATA.daily.map(x=>x.v));
+  document.getElementById('bars').innerHTML = DATA.daily.map(x=>`
+    <div class="b"><div class="bar" style="height:${(x.v/max*100)}%" title="${money(x.v*1000)}"></div><div class="d">${x.d}</div></div>`).join('');
+}
+
+/* ---------- inventory ---------- */
+function renderInventory(){
+  const lab={ok:'Đủ',low:'Sắp hết',out:'Hết'};
+  document.getElementById('inventory').innerHTML = DATA.inventory.map(i=>`
+    <div class="inv"><span>${i.name}</span>
+      <span><b class="serif" style="color:var(--maroon)">${i.qty}</b>
+        <span class="st ${i.status}">${lab[i.status]}</span></span></div>`).join('');
+}
+
+/* ---------- customers ---------- */
+function renderCustomers(){
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  const rf=document.getElementById('regionF').value;
+  const list=DATA.customers.filter(c=>{
+    const okQ=!q || [c.name,c.phone,c.code].join(' ').toLowerCase().includes(q);
+    const okR=rf==='all' || c.shipments.some(s=>s.region===rf);
+    return okQ && okR;
+  });
+  document.getElementById('customers').innerHTML = list.map((c,ci)=>`
+    <div class="cust" id="c${ci}">
+      <div class="ch" onclick="document.getElementById('c${ci}').classList.toggle('open')">
+        <span class="chev">▸</span>
+        <div><div class="nm">${c.name}</div><div class="meta">${c.phone} · ${c.code} · ${c.shipments.length} kiện</div></div>
+        <span class="sp"></span>
+        <span class="badge ${c.region}">${c.region==='kr'?'Đặt ở Hàn':'Đặt ở VN'}</span>
+        <span class="amt">${money(c.total_krw)}</span>
+      </div>
+      <div class="body">${c.shipments.map((s,i)=>`
+        <div class="ship">
+          <div class="sr">
+            <span class="to">Kiện ${i+1} · ${s.to}</span>
+            <span class="badge ${s.region}">${s.wh}</span>
+            <span class="sp" style="flex:1"></span>
+            <span class="pill ${s.pill}">${s.status}</span>
+            ${s.pill==='fail'?`<button class="retry" onclick="alert('Đẩy lại shipment với idempotency_key — không sinh đơn mới.')">Đẩy lại</button>`:''}
+          </div>
+          <div class="fin">
+            <span>ĐVVC: <b>${s.carrier}</b></span>
+            <span>VC: ${s.vc}</span>
+            <span>Hẹn giao: ${s.desired}</span>
+            <span>Trả trước: ${money(s.prepaid)}</span>
+            <span>COD: ${money(s.cod)}</span>
+            <span>Cước VC: ${money(s.cuoc)}</span>
+          </div>
+        </div>`).join('')}</div>
+    </div>`).join('') || `<div style="opacity:.6; padding:14px; text-align:center">Không có đơn khớp bộ lọc.</div>`;
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll('#rangeSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+});
+document.getElementById('curF').addEventListener('change',e=>{ showCur=e.target.value; renderAll(); });
+document.getElementById('regionF').addEventListener('change',renderCustomers);
+document.getElementById('search').addEventListener('input',renderCustomers);
+
+function renderAll(){ renderKpis(); renderWarn(); renderBars(); renderInventory(); renderCustomers(); }
+renderAll();
+</script>
+</body>
+</html>

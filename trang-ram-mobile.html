@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trăng Rằm — Bánh Trung Thu thủ công</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#5A1620; --maroon-deep:#3B0E15; --cream:#F7EFE1;
+    --gold:#C6A24C; --ink:#2B1A16; --line:#E7DAC3;
+    --radius:4px;
+    --serif:'Playfair Display',Georgia,serif;
+    --body:'Lora',Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:var(--body); color:var(--ink); background:#d8cdb8;
+    line-height:1.6; font-size:15px;
+  }
+  .app{max-width:468px; margin:0 auto; background:var(--cream); min-height:100vh;
+       box-shadow:0 0 40px rgba(0,0,0,.18)}
+  /* ---------- primitives ---------- */
+  .eyebrow{font-family:var(--serif); text-transform:uppercase; letter-spacing:.14em;
+           font-size:11px; color:var(--gold); font-weight:600}
+  .title{font-family:var(--serif); text-transform:uppercase; letter-spacing:.08em;
+          color:var(--maroon); font-weight:700; line-height:1.2}
+  .btn{display:inline-block; font-family:var(--serif); text-transform:uppercase;
+       letter-spacing:.1em; font-size:12px; font-weight:600; text-decoration:none;
+       padding:13px 22px; border-radius:var(--radius); cursor:pointer; border:none;
+       transition:.15s}
+  .btn-gold{background:var(--gold); color:var(--maroon-deep)}
+  .btn-gold:active{transform:translateY(1px)}
+  .btn-outline{background:transparent; color:var(--cream); border:1px solid var(--gold)}
+  .divider{display:flex; align-items:center; justify-content:center; gap:12px;
+           color:var(--gold); margin:26px 0}
+  .divider::before,.divider::after{content:''; height:1px; width:40px; background:var(--line)}
+  /* ---------- hotline bar ---------- */
+  .hotline{background:var(--maroon-deep); color:var(--cream); text-align:center;
+           font-size:11.5px; letter-spacing:.05em; padding:7px 12px}
+  .hotline b{color:var(--gold)}
+  /* ---------- header ---------- */
+  header{background:var(--cream); text-align:center; padding:18px 16px 14px;
+         border-bottom:1px solid var(--line)}
+  .brand{font-family:var(--serif); font-weight:700; color:var(--maroon);
+         letter-spacing:.18em; text-transform:uppercase; font-size:20px}
+  .brand small{display:block; font-family:var(--body); font-style:italic;
+               letter-spacing:.02em; text-transform:none; color:var(--ink);
+               font-size:11px; margin-top:3px; opacity:.75}
+  nav{display:flex; justify-content:center; gap:18px; margin-top:12px;
+      font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--maroon)}
+  nav a{color:inherit; text-decoration:none; opacity:.8}
+  /* ---------- hero ---------- */
+  .hero{background:
+        radial-gradient(120% 80% at 50% -10%, #6d1c28 0%, var(--maroon) 45%, var(--maroon-deep) 100%);
+        color:var(--cream); text-align:center; padding:46px 24px 40px; position:relative;
+        overflow:hidden}
+  .hero::before{content:'✦'; position:absolute; inset:0; color:rgba(198,162,76,.10);
+        font-size:220px; display:flex; align-items:center; justify-content:center;
+        pointer-events:none}
+  .hero .eyebrow{position:relative}
+  .hero h1{font-family:var(--serif); font-weight:700; font-size:32px; line-height:1.15;
+           margin:14px 0; letter-spacing:.04em; text-transform:uppercase; position:relative}
+  .hero p{position:relative; max-width:300px; margin:0 auto 22px; opacity:.9; font-size:14px}
+  .hero .btn{position:relative; margin:4px}
+  /* ---------- sale block ---------- */
+  .section{padding:34px 20px}
+  .section-head{text-align:center; margin-bottom:22px}
+  .section-head h2{font-size:20px; margin-top:6px}
+  .cards{display:grid; gap:16px}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+        overflow:hidden}
+  .card .thumb{height:132px; background:linear-gradient(135deg,#7a2230,#4a121b);
+        display:flex; align-items:center; justify-content:center; color:rgba(247,239,225,.85);
+        font-family:var(--serif); font-size:40px}
+  .card .body{padding:14px 16px 16px}
+  .card h3{font-family:var(--serif); text-transform:uppercase; letter-spacing:.06em;
+           color:var(--maroon); font-size:14px; margin-bottom:4px}
+  .card .desc{font-size:12.5px; opacity:.75; margin-bottom:10px; min-height:34px}
+  .card .foot{display:flex; align-items:center; justify-content:space-between}
+  .price{font-family:var(--serif); color:var(--maroon-deep); font-weight:600; font-size:16px}
+  .price small{font-weight:400; font-size:11px; opacity:.6}
+  .tag{display:inline-block; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+       background:var(--cream); color:var(--gold); border:1px solid var(--line);
+       padding:3px 8px; border-radius:2px; margin-bottom:8px}
+  /* ---------- editorial ---------- */
+  .editorial{background:var(--maroon); color:var(--cream); text-align:center;
+             padding:40px 26px; position:relative}
+  .pattern{color:var(--gold); font-size:20px; letter-spacing:.4em; opacity:.6; margin-bottom:14px}
+  .editorial h2{font-family:var(--serif); font-size:22px; letter-spacing:.04em;
+                line-height:1.35; font-weight:600; font-style:italic; text-transform:none}
+  .editorial p{max-width:320px; margin:14px auto 0; opacity:.85; font-size:13.5px}
+  /* ---------- specs ---------- */
+  .specs{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line);
+         border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+  .spec{background:var(--cream); padding:18px 14px; text-align:center}
+  .spec .k{font-family:var(--serif); color:var(--maroon); font-size:22px; font-weight:700}
+  .spec .v{font-size:11px; text-transform:uppercase; letter-spacing:.08em; opacity:.7; margin-top:4px}
+  /* ---------- region + ship note ---------- */
+  .ship{background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+        padding:16px; font-size:12.5px}
+  .ship .row{display:flex; justify-content:space-between; padding:7px 0;
+             border-bottom:1px dashed var(--line)}
+  .ship .row:last-child{border:none}
+  /* ---------- footer ---------- */
+  footer{background:var(--maroon-deep); color:var(--cream); text-align:center;
+         padding:28px 20px; font-size:12px}
+  footer .brand{font-size:16px; color:var(--cream)}
+  footer a{color:var(--gold); text-decoration:none}
+  footer .fine{opacity:.6; margin-top:12px; font-size:11px; line-height:1.7}
+  /* ---------- sticky cta ---------- */
+  .sticky{position:sticky; bottom:0; background:var(--cream); border-top:1px solid var(--line);
+          padding:12px 16px; display:flex; gap:10px; align-items:center}
+  .sticky .btn{flex:1; text-align:center}
+  .regsel{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--maroon);
+          border:1px solid var(--line); border-radius:var(--radius); padding:11px 10px;
+          background:#fff; font-family:var(--serif); font-weight:600}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="hotline">Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b id="hl">—</b></div>
+
+  <header>
+    <div class="brand" id="brand">—<small id="tagline">—</small></div>
+    <nav><a href="#ban">Sản phẩm</a><a href="trang-ram-full.html">Đặt hàng</a><a href="#tra">Tra cứu</a></nav>
+  </header>
+
+  <section class="hero">
+    <div class="eyebrow">Trung Thu · Mùa đoàn viên</div>
+    <h1 id="heroTitle">—</h1>
+    <p id="heroSub">—</p>
+    <a href="trang-ram-full.html" class="btn btn-gold">Đặt ngay</a>
+    <a href="#ban" class="btn btn-outline">Xem bộ sưu tập</a>
+  </section>
+
+  <section class="section" id="ban">
+    <div class="section-head">
+      <div class="eyebrow">Ba cách chọn quà</div>
+      <h2 class="title">Bộ sưu tập</h2>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <div class="editorial">
+    <div class="pattern">✦ ❁ ✦ ❁ ✦</div>
+    <h2 id="edTitle">—</h2>
+    <p id="edBody">—</p>
+  </div>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Cam kết</div>
+      <h2 class="title">Chất lượng</h2>
+    </div>
+    <div class="specs" id="specs"></div>
+  </section>
+
+  <section class="section" id="tra" style="padding-top:0">
+    <div class="section-head">
+      <div class="eyebrow">Vận chuyển</div>
+      <h2 class="title">Phí ship &amp; thời gian</h2>
+    </div>
+    <div class="ship" id="ship"></div>
+    <div class="divider">✦</div>
+    <div style="text-align:center">
+      <a href="trang-ram-full.html#tracking" class="btn btn-gold" style="background:var(--maroon);color:var(--cream)">Tra cứu đơn bằng SĐT</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="brand" id="fbrand">—</div>
+    <div class="fine" id="fine">—</div>
+  </footer>
+
+  <div class="sticky">
+    <select class="regsel" id="region">
+      <option value="kr">🇰🇷 Đặt ở Hàn · ₩</option>
+      <option value="vn">🇻🇳 Đặt ở VN · đ</option>
+    </select>
+    <a href="trang-ram-full.html" class="btn btn-gold">Đặt bánh</a>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   DATA — thay bằng dữ liệu thật từ Supabase. Khớp data model §4 CLAUDE.md.
+   Money = integer đơn vị nhỏ nhất (đ / ₩). Giá theo vùng người đặt.
+   ========================================================================= */
+const DATA = {
+  brand: { name:"Trăng Rằm", tagline:"Bánh Trung Thu thủ công", hotline:"1900 6060" },
+  hero: {
+    title:"Trọn vị đoàn viên",
+    sub:"Bánh nướng · bánh dẻo thủ công, hộp quà biếu tinh tế cho mùa Trung Thu."
+  },
+  editorial: {
+    title:"“Mỗi chiếc bánh là một lời chúc gửi người thương.”",
+    body:"Công thức truyền thống, nhân sên tay trong ngày, không chất bảo quản công nghiệp — gói trong bộ hộp lấy cảm hứng hoa văn Việt."
+  },
+  // giá theo vùng người đặt: price_vn (đồng) / price_kr (won)
+  products: [
+    { icon:"❋", tag:"Chủ đạo", name:"Hộp tự chọn 6 vị", desc:"Chọn vỏ hộp, lấp từng ô bằng vị anh thích.", price_vn:520000, price_kr:52000 },
+    { icon:"✦", tag:"Gợi ý sẵn", name:"Set Đoàn Viên", desc:"Hộp mix sẵn 4 vị best-seller, thêm một chạm.", price_vn:390000, price_kr:39000 },
+    { icon:"❁", tag:"Mua lẻ", name:"Bánh lẻ từng vị", desc:"Thập cẩm, sen nhuyễn, trà xanh, đậu đỏ…", price_vn:65000, price_kr:6500 }
+  ],
+  specs: [
+    { k:"100%", v:"Sên tay trong ngày" },
+    { k:"0", v:"Chất bảo quản CN" },
+    { k:"2 vùng", v:"Giao VN & Hàn" },
+    { k:"45 ngày", v:"Hạn sử dụng" }
+  ],
+  ship: [
+    { region:"🇻🇳 Kho VN", detail:"Nội địa 2–4 ngày", fee:"từ 30.000đ / đã gồm ship set lớn" },
+    { region:"🇰🇷 Kho Hàn", detail:"Nội địa 1–3 ngày", fee:"từ ₩3.000 / freeship đơn lớn" }
+  ],
+  footer: "© 2026 Trăng Rằm · An toàn thực phẩm chứng nhận · Hoàn tiền nếu bánh lỗi · Zalo/KakaoTalk hỗ trợ 8–22h"
+};
+
+/* ---------- render ---------- */
+const fmt = (region, v) => region==='vn'
+  ? v.toLocaleString('vi-VN')+'đ'
+  : '₩'+v.toLocaleString('en-US');
+
+let region = 'kr';
+
+function render(){
+  document.getElementById('hl').textContent = DATA.brand.hotline;
+  document.getElementById('brand').firstChild.textContent = DATA.brand.name;
+  document.getElementById('tagline').textContent = DATA.brand.tagline;
+  document.getElementById('fbrand').textContent = DATA.brand.name;
+  document.getElementById('fine').textContent = DATA.footer;
+  document.getElementById('heroTitle').textContent = DATA.hero.title;
+  document.getElementById('heroSub').textContent = DATA.hero.sub;
+  document.getElementById('edTitle').textContent = DATA.editorial.title;
+  document.getElementById('edBody').textContent = DATA.editorial.body;
+
+  document.getElementById('cards').innerHTML = DATA.products.map(p=>`
+    <div class="card">
+      <div class="thumb">${p.icon}</div>
+      <div class="body">
+        <span class="tag">${p.tag}</span>
+        <h3>${p.name}</h3>
+        <div class="desc">${p.desc}</div>
+        <div class="foot">
+          <span class="price">${fmt(region, region==='vn'?p.price_vn:p.price_kr)} <small>${region==='la'?'':'/ ' + (p.tag==='Mua lẻ'?'chiếc':'hộp')}</small></span>
+          <a href="trang-ram-full.html" class="btn btn-gold" style="padding:9px 14px">Chọn</a>
+        </div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('specs').innerHTML = DATA.specs.map(s=>`
+    <div class="spec"><div class="k">${s.k}</div><div class="v">${s.v}</div></div>`).join('');
+
+  document.getElementById('ship').innerHTML = DATA.ship.map(s=>`
+    <div class="row"><span><b>${s.region}</b> · ${s.detail}</span><span style="color:var(--maroon);font-weight:600">${s.fee}</span></div>`).join('');
+}
+
+document.getElementById('region').addEventListener('change', e=>{ region=e.target.value; render(); });
+render();
+</script>
+</body>
+</html>

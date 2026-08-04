@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trăng Rằm — Đặt hàng</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&display=swap&subset=vietnamese" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#5A1620; --maroon-deep:#3B0E15; --cream:#F7EFE1;
+    --gold:#C6A24C; --ink:#2B1A16; --line:#E7DAC3; --radius:4px;
+    --serif:'Playfair Display',Georgia,serif; --body:'Lora',Georgia,serif;
+    --ok:#3f7d4e; --warn:#b8862f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body); color:var(--ink); background:#d8cdb8; font-size:15px; line-height:1.55}
+  .app{max-width:468px; margin:0 auto; background:var(--cream); min-height:100vh;
+       box-shadow:0 0 40px rgba(0,0,0,.18); padding-bottom:96px}
+  .serif{font-family:var(--serif)}
+  .eyebrow{font-family:var(--serif); text-transform:uppercase; letter-spacing:.14em;
+           font-size:11px; color:var(--gold); font-weight:600}
+  .title{font-family:var(--serif); text-transform:uppercase; letter-spacing:.07em;
+         color:var(--maroon); font-weight:700}
+  /* header + stepper */
+  header{background:var(--maroon-deep); color:var(--cream); padding:14px 16px; text-align:center}
+  header .brand{font-family:var(--serif); letter-spacing:.18em; text-transform:uppercase;
+                font-size:16px; font-weight:700}
+  .stepper{display:flex; background:var(--maroon); color:var(--cream)}
+  .stepper .s{flex:1; text-align:center; padding:9px 2px; font-size:9.5px;
+              text-transform:uppercase; letter-spacing:.05em; opacity:.5; position:relative}
+  .stepper .s.active{opacity:1; color:var(--gold)}
+  .stepper .s .n{display:inline-flex; width:18px; height:18px; border-radius:50%;
+       border:1px solid currentColor; align-items:center; justify-content:center;
+       font-family:var(--serif); font-size:10px; margin-bottom:3px}
+  .stepper .s.done .n{background:var(--gold); color:var(--maroon-deep); border-color:var(--gold)}
+  /* step body */
+  .step{display:none; padding:20px 16px}
+  .step.on{display:block}
+  .step > .eyebrow{display:block; margin-bottom:2px}
+  .step > h2{font-family:var(--serif); text-transform:uppercase; letter-spacing:.06em;
+             color:var(--maroon); font-size:19px; margin-bottom:16px}
+  /* cards / lines */
+  .box{background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+       padding:14px; margin-bottom:12px}
+  .line{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+  .line .nm{font-family:var(--serif); text-transform:uppercase; letter-spacing:.04em;
+            font-size:13px; color:var(--maroon)}
+  .line .sub{font-size:12px; opacity:.7; margin-top:2px}
+  .price{font-family:var(--serif); color:var(--maroon-deep); font-weight:600}
+  .qty{display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:var(--radius)}
+  .qty button{width:28px; height:28px; border:none; background:#fff; font-size:16px;
+              color:var(--maroon); cursor:pointer}
+  .qty span{width:30px; text-align:center; font-family:var(--serif)}
+  /* builder slots */
+  .slots{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0}
+  .slot{aspect-ratio:1; border:1.5px dashed var(--line); border-radius:var(--radius);
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        font-size:11px; text-align:center; color:var(--maroon); background:var(--cream);
+        cursor:pointer; padding:4px}
+  .slot.filled{border-style:solid; border-color:var(--gold); background:#fff}
+  .slot .ic{font-size:20px; color:var(--gold)}
+  .flavors{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+  .chip{font-size:11px; padding:6px 10px; border:1px solid var(--line); border-radius:20px;
+        background:#fff; cursor:pointer; letter-spacing:.02em}
+  .chip.prem{border-color:var(--gold); color:var(--maroon)}
+  .chip .p{color:var(--gold); font-size:10px}
+  /* inputs */
+  label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+        color:var(--maroon); margin:12px 0 5px; font-family:var(--serif); font-weight:600}
+  input,select,textarea{width:100%; font-family:var(--body); font-size:14px; padding:10px 12px;
+        border:1px solid var(--line); border-radius:var(--radius); background:#fff; color:var(--ink)}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .hint{font-size:11px; opacity:.65; margin-top:5px}
+  /* recipient card */
+  .rcp{border-left:3px solid var(--gold)}
+  .rcp .rh{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+  .badge{font-size:10px; text-transform:uppercase; letter-spacing:.06em; padding:3px 8px;
+         border-radius:2px; background:var(--cream); border:1px solid var(--line)}
+  .badge.kr{color:#2c5a8a} .badge.vn{color:#8a2c2c}
+  .assign{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .assign .chip.sel{background:var(--maroon); color:var(--cream); border-color:var(--maroon)}
+  /* review bill */
+  .bill .row{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--line); font-size:13px}
+  .bill .row.total{border:none; border-top:2px solid var(--maroon); margin-top:6px; padding-top:10px;
+                   font-family:var(--serif); font-size:17px; color:var(--maroon)}
+  .kase{background:var(--cream); border:1px solid var(--line); border-radius:var(--radius);
+        padding:10px 12px; margin-bottom:8px; font-size:12.5px}
+  .kase .kh{display:flex; justify-content:space-between; font-family:var(--serif);
+            color:var(--maroon); text-transform:uppercase; letter-spacing:.04em; font-size:12px; margin-bottom:4px}
+  /* payment */
+  .qr{width:180px; height:180px; margin:10px auto; background:#fff; border:1px solid var(--line);
+      border-radius:var(--radius); display:flex; align-items:center; justify-content:center;
+      background-image:repeating-linear-gradient(45deg,#2b1a16 0 6px,transparent 6px 12px);
+      background-clip:padding-box}
+  .copyrow{display:flex; justify-content:space-between; align-items:center; background:#fff;
+           border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; margin-bottom:8px}
+  .copyrow .k{font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.6}
+  .copyrow .v{font-family:var(--serif); color:var(--maroon); font-weight:600; font-size:14px}
+  .copyrow button{border:none; background:var(--maroon); color:var(--cream); font-size:10px;
+                  text-transform:uppercase; letter-spacing:.06em; padding:6px 10px;
+                  border-radius:var(--radius); cursor:pointer; margin-left:8px}
+  .note{background:#fff8ec; border:1px solid var(--gold); border-radius:var(--radius);
+        padding:10px 12px; font-size:12px; color:var(--warn); margin-top:10px}
+  /* footer nav */
+  .navbar{position:fixed; bottom:0; left:0; right:0; max-width:468px; margin:0 auto;
+          background:var(--cream); border-top:1px solid var(--line); padding:12px 16px;
+          display:flex; gap:10px; align-items:center}
+  .navbar .tot{flex:1; font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.7}
+  .navbar .tot b{display:block; font-family:var(--serif); font-size:17px; color:var(--maroon);
+                 text-transform:none; letter-spacing:0}
+  .btn{font-family:var(--serif); text-transform:uppercase; letter-spacing:.1em; font-size:12px;
+       font-weight:600; padding:13px 20px; border:none; border-radius:var(--radius); cursor:pointer}
+  .btn-gold{background:var(--gold); color:var(--maroon-deep)}
+  .btn-ghost{background:transparent; color:var(--maroon); border:1px solid var(--line)}
+  .btn:disabled{opacity:.4}
+  .addbtn{width:100%; border:1px dashed var(--line); background:var(--cream); color:var(--maroon);
+          padding:11px; border-radius:var(--radius); font-family:var(--serif); text-transform:uppercase;
+          letter-spacing:.06em; font-size:12px; cursor:pointer; margin-bottom:12px}
+  .success{text-align:center; padding:40px 20px}
+  .success .ic{font-size:48px; color:var(--gold)}
+  /* tracking */
+  .track-timeline{list-style:none; margin-top:8px}
+  .track-timeline li{display:flex; gap:10px; padding:6px 0; font-size:12.5px}
+  .track-timeline .dot{width:12px; height:12px; border-radius:50%; border:2px solid var(--line);
+                       margin-top:3px; flex:none}
+  .track-timeline li.done .dot{background:var(--ok); border-color:var(--ok)}
+  .track-timeline li.now .dot{background:var(--gold); border-color:var(--gold)}
+  .track-timeline li.now{font-weight:600; color:var(--maroon)}
+  .tag-src{font-size:9px; text-transform:uppercase; letter-spacing:.06em; padding:2px 6px;
+           border-radius:2px; background:var(--maroon); color:var(--cream)}
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand">Trăng Rằm</div></header>
+  <div class="stepper" id="stepper"></div>
+
+  <!-- STEP 1: GIỎ -->
+  <section class="step on" data-step="1">
+    <span class="eyebrow">Bước 1</span><h2>Giỏ hàng</h2>
+    <div id="cart"></div>
+    <button class="addbtn" onclick="go(1.5)">+ Hộp tự chọn</button>
+  </section>
+
+  <!-- STEP 1.5: BUILDER -->
+  <section class="step" data-step="1.5">
+    <span class="eyebrow">Hộp tự chọn</span><h2>Lấp từng ô</h2>
+    <div class="box">
+      <div class="line"><div><div class="nm" id="bxName">—</div><div class="sub" id="bxSpec">—</div></div>
+        <span class="price" id="bxPrice">—</span></div>
+      <div class="slots" id="slots"></div>
+      <div class="eyebrow">Chọn vị cho ô đang mở</div>
+      <div class="flavors" id="flavors"></div>
+      <div class="hint">Giá hộp = giá phẳng theo size + phụ thu vị premium. Không cộng giá lẻ từng bánh.</div>
+    </div>
+    <button class="btn btn-gold" style="width:100%" onclick="addBox()">Thêm hộp vào giỏ</button>
+  </section>
+
+  <!-- STEP 2: NGƯỜI ĐẶT -->
+  <section class="step" data-step="2">
+    <span class="eyebrow">Bước 2</span><h2>Người đặt</h2>
+    <div class="box">
+      <label>Vùng đặt hàng · quyết tiền tệ</label>
+      <select id="buyerRegion">
+        <option value="kr">🇰🇷 Ở Hàn Quốc → thanh toán ₩ KRW</option>
+        <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
+      </select>
+      <label>Họ tên</label><input id="bName" placeholder="Nguyễn Văn A">
+      <label>Số điện thoại · bắt buộc</label><input id="bPhone" placeholder="010-xxxx-xxxx / 09xx xxx xxx">
+      <div class="hint">SĐT dùng để đối soát khách với Pancake &amp; tra cứu đơn về sau.</div>
+    </div>
+  </section>
+
+  <!-- STEP 3: NGƯỜI NHẬN -->
+  <section class="step" data-step="3">
+    <span class="eyebrow">Bước 3</span><h2>Người nhận &amp; chia quà</h2>
+    <div id="recipients"></div>
+    <button class="addbtn" onclick="addRecipient()">+ Thêm người nhận</button>
+    <div class="hint">Kho &amp; phí ship bám vùng người nhận. Gán mỗi dòng hàng cho đúng một người.</div>
+  </section>
+
+  <!-- STEP 4: XEM LẠI -->
+  <section class="step" data-step="4">
+    <span class="eyebrow">Bước 4</span><h2>Xem lại</h2>
+    <div id="review"></div>
+  </section>
+
+  <!-- STEP 5: THANH TOÁN -->
+  <section class="step" data-step="5">
+    <span class="eyebrow">Bước 5</span><h2>Chuyển khoản</h2>
+    <div class="box" style="text-align:center">
+      <div class="eyebrow" id="payBank">—</div>
+      <div class="qr">QR</div>
+      <div class="hint" id="payQrNote">Quét bằng app ngân hàng</div>
+    </div>
+    <div class="copyrow"><div><div class="k">Số tài khoản</div><div class="v" id="payAcc">—</div></div><button onclick="cp(this,'payAcc')">Copy</button></div>
+    <div class="copyrow"><div><div class="k">Số tiền</div><div class="v" id="payAmt">—</div></div><button onclick="cp(this,'payAmt')">Copy</button></div>
+    <div class="copyrow"><div><div class="k">Nội dung CK · mã đối soát</div><div class="v" id="payCode">—</div></div><button onclick="cp(this,'payCode')">Copy</button></div>
+    <div class="note">⚠ Ghi <b>đúng mã đối soát</b> ở nội dung CK. Đơn tự xác nhận khi tiền về đúng mã + đúng số tiền.</div>
+  </section>
+
+  <!-- STEP 6: XÁC NHẬN -->
+  <section class="step" data-step="6">
+    <div class="success">
+      <div class="ic">✦</div>
+      <h2 class="title" style="font-size:20px; margin:12px 0">Đã nhận đơn</h2>
+      <p style="opacity:.8; font-size:13.5px">Mã đơn <b id="doneCode" class="serif">—</b>. Đơn được đẩy sang Pancake khi tiền về; theo dõi từng kiện bên dưới.</p>
+      <button class="btn btn-gold" style="margin-top:18px" onclick="location.hash='tracking';go('t')">Theo dõi đơn</button>
+    </div>
+  </section>
+
+  <!-- TRACKING -->
+  <section class="step" data-step="t" id="tracking">
+    <span class="eyebrow">Tra cứu</span><h2>Theo dõi đơn</h2>
+    <div class="box">
+      <label>Số điện thoại đã đặt</label>
+      <div style="display:flex; gap:8px">
+        <input id="trkPhone" placeholder="Nhập SĐT">
+        <button class="btn btn-gold" onclick="lookup()">Tra</button>
+      </div>
+      <div class="hint">Không cần đăng nhập. Có giới hạn số lần tra để chống dò.</div>
+    </div>
+    <div id="trkResult"></div>
+  </section>
+
+  <div class="navbar">
+    <div class="tot">Tạm tính<b id="navTotal">—</b></div>
+    <button class="btn btn-ghost" id="btnBack" onclick="back()">Lùi</button>
+    <button class="btn btn-gold" id="btnNext" onclick="next()">Tiếp</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   DATA — thay bằng dữ liệu thật (Supabase §4). Money = integer đơn vị nhỏ nhất.
+   Giá theo vùng NGƯỜI ĐẶT; phí ship theo vùng NGƯỜI NHẬN, quy đổi qua fx_rate.
+   ========================================================================= */
+const DATA = {
+  config: {
+    fx_rate_krw_vnd: 18.5,          // 1 KRW = 18.5 VND (snapshot vào web_order lúc tạo đơn)
+    banks: {
+      vn: { name:"Vietcombank · CTY TRĂNG RẰM", acc:"0123456789", label:"VietQR napas247" },
+      kr: { name:"KakaoBank · TRANG RAM", acc:"3333-01-2345678", label:"QR Toss / chuyển khoản" }
+    }
+  },
+  // hộp tự chọn: giá phẳng theo size (price theo vùng người đặt) + phụ thu premium
+  box: { id:"box6", name:"Hộp gấm 6 vị", slots:6, weight:150, allowed_flavor_weight:150,
+         spec:"6 ô · bánh 150g · hộp gấm gold", price_vn:480000, price_kr:48000 },
+  flavors: [
+    { id:"f1", name:"Thập cẩm gà quay", premium:false, sur_vn:0, sur_kr:0 },
+    { id:"f2", name:"Sen nhuyễn trứng", premium:false, sur_vn:0, sur_kr:0 },
+    { id:"f3", name:"Trà xanh", premium:false, sur_vn:0, sur_kr:0 },
+    { id:"f4", name:"Đậu đỏ", premium:false, sur_vn:0, sur_kr:0 },
+    { id:"f5", name:"Vi cá · bào ngư", premium:true, sur_vn:60000, sur_kr:6000 },
+    { id:"f6", name:"Yến sào", premium:true, sur_vn:80000, sur_kr:8000 }
+  ],
+  // fee_table đơn giản theo kho (local currency); handling cho ca chéo vùng
+  warehouses: {
+    vn: { region:"vn", mode:"separate", ship_local:30000, handling_local:0, currency:"vnd" },
+    kr: { region:"kr", mode:"separate", ship_local:3000,  handling_local:0, currency:"krw" }
+  },
+  // demo tracking (mirror từ Pancake webhook §10.5)
+  pipeline: ["Mới","Chờ hàng","Đã xác nhận","Đang đóng hàng","Chờ chuyển hàng","Đã gửi hàng","Đã nhận","Đã thu tiền"],
+  demoOrders: [
+    { code:"TR-8241", currency:"kr", shipments:[
+      { to:"Kim Min · Seoul", region:"kr", carrier:"CJ Logistics", vc:"CJ-771182", status:"Đã gửi hàng", desired:"2026-09-20" },
+      { to:"Mẹ · Hà Nội", region:"vn", carrier:"GHN", vc:"GHN-55021", status:"Đang đóng hàng", desired:"2026-09-21" }
+    ]}
+  ]
+};
+
+/* ---------------- state ---------------- */
+const S = {
+  step: 1,
+  buyerRegion: 'kr',
+  cart: [],            // {uid, kind, name, flavors:[], unit, recipientUid}
+  recipients: [],      // {uid, name, phone, address, region, desired}
+  builder: { openSlot:0, picks:[] }
+};
+const STEPS = [
+  {id:1,   label:"Giỏ"},
+  {id:2,   label:"Người đặt"},
+  {id:3,   label:"Người nhận"},
+  {id:4,   label:"Xem lại"},
+  {id:5,   label:"Thanh toán"},
+  {id:6,   label:"Xong"}
+];
+const cur = () => S.buyerRegion;
+const fx  = DATA.config.fx_rate_krw_vnd;
+const fmt = (v, region=cur()) => region==='vn'
+  ? Math.round(v).toLocaleString('vi-VN')+'đ'
+  : '₩'+Math.round(v).toLocaleString('en-US');
+const boxPrice = () => cur()==='vn'?DATA.box.price_vn:DATA.box.price_kr;
+const sur = f => cur()==='vn'?f.sur_vn:f.sur_kr;
+let uid=0; const nid=()=>'u'+(++uid);
+
+/* convert phí ship kho → tiền tệ người đặt (§6) */
+function shipFeeInBuyerCurrency(recipRegion){
+  const wh = DATA.warehouses[recipRegion];
+  let fee = wh.ship_local, handling = wh.handling_local;
+  // local currency của kho khác tiền tệ người đặt → quy đổi qua fx snapshot
+  if (wh.currency !== (cur()==='vn'?'vnd':'krw')){
+    const toKRW = v => wh.currency==='vnd' ? v/fx : v;      // về KRW
+    const conv  = v => cur()==='vn' ? toKRW(v)*fx : toKRW(v);
+    fee = conv(fee); handling = conv(handling);
+  }
+  return { fee, handling };
+}
+
+/* ---------------- stepper ---------------- */
+function renderStepper(){
+  const active = Math.floor(S.step);
+  document.getElementById('stepper').innerHTML = STEPS.map(s=>`
+    <div class="s ${s.id===active?'active':''} ${s.id<active?'done':''}">
+      <div class="n">${s.id<active?'✓':s.id}</div>${s.label}
+    </div>`).join('');
+}
+
+/* ---------------- cart ---------------- */
+function renderCart(){
+  const el = document.getElementById('cart');
+  if(!S.cart.length){ el.innerHTML = `<div class="box" style="text-align:center;opacity:.6">Giỏ trống — thêm hộp tự chọn bên dưới.</div>`; }
+  else el.innerHTML = S.cart.map(it=>`
+    <div class="box"><div class="line">
+      <div><div class="nm">${it.name}</div><div class="sub">${it.flavors.join(' · ')||'—'}</div></div>
+      <div style="text-align:right"><span class="price">${fmt(it.unit)}</span>
+        <div class="qty" style="margin-top:6px"><button onclick="delItem('${it.uid}')">🗑</button></div></div>
+    </div></div>`).join('');
+  updateTotals();
+}
+
+/* ---------------- builder ---------------- */
+function renderBuilder(){
+  document.getElementById('bxName').textContent = DATA.box.name;
+  document.getElementById('bxSpec').textContent = DATA.box.spec;
+  const total = boxPrice() + S.builder.picks.reduce((a,fid)=>{const f=DATA.flavors.find(x=>x.id===fid);return a+(f?sur(f):0)},0);
+  document.getElementById('bxPrice').textContent = fmt(total);
+  document.getElementById('slots').innerHTML = Array.from({length:DATA.box.slots},(_,i)=>{
+    const fid=S.builder.picks[i]; const f=fid&&DATA.flavors.find(x=>x.id===fid);
+    return `<div class="slot ${f?'filled':''} ${i===S.builder.openSlot?'':''}" onclick="openSlot(${i})">
+      ${f?`<div class="ic">✦</div>${f.name}`:`<div class="ic">＋</div>Ô ${i+1}`}</div>`;
+  }).join('');
+  document.getElementById('flavors').innerHTML = DATA.flavors.map(f=>`
+    <span class="chip ${f.premium?'prem':''}" onclick="pick('${f.id}')">${f.name}${f.premium?` <span class="p">+${fmt(sur(f))}</span>`:''}</span>`).join('');
+}
+function openSlot(i){ S.builder.openSlot=i; renderBuilder(); }
+function pick(fid){
+  S.builder.picks[S.builder.openSlot]=fid;
+  if(S.builder.openSlot<DATA.box.slots-1) S.builder.openSlot++;
+  renderBuilder();
+}
+function addBox(){
+  // validate §8.1: đủ ô, đúng số slot
+  const filled = S.builder.picks.filter(Boolean).length;
+  if(filled<DATA.box.slots){ alert(`Cần lấp đủ ${DATA.box.slots} ô (đang ${filled}).`); return; }
+  const total = boxPrice()+S.builder.picks.reduce((a,fid)=>a+sur(DATA.flavors.find(x=>x.id===fid)),0);
+  S.cart.push({ uid:nid(), kind:'box', name:DATA.box.name,
+    flavors:S.builder.picks.map(fid=>DATA.flavors.find(x=>x.id===fid).name), unit:total, recipientUid:null });
+  S.builder={openSlot:0,picks:[]};
+  go(1); renderCart();
+}
+function delItem(u){ S.cart=S.cart.filter(x=>x.uid!==u); renderCart(); }
+
+/* ---------------- recipients ---------------- */
+function addRecipient(){
+  S.recipients.push({ uid:nid(), name:'', phone:'', address:'', region:'kr', desired:'' });
+  renderRecipients();
+}
+function renderRecipients(){
+  if(!S.recipients.length) addRecipient();
+  document.getElementById('recipients').innerHTML = S.recipients.map((r,i)=>`
+    <div class="box rcp">
+      <div class="rh"><div class="nm">Người nhận ${i+1}</div>
+        <span class="badge ${r.region}">${r.region==='kr'?'🇰🇷 Kho Hàn':'🇻🇳 Kho VN'}</span></div>
+      <div class="grid2">
+        <div><label>Tên</label><input value="${r.name}" oninput="setR('${r.uid}','name',this.value)"></div>
+        <div><label>SĐT</label><input value="${r.phone}" oninput="setR('${r.uid}','phone',this.value)"></div>
+      </div>
+      <label>Địa chỉ</label><input value="${r.address}" oninput="setR('${r.uid}','address',this.value)">
+      <div class="grid2">
+        <div><label>Vùng giao</label>
+          <select onchange="setR('${r.uid}','region',this.value)">
+            <option value="kr" ${r.region==='kr'?'selected':''}>🇰🇷 Hàn Quốc</option>
+            <option value="vn" ${r.region==='vn'?'selected':''}>🇻🇳 Việt Nam</option>
+          </select></div>
+        <div><label>Ngày muốn nhận</label><input type="date" value="${r.desired}" onchange="setR('${r.uid}','desired',this.value)"></div>
+      </div>
+      <label>Gán quà cho người này</label>
+      <div class="assign">${S.cart.map(it=>`
+        <span class="chip ${it.recipientUid===r.uid?'sel':''}" onclick="assign('${it.uid}','${r.uid}')">${it.name}</span>`).join('')||'<span class="hint">Giỏ trống</span>'}</div>
+    </div>`).join('');
+}
+function setR(u,k,v){ const r=S.recipients.find(x=>x.uid===u); r[k]=v; if(k==='region') renderRecipients(); }
+function assign(itemUid,rUid){ const it=S.cart.find(x=>x.uid===itemUid); it.recipientUid = it.recipientUid===rUid?null:rUid; renderRecipients(); }
+
+/* ---------------- review ---------------- */
+function computeBill(){
+  const subtotal = S.cart.reduce((a,it)=>a+it.unit,0);
+  let shipping=0, handling=0;
+  const shipments = S.recipients.map((r,i)=>{
+    const items = S.cart.filter(it=>it.recipientUid===r.uid);
+    const {fee,handling:h} = shipFeeInBuyerCurrency(r.region);
+    if(items.length){ shipping+=fee; handling+=h; }
+    return { r, i, items, fee, handling:h };
+  }).filter(s=>s.items.length);
+  return { subtotal, shipping, handling, grand:subtotal+shipping+handling, shipments };
+}
+function renderReview(){
+  const b=computeBill();
+  document.getElementById('review').innerHTML = `
+    ${b.shipments.map((s,i)=>`
+      <div class="kase">
+        <div class="kh"><span>Kiện ${i+1}/${b.shipments.length} · ${s.r.name||'—'}</span>
+          <span class="badge ${s.r.region}">${s.r.region==='kr'?'Kho Hàn':'Kho VN'}</span></div>
+        <div class="sub">${s.items.map(x=>x.name).join(', ')} · giao ${s.r.desired||'—'}</div>
+        <div class="line" style="margin-top:6px"><span class="sub">Phí ship${s.handling?' + handling':''}</span>
+          <span class="price" style="font-size:13px">${fmt(s.fee+s.handling)}</span></div>
+      </div>`).join('')}
+    <div class="box bill">
+      <div class="row"><span>Tạm tính (${S.cart.length} món)</span><span>${fmt(b.subtotal)}</span></div>
+      <div class="row"><span>Phí ship (${b.shipments.length} kiện)</span><span>${fmt(b.shipping)}</span></div>
+      ${b.handling?`<div class="row"><span>Phí handling chéo vùng</span><span>${fmt(b.handling)}</span></div>`:''}
+      <div class="row total"><span>Tổng · ${cur()==='vn'?'VND':'KRW'}</span><span>${fmt(b.grand)}</span></div>
+    </div>
+    <div class="hint">Một bill · một tiền tệ theo người đặt · ${b.shipments.length} kiện tách kho. Tỉ giá chốt: 1₩ = ${fx}đ.</div>`;
+}
+
+/* ---------------- payment ---------------- */
+let orderCode='';
+function renderPayment(){
+  const b=computeBill();
+  const bank=DATA.config.banks[cur()];
+  orderCode = 'TR-'+Math.floor(1000+Math.abs(hash(JSON.stringify(S.cart)+Date.now()))%9000);
+  document.getElementById('payBank').textContent = bank.name;
+  document.getElementById('payQrNote').textContent = bank.label;
+  document.getElementById('payAcc').textContent = bank.acc;
+  document.getElementById('payAmt').textContent = fmt(b.grand);
+  document.getElementById('payCode').textContent = orderCode;
+  document.getElementById('doneCode').textContent = orderCode;
+}
+function hash(s){let h=0;for(let i=0;i<s.length;i++){h=(h<<5)-h+s.charCodeAt(i)|0}return h}
+function cp(btn,id){
+  const t=document.getElementById(id).textContent;
+  navigator.clipboard?.writeText(t); const o=btn.textContent; btn.textContent='✓'; setTimeout(()=>btn.textContent=o,900);
+}
+
+/* ---------------- tracking ---------------- */
+function lookup(){
+  const el=document.getElementById('trkResult');
+  const o=DATA.demoOrders[0];
+  el.innerHTML = `<div class="hint" style="margin:8px 0">Đơn của SĐT vừa nhập (demo):</div>` +
+    `<div class="box"><div class="line"><div class="nm">Đơn ${o.code}</div><span class="tag-src">web</span></div>` +
+    o.shipments.map((s,i)=>{
+      const idx=DATA.pipeline.indexOf(s.status);
+      return `<div class="kase" style="margin-top:10px">
+        <div class="kh"><span>Kiện ${i+1} · ${s.to}</span><span class="badge ${s.region}">${s.region==='kr'?'Hàn':'VN'}</span></div>
+        <div class="sub">${s.carrier} · VC ${s.vc} · hẹn ${s.desired}</div>
+        <ul class="track-timeline">${DATA.pipeline.map((p,pi)=>`
+          <li class="${pi<idx?'done':pi===idx?'now':''}"><span class="dot"></span>${p}</li>`).join('')}</ul>
+      </div>`;
+    }).join('') + `</div>`;
+}
+
+/* ---------------- nav ---------------- */
+function updateTotals(){
+  const b=computeBill();
+  document.getElementById('navTotal').textContent = fmt(b.grand||S.cart.reduce((a,i)=>a+i.unit,0));
+}
+function showStep(){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('on'));
+  const el=document.querySelector(`.step[data-step="${S.step}"]`); if(el) el.classList.add('on');
+  renderStepper();
+  const back=document.getElementById('btnBack'), nextb=document.getElementById('btnNext');
+  const isFlow = typeof S.step==='number';
+  document.querySelector('.navbar').style.display = (S.step===6||S.step==='t')?'none':'flex';
+  if(S.step===1.5){ back.onclick=()=>go(1); }
+  window.scrollTo(0,0);
+}
+function go(step){
+  S.step=step;
+  if(step===1) renderCart();
+  if(step===1.5) renderBuilder();
+  if(step===3) renderRecipients();
+  if(step===4) renderReview();
+  if(step===5) renderPayment();
+  showStep();
+}
+function next(){
+  const flow=[1,2,3,4,5,6];
+  if(S.step===1){ if(!S.cart.length){alert('Giỏ đang trống.');return;} go(2); return; }
+  if(S.step===2){
+    S.buyerRegion=document.getElementById('buyerRegion').value;
+    if(!document.getElementById('bPhone').value.trim()){alert('SĐT người đặt là bắt buộc.');return;}
+    renderCart(); go(3); return;
+  }
+  if(S.step===3){
+    const unassigned=S.cart.filter(it=>!it.recipientUid);
+    if(unassigned.length){alert('Còn món chưa gán người nhận.');return;}
+    go(4); return;
+  }
+  if(S.step===4){ go(5); return; }
+  if(S.step===5){ go(6); return; }
+}
+function back(){
+  const map={1.5:1, 2:1, 3:2, 4:3, 5:4};
+  if(map[S.step]!==undefined) go(map[S.step]);
+}
+
+/* ---------------- init ---------------- */
+document.getElementById('buyerRegion').addEventListener('change',e=>{ S.buyerRegion=e.target.value; renderCart(); });
+// seed demo cart
+S.cart.push({uid:nid(),kind:'combo',name:'Set Đoàn Viên',flavors:['Thập cẩm','Sen trứng','Trà xanh','Đậu đỏ'],unit:DATA.box.price_kr,recipientUid:null});
+renderCart(); go(1);
+if(location.hash==='#tracking'){ go('t'); }
+</script>
+</body>
+</html>
