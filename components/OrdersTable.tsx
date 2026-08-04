@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ORDERS,
   PIPELINE,
@@ -23,7 +23,10 @@ import {
   IconTrash,
   IconPlus,
 } from "@/components/icons";
-import OrderDetailModal from "@/components/OrderDetailModal";
+import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
+
+const HISTORY_KEY = "tr_order_history";
+const EDITS_KEY = "tr_order_edits";
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -58,6 +61,51 @@ export default function OrdersTable() {
   const [pageSize, setPageSize] = useState(500);
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [history, setHistory] = useState<Record<number, HistoryEntry[]>>({});
+
+  // nạp lịch sử + đơn đã sửa (localStorage) — demo persist; thật sẽ đọc DB/bảng audit
+  useEffect(() => {
+    try {
+      const h = localStorage.getItem(HISTORY_KEY);
+      if (h) setHistory(JSON.parse(h));
+      const e = localStorage.getItem(EDITS_KEY);
+      if (e) {
+        const edits: Record<number, OrderRow> = JSON.parse(e);
+        setRows((rs) => rs.map((r) => edits[r.id] ?? r));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const stamp = () => {
+    const n = new Date();
+    const p = (x: number) => String(x).padStart(2, "0");
+    return `${p(n.getDate())}/${p(n.getMonth() + 1)}/${n.getFullYear()} ${p(n.getHours())}:${p(n.getMinutes())}`;
+  };
+
+  const saveOrder = (updated: OrderRow, changes: string[]) => {
+    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
+    // lưu đơn đã sửa
+    try {
+      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
+      edits[updated.id] = updated;
+      localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+    } catch {
+      /* ignore */
+    }
+    // ghi lịch sử
+    setHistory((h) => {
+      const entry: HistoryEntry = { at: stamp(), by: "Bạn", changes };
+      const next = { ...h, [updated.id]: [entry, ...(h[updated.id] ?? [])] };
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const money = (krw: number) =>
     cur === "vnd"
@@ -386,7 +434,14 @@ export default function OrdersTable() {
       {/* popup chi tiết đơn */}
       {detailId !== null && (() => {
         const order = rows.find((r) => r.id === detailId);
-        return order ? <OrderDetailModal order={order} onClose={() => setDetailId(null)} /> : null;
+        return order ? (
+          <OrderDetailModal
+            order={order}
+            history={history[detailId] ?? []}
+            onSave={saveOrder}
+            onClose={() => setDetailId(null)}
+          />
+        ) : null;
       })()}
     </main>
   );
