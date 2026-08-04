@@ -1,5 +1,5 @@
 import { getPublicClient } from "./supabase/server";
-import type { Box, Flavor } from "./types";
+import type { Box, Flavor, Warehouse } from "./types";
 
 // Fallback seed (khớp 0002_seed.sql) khi Supabase chưa cấu hình — để dev chạy được ngay.
 const FALLBACK_BOXES: Box[] = [
@@ -30,4 +30,26 @@ export async function getFlavors(): Promise<Flavor[]> {
   const { data, error } = await sb.from("flavor").select("*").eq("active", true).order("sort");
   if (error || !data?.length) return FALLBACK_FLAVORS;
   return data as Flavor[];
+}
+
+const FALLBACK_WAREHOUSES: Warehouse[] = [
+  { id: "wh-vn", region: "vn", name: "Kho Việt Nam", shipping_mode: "separate", fee_table: { ship: 30000, handling: 0 }, local_currency: "vnd", active: true },
+  { id: "wh-kr", region: "kr", name: "Kho Hàn Quốc", shipping_mode: "separate", fee_table: { ship: 3000, handling: 0 }, local_currency: "krw", active: true },
+];
+
+export async function getWarehouses(): Promise<Warehouse[]> {
+  const sb = getPublicClient();
+  if (!sb) return FALLBACK_WAREHOUSES;
+  const { data, error } = await sb.from("warehouse").select("*").eq("active", true);
+  if (error || !data?.length) return FALLBACK_WAREHOUSES;
+  return data as Warehouse[];
+}
+
+/** Tỉ giá krw↔vnd (số VND cho 1 KRW). Fallback 18.5 khi chưa cấu hình. */
+export async function getFxRate(): Promise<number> {
+  const sb = getPublicClient();
+  if (!sb) return 18.5;
+  const { data } = await sb.from("app_config").select("value").eq("key", "fx_rate").single();
+  const v = (data?.value as { krw_vnd?: number } | undefined)?.krw_vnd;
+  return typeof v === "number" ? v : 18.5;
 }
