@@ -6,6 +6,26 @@
 import { ALL_STOCK, SETS } from "./inventory";
 
 export const STOCK_KEY = "tr_stock_qty";
+export const NAME_KEY = "tr_stock_name";
+
+// ---- tên mặt hàng kho (đổi tên vỏ hộp / bánh) ----
+export function getNames(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(NAME_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+export function saveNames(n: Record<string, string>) {
+  try {
+    localStorage.setItem(NAME_KEY, JSON.stringify(n));
+    window.dispatchEvent(new StorageEvent("storage", { key: NAME_KEY }));
+  } catch {
+    /* ignore */
+  }
+}
 
 const baseStock = (): Record<string, number> =>
   Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty]));
