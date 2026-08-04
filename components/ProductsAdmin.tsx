@@ -21,6 +21,7 @@ interface Override {
   stock?: string; // tên mặt hàng kho
   active?: boolean;
   flavorIds?: string[]; // bánh trong set (Hộp/Combo)
+  removed?: boolean; // đã xoá (ẩn khỏi danh sách, còn khôi phục được)
 }
 
 interface Product {
@@ -57,6 +58,7 @@ export default function ProductsAdmin({
   const [editKey, setEditKey] = useState<string | null>(null);
   const [chooser, setChooser] = useState(false);
   const [draft, setDraft] = useState<Product | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
 
   useEffect(() => {
     try {
@@ -111,8 +113,12 @@ export default function ProductsAdmin({
       flavorIds: o.flavorIds ?? p.flavorIds,
     };
   });
+  // tách sản phẩm gốc đã xoá vào thùng rác (còn khôi phục được)
+  const removedKeys = new Set(Object.entries(ov).filter(([, o]) => o.removed).map(([k]) => k));
+  const visibleBase = mergedBase.filter((p) => !removedKeys.has(p.key));
+  const trashBase = mergedBase.filter((p) => removedKeys.has(p.key));
   // sản phẩm tự thêm hiển thị trên cùng
-  const merged: Product[] = [...custom, ...mergedBase];
+  const merged: Product[] = showTrash ? trashBase : [...custom, ...visibleBase];
 
   const save = (key: string, patch: Override) => {
     setOv((cur) => {
@@ -175,6 +181,13 @@ export default function ProductsAdmin({
     setEditKey(null);
   };
 
+  // xoá/khôi phục sản phẩm bất kỳ (custom → xoá hẳn; gốc → cho vào thùng rác)
+  const removeAny = (key: string) => {
+    if (key.startsWith("custom:")) deleteCustom(key);
+    else { save(key, { removed: true }); setEditKey(null); }
+  };
+  const restore = (key: string) => save(key, { removed: false });
+
   const editing = draft ?? (editKey ? merged.find((p) => p.key === editKey) ?? null : null);
   const afterDiscount = (price: number, disc: number) => Math.round(price * (1 - disc / 100));
 
@@ -186,12 +199,22 @@ export default function ProductsAdmin({
       <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
         <h1 className="text-[15px] font-semibold text-slate-800">Sản phẩm</h1>
         <span className="text-[13px] text-slate-400">{merged.length} mục</span>
-        <button
-          onClick={() => setChooser(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
-        >
-          + Thêm sản phẩm
-        </button>
+        {(trashBase.length > 0 || showTrash) && (
+          <button
+            onClick={() => setShowTrash((s) => !s)}
+            className={`ml-auto rounded-lg border px-3 py-2 text-[13px] font-medium ${showTrash ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+          >
+            {showTrash ? "← Quay lại" : `Thùng rác (${trashBase.length})`}
+          </button>
+        )}
+        {!showTrash && (
+          <button
+            onClick={() => setChooser(true)}
+            className={`${trashBase.length > 0 ? "" : "ml-auto"} inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700`}
+          >
+            + Thêm sản phẩm
+          </button>
+        )}
         <a href="/san-pham" className="text-[13px] font-medium text-blue-600 hover:underline">Xem trang bán →</a>
       </header>
 
@@ -215,7 +238,7 @@ export default function ProductsAdmin({
               {merged.map((p) => {
                 const inv = inventory.find((i) => i.name === p.stock);
                 return (
-                  <tr key={p.key} className="cursor-pointer hover:bg-slate-50" onClick={() => setEditKey(p.key)}>
+                  <tr key={p.key} className={showTrash ? "" : "cursor-pointer hover:bg-slate-50"} onClick={() => { if (!showTrash) setEditKey(p.key); }}>
                     <td className="px-4 py-2">
                       <div className="relative">
                         {p.images[0] ? (
@@ -255,9 +278,18 @@ export default function ProductsAdmin({
                       )}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${p.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                        {p.active ? "Đang bán" : "Ẩn"}
-                      </span>
+                      {showTrash ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); restore(p.key); }}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[12px] font-medium text-blue-700 hover:bg-blue-100"
+                        >
+                          Khôi phục
+                        </button>
+                      ) : (
+                        <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${p.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                          {p.active ? "Đang bán" : "Ẩn"}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -265,7 +297,14 @@ export default function ProductsAdmin({
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[12px] text-slate-400">Bấm vào một sản phẩm để sửa. Thay đổi lưu tạm ở trình duyệt (demo) — bản thật ghi vào Supabase.</p>
+        {showTrash && merged.length === 0 && (
+          <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-[13px] text-slate-400">Thùng rác trống.</div>
+        )}
+        <p className="mt-3 text-[12px] text-slate-400">
+          {showTrash
+            ? "Sản phẩm đã xoá — bấm “Khôi phục” để đưa lại danh sách."
+            : "Bấm vào một sản phẩm để sửa/xoá. Thay đổi lưu tạm ở trình duyệt (demo) — bản thật ghi vào Supabase."}
+        </p>
       </div>
 
       {chooser && (
@@ -282,7 +321,7 @@ export default function ProductsAdmin({
           flavors={flavors}
           inventory={inventory}
           onSave={handleSave}
-          onDelete={editing.key.startsWith("custom:") && !draft ? () => deleteCustom(editing.key) : undefined}
+          onDelete={!draft ? () => removeAny(editing.key) : undefined}
           onClose={() => { setDraft(null); setEditKey(null); }}
         />
       )}
