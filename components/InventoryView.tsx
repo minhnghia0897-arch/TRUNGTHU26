@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { VO, BANH, ALL_STOCK, SETS, availableSet, nameOf } from "@/lib/inventory";
+import { useEffect, useMemo, useState } from "react";
+import { VO, BANH, ALL_STOCK, SETS, availableSet, nameOf, type StockItem } from "@/lib/inventory";
+
+const STOCK_KEY = "tr_stock_qty";
 
 const statusOf = (qty: number, th: number) => (qty <= 0 ? "out" : qty < th ? "low" : "ok");
 const badge = (s: string) =>
@@ -9,7 +11,29 @@ const badge = (s: string) =>
 const label = (s: string) => (s === "ok" ? "Đủ" : s === "low" ? "Sắp hết" : "Hết");
 
 export default function InventoryView() {
-  const qtyOf = (k: string) => ALL_STOCK.find((s) => s.key === k)?.qty ?? 0;
+  // ---- tồn kho sửa được (lưu localStorage) ----
+  const [stock, setStock] = useState<Record<string, number>>(() =>
+    Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
+  );
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STOCK_KEY);
+      if (raw) setStock((cur) => ({ ...cur, ...JSON.parse(raw) }));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const qtyOf = (k: string) => stock[k] ?? 0;
+  const setStockQty = (k: string, v: number) =>
+    setStock((cur) => {
+      const next = { ...cur, [k]: Math.max(0, Math.floor(v) || 0) };
+      try {
+        localStorage.setItem(STOCK_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   // ---- máy tính bán ----
   const [setQty, setSetQty] = useState<Record<string, number>>({});
@@ -29,7 +53,7 @@ export default function InventoryView() {
   }, [setQty, looseQty]);
 
   const hasOrder = Object.values(deduction).some((v) => v > 0);
-  const shortage = ALL_STOCK.filter((s) => (deduction[s.key] || 0) > s.qty);
+  const shortage = ALL_STOCK.filter((s) => (deduction[s.key] || 0) > qtyOf(s.key));
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -113,11 +137,11 @@ export default function InventoryView() {
                 <tbody className="divide-y divide-slate-100">
                   {ALL_STOCK.filter((s) => (deduction[s.key] || 0) > 0).map((s) => {
                     const d = deduction[s.key] || 0;
-                    const left = s.qty - d;
+                    const left = qtyOf(s.key) - d;
                     return (
                       <tr key={s.key} className={left < 0 ? "bg-rose-50" : ""}>
                         <td className="px-3 py-2 font-medium text-slate-800">{s.name}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">{s.qty}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{qtyOf(s.key)}</td>
                         <td className="px-3 py-2 text-right font-semibold text-rose-600">−{d}</td>
                         <td className={`px-3 py-2 text-right font-semibold ${left < 0 ? "text-rose-600" : "text-slate-800"}`}>
                           {left}{left < 0 ? " (thiếu!)" : ""}
@@ -137,10 +161,10 @@ export default function InventoryView() {
           {!hasOrder && <p className="mt-3 text-[13px] text-slate-400">Nhập số lượng ở trên để tính.</p>}
         </Panel>
 
-        {/* ===== KHO VỎ + BÁNH ===== */}
+        {/* ===== KHO VỎ + BÁNH (sửa số tồn) ===== */}
         <div className="grid gap-5 md:grid-cols-2">
-          <StockTable title="Kho vỏ hộp" items={VO} />
-          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={BANH} />
+          <StockTable title="Kho vỏ hộp" items={VO} qtyOf={qtyOf} onChange={setStockQty} />
+          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={BANH} qtyOf={qtyOf} onChange={setStockQty} />
         </div>
 
         <p className="text-[12px] text-slate-400">
@@ -165,26 +189,47 @@ function Stepper({ value, onChange }: { value: number; onChange: (v: number) => 
   );
 }
 
-function StockTable({ title, items }: { title: string; items: typeof VO }) {
+function StockTable({
+  title,
+  items,
+  qtyOf,
+  onChange,
+}: {
+  title: string;
+  items: StockItem[];
+  qtyOf: (k: string) => number;
+  onChange: (k: string, v: number) => void;
+}) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-800">{title}</div>
+      <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-800">
+        {title}
+        <span className="text-[11px] font-normal text-slate-400">· sửa được</span>
+      </div>
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
             <th className="px-4 py-2">Mặt hàng</th>
-            <th className="px-4 py-2 text-right">Tồn</th>
+            <th className="px-4 py-2 text-right">Tồn (sửa)</th>
             <th className="px-4 py-2 text-right">Ngưỡng</th>
             <th className="px-4 py-2 text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {items.map((s) => {
-            const st = statusOf(s.qty, s.threshold);
+            const q = qtyOf(s.key);
+            const st = statusOf(q, s.threshold);
             return (
               <tr key={s.key}>
                 <td className="px-4 py-2.5 font-medium text-slate-800">{s.name}</td>
-                <td className="px-4 py-2.5 text-right font-semibold text-slate-800">{s.qty}</td>
+                <td className="px-4 py-2 text-right">
+                  <input
+                    type="number"
+                    value={q}
+                    onChange={(e) => onChange(s.key, Number(e.target.value))}
+                    className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-400"
+                  />
+                </td>
                 <td className="px-4 py-2.5 text-right text-slate-400">{s.threshold}</td>
                 <td className="px-4 py-2.5 text-center"><span className={`rounded px-2 py-0.5 text-[11px] font-medium ${badge(st)}`}>{label(st)}</span></td>
               </tr>
