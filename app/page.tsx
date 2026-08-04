@@ -1,7 +1,21 @@
 import { getBoxes, getFlavors } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import type { Region } from "@/lib/types";
+import type { Badge, Region } from "@/lib/types";
+import { IconLotus, IconCrown, IconStar, IconCheck, IconArrowRight } from "@/components/icons";
+
+function CardBadge({ badge }: { badge?: Badge }) {
+  if (!badge) return null;
+  const isBest = badge === "best_seller";
+  return (
+    <div
+      className={`absolute right-2.5 top-2.5 flex h-12 w-12 flex-col items-center justify-center rounded-full text-center text-[7px] font-bold uppercase leading-tight text-white shadow-md ${isBest ? "bg-gradient-to-br from-gold to-gold-deep" : "bg-navy"}`}
+    >
+      {isBest ? <IconCrown width={13} height={13} /> : <IconStar width={13} height={13} />}
+      <span className="mt-0.5">{isBest ? "Best\nSeller" : "Must\nTry"}</span>
+    </div>
+  );
+}
 
 // Storefront — server component. Vùng hiển thị mặc định KR (thị trường chính §5).
 export default async function Home({
@@ -38,7 +52,7 @@ export default async function Home({
       </header>
 
       {/* hero */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_80%_at_50%_-10%,#6d1c28_0%,#5A1620_45%,#3B0E15_100%)] px-6 py-11 text-center text-cream">
+      <section className="relative overflow-hidden bg-[radial-gradient(120%_80%_at_50%_-10%,#2a3d5f_0%,#1C2B45_45%,#14203A_100%)] px-6 py-11 text-center text-cream">
         <div className="eyebrow">Trung Thu · Mùa đoàn viên</div>
         <h1 className="my-4 font-serif text-[32px] font-bold uppercase leading-tight tracking-[0.04em]">
           Trọn vị đoàn viên
@@ -47,10 +61,10 @@ export default async function Home({
           Bánh nướng · bánh dẻo thủ công, hộp quà biếu tinh tế cho mùa Trung Thu.
         </p>
         <a
-          href="/dat-hang"
-          className="inline-block rounded bg-gold px-6 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep"
+          href="/san-pham"
+          className="inline-flex items-center gap-1.5 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
         >
-          Đặt ngay
+          Đặt ngay <IconArrowRight width={14} height={14} />
         </a>
       </section>
 
@@ -58,13 +72,13 @@ export default async function Home({
       <div className="flex justify-center gap-2 bg-cream px-4 py-3 text-[11px]">
         <a
           href="/?region=kr"
-          className={`rounded border px-3 py-2 font-serif uppercase tracking-wide ${region === "kr" ? "border-maroon bg-maroon text-cream" : "border-line bg-white text-maroon"}`}
+          className={`rounded-full border px-4 py-2 font-semibold uppercase tracking-wide ${region === "kr" ? "border-navy bg-navy text-cream" : "border-line bg-white text-navy"}`}
         >
           🇰🇷 Đặt ở Hàn · ₩
         </a>
         <a
           href="/?region=vn"
-          className={`rounded border px-3 py-2 font-serif uppercase tracking-wide ${region === "vn" ? "border-maroon bg-maroon text-cream" : "border-line bg-white text-maroon"}`}
+          className={`rounded-full border px-4 py-2 font-semibold uppercase tracking-wide ${region === "vn" ? "border-navy bg-navy text-cream" : "border-line bg-white text-navy"}`}
         >
           🇻🇳 Đặt ở VN · đ
         </a>
@@ -78,44 +92,49 @@ export default async function Home({
         </div>
         <div className="grid gap-4">
           {boxes.map((b) => (
-            <div key={b.id} className="overflow-hidden rounded border border-line bg-white">
-              <div className="flex h-32 items-center justify-center bg-[linear-gradient(135deg,#7a2230,#4a121b)] font-serif text-4xl text-cream/80">
-                ❋
+            <article key={b.id} className="overflow-hidden rounded-card bg-white shadow-card">
+              <div className="relative flex h-40 items-center justify-center bg-cream-soft">
+                <IconLotus width={54} height={54} className="text-gold/45" />
+                <CardBadge badge={b.badge} />
+                <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded bg-gold/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  <IconCheck width={11} height={11} /> {b.weight}GR
+                </div>
               </div>
-              <div className="p-4">
-                <h3 className="font-serif text-sm font-semibold uppercase tracking-wide text-maroon">
-                  {b.name}
-                </h3>
-                <div className="mt-1 text-xs opacity-70">
+              <div className="p-4 text-center">
+                <h3 className="font-semibold text-navy">{b.name}</h3>
+                <p className="mx-auto mt-1 max-w-[280px] text-xs text-ink/60">
                   {b.description ?? `${b.slots} ô · bánh ${b.weight}g`}
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="font-serif text-base font-semibold text-maroon-deep">
-                    {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)}
-                  </span>
-                  <a
-                    href={`/dat-hang?box=${b.id}`}
-                    className="rounded bg-gold px-3.5 py-2 font-serif text-xs font-semibold uppercase tracking-wide text-maroon-deep"
-                  >
-                    Tự chọn vị
-                  </a>
-                </div>
+                </p>
+                <div className="mx-auto my-3 h-px w-16 bg-line" />
+                <span className="price-lg text-lg">
+                  {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)} <span className="unit">/ hộp</span>
+                </span>
+                <a
+                  href={`/dat-hang?box=${b.id}`}
+                  className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+                >
+                  Tự chọn vị <IconArrowRight width={14} height={14} />
+                </a>
               </div>
-            </div>
+            </article>
           ))}
         </div>
         <a
           href="/san-pham"
-          className="mt-4 block rounded border border-maroon py-3 text-center font-serif text-xs font-semibold uppercase tracking-widest text-maroon"
+          className="mt-4 flex items-center justify-center gap-1.5 rounded-full border border-navy py-3 text-center text-xs font-semibold uppercase tracking-wide text-navy"
         >
-          Xem chi tiết · Combo · Mua lẻ →
+          Xem chi tiết · Combo · Mua lẻ <IconArrowRight width={14} height={14} />
         </a>
       </section>
 
       {/* editorial */}
-      <div className="bg-maroon px-6 py-10 text-center text-cream">
-        <div className="mb-3 tracking-[0.4em] text-gold opacity-60">✦ ❁ ✦ ❁ ✦</div>
-        <h2 className="font-serif text-[22px] font-semibold italic leading-snug">
+      <div className="bg-navy px-6 py-11 text-center text-cream">
+        <div className="mx-auto mb-4 flex items-center justify-center gap-2 text-gold">
+          <span className="h-px w-8 bg-gold/50" />
+          <IconLotus width={18} height={18} />
+          <span className="h-px w-8 bg-gold/50" />
+        </div>
+        <h2 className="text-[21px] font-semibold italic leading-snug">
           “Mỗi chiếc bánh là một lời chúc gửi người thương.”
         </h2>
         <p className="mx-auto mt-3.5 max-w-[320px] text-sm opacity-85">
@@ -135,8 +154,8 @@ export default async function Home({
           Chọn hộp & vị anh thích
         </span>
         <a
-          href="/dat-hang"
-          className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep"
+          href="/san-pham"
+          className="rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
         >
           Đặt bánh
         </a>
