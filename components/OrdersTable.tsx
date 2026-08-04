@@ -25,10 +25,13 @@ import {
 } from "@/components/icons";
 import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
 import CreateOrderModal from "@/components/CreateOrderModal";
+import { applyStock } from "@/lib/stockStore";
 
 const HISTORY_KEY = "tr_order_history";
 const EDITS_KEY = "tr_order_edits";
 const NEW_KEY = "tr_order_new";
+// trạng thái "giải phóng hàng" → hoàn kho
+const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -87,16 +90,37 @@ export default function OrdersTable() {
     return `${p(n.getDate())}/${p(n.getMonth() + 1)}/${n.getFullYear()} ${p(n.getHours())}:${p(n.getMinutes())}`;
   };
 
-  const saveOrder = (updated: OrderRow, changes: string[]) => {
-    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
-    // lưu đơn đã sửa
+  // Trừ/hoàn kho theo trạng thái đơn. Đơn "sống" (chưa huỷ/hoàn/trả) → trừ kho;
+  // chuyển sang huỷ/hoàn/trả → hoàn kho lại. Idempotent qua cờ stockApplied.
+  const reconcileStock = (order: OrderRow): OrderRow => {
+    if (!order.consume) return order;
+    const should = !RELEASED.has(order.status);
+    const applied = !!order.stockApplied;
+    if (should === applied) return order;
+    applyStock(order.consume, should ? -1 : 1);
+    return { ...order, stockApplied: should };
+  };
+
+  const persistEdit = (order: OrderRow) => {
     try {
       const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
-      edits[updated.id] = updated;
+      edits[order.id] = order;
       localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
+      const idx = created.findIndex((o) => o.id === order.id);
+      if (idx >= 0) {
+        created[idx] = order;
+        localStorage.setItem(NEW_KEY, JSON.stringify(created));
+      }
     } catch {
       /* ignore */
     }
+  };
+
+  const saveOrder = (input: OrderRow, changes: string[]) => {
+    const updated = reconcileStock(input); // trừ/hoàn kho nếu đổi trạng thái
+    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
+    persistEdit(updated);
     // ghi lịch sử
     setHistory((h) => {
       const entry: HistoryEntry = { at: stamp(), by: "Bạn", changes };
@@ -160,7 +184,21 @@ export default function OrdersTable() {
       return n;
     });
   const deleteSelected = () => {
+    // hoàn kho cho các đơn đang trừ kho trước khi xoá
+    rows.forEach((r) => {
+      if (selected.has(r.id) && r.stockApplied && r.consume) applyStock(r.consume, 1);
+    });
     setRows((rs) => rs.filter((r) => !selected.has(r.id)));
+    // dọn localStorage để đơn xoá không quay lại sau reload
+    try {
+      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
+      selected.forEach((id) => delete edits[id]);
+      localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
+      localStorage.setItem(NEW_KEY, JSON.stringify(created.filter((o) => !selected.has(o.id))));
+    } catch {
+      /* ignore */
+    }
     setSelected(new Set());
   };
 
@@ -176,7 +214,8 @@ export default function OrdersTable() {
 
   const createOrder = (payload: Omit<OrderRow, "id">) => {
     const id = Math.max(1000, ...rows.map((r) => r.id)) + 1;
-    const order: OrderRow = { id, ...payload, created: stamp() };
+    // trừ kho ngay khi tạo (đơn ở trạng thái "sống")
+    const order: OrderRow = reconcileStock({ id, ...payload, created: stamp(), stockApplied: false });
     setRows((rs) => [order, ...rs]);
     // lưu đơn mới
     try {
@@ -201,7 +240,14 @@ export default function OrdersTable() {
   };
 
   const setStatusOf = (id: number, s: Status) => {
-    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: s } : r)));
+    setRows((rs) =>
+      rs.map((r) => {
+        if (r.id !== id) return r;
+        const reconciled = reconcileStock({ ...r, status: s }); // trừ/hoàn kho
+        persistEdit(reconciled);
+        return reconciled;
+      }),
+    );
     setMenu(null);
   };
 

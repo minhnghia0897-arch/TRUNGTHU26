@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { VO, BANH, ALL_STOCK, SETS, availableSet, nameOf, type StockItem } from "@/lib/inventory";
-
-const STOCK_KEY = "tr_stock_qty";
+import { getStock, saveStock, STOCK_KEY } from "@/lib/stockStore";
 
 const statusOf = (qty: number, th: number) => (qty <= 0 ? "out" : qty < th ? "low" : "ok");
 const badge = (s: string) =>
@@ -11,27 +10,23 @@ const badge = (s: string) =>
 const label = (s: string) => (s === "ok" ? "Đủ" : s === "low" ? "Sắp hết" : "Hết");
 
 export default function InventoryView() {
-  // ---- tồn kho sửa được (lưu localStorage) ----
+  // ---- tồn kho dùng chung (đặt đơn tự trừ ở đây) ----
   const [stock, setStock] = useState<Record<string, number>>(() =>
     Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
   );
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STOCK_KEY);
-      if (raw) setStock((cur) => ({ ...cur, ...JSON.parse(raw) }));
-    } catch {
-      /* ignore */
-    }
+    setStock(getStock());
+    const onChange = (e: StorageEvent) => {
+      if (!e.key || e.key === STOCK_KEY) setStock(getStock());
+    };
+    window.addEventListener("storage", onChange);
+    return () => window.removeEventListener("storage", onChange);
   }, []);
   const qtyOf = (k: string) => stock[k] ?? 0;
   const setStockQty = (k: string, v: number) =>
     setStock((cur) => {
       const next = { ...cur, [k]: Math.max(0, Math.floor(v) || 0) };
-      try {
-        localStorage.setItem(STOCK_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+      saveStock(next);
       return next;
     });
 

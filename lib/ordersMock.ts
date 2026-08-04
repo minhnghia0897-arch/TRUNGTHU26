@@ -50,6 +50,9 @@ export interface OrderRow {
   gender?: "Nữ" | "Nam";
   successOrders?: string; // "1/1 đơn"
   lastBuy?: string;
+  // liên kết kho: SKU tiêu hao của đơn (vd { "vo-gam":1, "b-thapcam":1, ... })
+  consume?: Record<string, number>;
+  stockApplied?: boolean; // đơn này hiện đang trừ kho hay chưa
 }
 
 // màu pill theo trạng thái (giống Pancake)
