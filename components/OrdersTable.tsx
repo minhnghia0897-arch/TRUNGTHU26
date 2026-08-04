@@ -20,29 +20,26 @@ import {
   IconXCircle,
   IconReturn,
   IconCopyDoc,
-  IconCheck,
 } from "@/components/icons";
 
-const FX = 18.5; // KRW↔VND
+const FX = 18.5;
 type Cur = "krw" | "vnd";
 type SourceFilter = "all" | OrderSource;
 
-// đổi mọi số về KRW base rồi hiển thị theo tiền tệ chọn (hợp nhất §15)
 const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
 
 function SourceIcon({ s }: { s: OrderSource }) {
   if (s === "facebook") return <IconFacebook className="text-[#1877F2]" width={15} height={15} />;
-  if (s === "web") return <IconGlobe className="text-gold-deep" width={15} height={15} />;
-  return <IconStore className="text-slate-500" width={15} height={15} />;
+  if (s === "web") return <IconGlobe className="text-emerald-500" width={15} height={15} />;
+  return <IconStore className="text-slate-400" width={15} height={15} />;
 }
 
-// menu đổi trạng thái (như Pancake)
-const MENU: { label: Status | "Tạo trùng lặp"; Icon: typeof IconTruck }[] = [
+const MENU: { label: Status | "Tạo trùng lặp"; Icon: typeof IconTruck; danger?: boolean }[] = [
   { label: "Đã thu tiền", Icon: IconDollar },
   { label: "Khách trả lại", Icon: IconReturn },
   { label: "Đã hoàn toàn bộ", Icon: IconReturn },
   { label: "Đã gửi hàng", Icon: IconTruck },
-  { label: "Huỷ đơn", Icon: IconXCircle },
+  { label: "Huỷ đơn", Icon: IconXCircle, danger: true },
   { label: "Tạo trùng lặp", Icon: IconCopyDoc },
 ];
 
@@ -60,8 +57,7 @@ export default function OrdersTable() {
       ? Math.round(krw * FX).toLocaleString("vi-VN") + "đ"
       : "₩" + Math.round(krw).toLocaleString("en-US");
 
-  // lọc theo nguồn + kho + tìm kiếm (không tính status — để đếm tab)
-  const base = useMemo(() => {
+  const baseRows = useMemo(() => {
     const query = q.trim().toLowerCase();
     return rows.filter((r) => {
       const okS = source === "all" || r.source === source;
@@ -77,13 +73,13 @@ export default function OrdersTable() {
   }, [rows, source, warehouse, q]);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: base.length };
+    const c: Record<string, number> = { all: baseRows.length };
     for (const s of PIPELINE) c[s] = 0;
-    for (const r of base) c[r.status] = (c[r.status] ?? 0) + 1;
+    for (const r of baseRows) c[r.status] = (c[r.status] ?? 0) + 1;
     return c;
-  }, [base]);
+  }, [baseRows]);
 
-  const list = status === "all" ? base : base.filter((r) => r.status === status);
+  const list = status === "all" ? baseRows : baseRows.filter((r) => r.status === status);
 
   const totals = list.reduce(
     (a, r) => ({
@@ -108,27 +104,26 @@ export default function OrdersTable() {
   ];
 
   return (
-    <main className="min-h-screen bg-cream" onClick={() => menu && setMenu(null)}>
+    <main className="min-h-screen bg-slate-50 text-slate-700" onClick={() => menu && setMenu(null)}>
       {/* topbar */}
-      <div className="flex flex-wrap items-center gap-3 bg-navy px-4 py-3 text-cream">
-        <a href="/dashboard" className="title-heritage text-sm tracking-[0.16em] text-cream">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
+        <a href="/dashboard" className="text-[15px] font-semibold text-slate-800">
           Trăng Rằm
         </a>
-        <span className="text-xs opacity-60">· Quản lý đơn hàng</span>
-        <div className="flex-1" />
-        <div className="relative w-full max-w-md">
-          <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-navy/40" width={16} height={16} />
+        <span className="text-[13px] text-slate-400">· Quản lý đơn hàng</span>
+        <div className="relative ml-auto w-full max-w-md">
+          <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" width={16} height={16} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Mã đơn / Mã VC / Tên / Địa chỉ / SĐT / Ghi chú"
-            className="w-full rounded-md border border-line bg-white py-2 pl-8 pr-3 text-[13px] text-ink"
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-[13px]"
           />
         </div>
         <select
           value={warehouse}
           onChange={(e) => setWarehouse(e.target.value as typeof warehouse)}
-          className="rounded-md border border-line bg-white px-2.5 py-2 text-[13px] text-ink"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px]"
         >
           <option value="all">Tất cả các kho</option>
           <option value="kr">🇰🇷 Kho Hàn</option>
@@ -137,7 +132,7 @@ export default function OrdersTable() {
         <select
           value={cur}
           onChange={(e) => setCur(e.target.value as Cur)}
-          className="rounded-md border border-line bg-white px-2.5 py-2 text-[13px] text-ink"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px]"
         >
           <option value="krw">₩ KRW</option>
           <option value="vnd">đ VND</option>
@@ -145,12 +140,12 @@ export default function OrdersTable() {
       </div>
 
       {/* source tabs */}
-      <div className="flex gap-1 border-b border-line bg-white px-4 pt-2">
+      <div className="flex gap-6 border-b border-slate-200 bg-white px-5">
         {SOURCE_TABS.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setSource(key)}
-            className={`rounded-t-md px-3 py-2 text-[13px] font-medium ${source === key ? "bg-cream text-navy" : "text-ink/55 hover:text-navy"}`}
+            className={`border-b-2 py-2.5 text-[13px] font-medium transition ${source === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
           >
             {label}
           </button>
@@ -158,7 +153,7 @@ export default function OrdersTable() {
       </div>
 
       {/* status count tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-line bg-white px-4 py-2 text-[13px]">
+      <div className="flex gap-1.5 overflow-x-auto border-b border-slate-200 bg-white px-5 py-2.5">
         <StatusTab label="Tất cả" count={counts.all} active={status === "all"} onClick={() => setStatus("all")} />
         {PIPELINE.map((s) => (
           <StatusTab key={s} label={s} count={counts[s] ?? 0} active={status === s} onClick={() => setStatus(s)} />
@@ -166,77 +161,77 @@ export default function OrdersTable() {
       </div>
 
       {/* table */}
-      <div className="overflow-x-auto px-4 py-3">
-        <table className="w-full min-w-[1000px] border-separate border-spacing-0 text-[13px]">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1040px] border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-ink/50">
-              <th className="border-b border-line px-2 py-2">ID</th>
-              <th className="border-b border-line px-2 py-2">VC</th>
-              <th className="border-b border-line px-2 py-2">Thẻ</th>
-              <th className="border-b border-line px-2 py-2">Ghi chú</th>
-              <th className="border-b border-line px-2 py-2">Khách hàng</th>
-              <th className="border-b border-line px-2 py-2">Người nhận</th>
-              <th className="border-b border-line px-2 py-2">SĐT</th>
-              <th className="border-b border-line px-2 py-2">Nhận hàng</th>
-              <th className="border-b border-line px-2 py-2 text-right">Trả trước</th>
-              <th className="border-b border-line px-2 py-2">Trạng thái</th>
+            <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              <Th>ID</Th>
+              <Th>VC</Th>
+              <Th>Thẻ</Th>
+              <Th>Ghi chú</Th>
+              <Th>Khách hàng</Th>
+              <Th>Người nhận</Th>
+              <Th>SĐT</Th>
+              <Th>Nhận hàng</Th>
+              <Th className="text-right">Trả trước</Th>
+              <Th>Trạng thái</Th>
             </tr>
           </thead>
           <tbody>
             {list.map((r) => (
-              <tr key={r.id} className="hover:bg-cream-soft">
-                <td className="whitespace-nowrap border-b border-line px-2 py-2">
-                  <span className="inline-flex items-center gap-1.5 font-semibold text-navy">
+              <tr key={r.id} className="bg-white hover:bg-slate-50">
+                <Td className="whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
                     <SourceIcon s={r.source} /> {r.id}
                   </span>
-                </td>
-                <td className="whitespace-nowrap border-b border-line px-2 py-2 text-ink/70">{r.vc || "—"}</td>
-                <td className="border-b border-line px-2 py-2">
+                </Td>
+                <Td className="whitespace-nowrap text-slate-500">{r.vc || "—"}</Td>
+                <Td>
                   {r.tags.length ? (
                     <span className="flex flex-wrap gap-1">
                       {r.tags.map((t) => (
-                        <span key={t} className="rounded bg-gold/15 px-1.5 py-0.5 text-[10px] text-gold-deep">{t}</span>
+                        <span key={t} className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">{t}</span>
                       ))}
                     </span>
                   ) : (
-                    "—"
+                    <span className="text-slate-300">—</span>
                   )}
-                </td>
-                <td className="max-w-[120px] truncate border-b border-line px-2 py-2 text-ink/60" title={r.note}>{r.note || "—"}</td>
-                <td className="whitespace-nowrap border-b border-line px-2 py-2 text-ink">{r.customer}</td>
-                <td className="whitespace-nowrap border-b border-line px-2 py-2 text-ink">{r.recipient}</td>
-                <td className="whitespace-nowrap border-b border-line px-2 py-2">
+                </Td>
+                <Td className="max-w-[120px] truncate text-slate-500" title={r.note}>{r.note || <span className="text-slate-300">—</span>}</Td>
+                <Td className="whitespace-nowrap text-slate-700">{r.customer}</Td>
+                <Td className="whitespace-nowrap text-slate-700">{r.recipient}</Td>
+                <Td className="whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="text-navy">{r.phone}</span>
+                    <span className="font-medium text-blue-600">{r.phone}</span>
                     {r.carrier && (
-                      <span className="rounded border border-line px-1.5 py-0.5 text-[10px] text-ink/60">{r.carrier}</span>
+                      <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500">{r.carrier}</span>
                     )}
                   </span>
-                </td>
-                <td className="max-w-[180px] truncate border-b border-line px-2 py-2 text-ink/70" title={r.address}>
+                </Td>
+                <Td className="max-w-[190px] truncate text-slate-600" title={r.address}>
                   <span className="mr-1">{r.region === "kr" ? "🇰🇷" : "🇻🇳"}</span>
                   {r.address}
-                </td>
-                <td className="whitespace-nowrap border-b border-line px-2 py-2 text-right font-medium text-gold-deep">
+                </Td>
+                <Td className="whitespace-nowrap text-right font-medium text-slate-700">
                   {money(toKrw(r.prepaid, r.region))}
-                </td>
-                <td className="border-b border-line px-2 py-2">
+                </Td>
+                <Td>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       const rect = e.currentTarget.getBoundingClientRect();
                       setMenu(menu?.id === r.id ? null : { id: r.id, x: rect.left, y: rect.bottom + 4 });
                     }}
-                    className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-2.5 py-1 text-[12px] font-semibold ${STATUS_COLOR[r.status] ?? "bg-slate-200 text-slate-700"}`}
+                    className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-semibold ${STATUS_COLOR[r.status] ?? "bg-slate-100 text-slate-600"}`}
                   >
                     {r.status} <IconChevronDown width={13} height={13} />
                   </button>
-                </td>
+                </Td>
               </tr>
             ))}
             {list.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-2 py-8 text-center text-ink/50">
+                <td colSpan={10} className="bg-white px-4 py-10 text-center text-slate-400">
                   Không có đơn khớp bộ lọc.
                 </td>
               </tr>
@@ -245,48 +240,62 @@ export default function OrdersTable() {
         </table>
       </div>
 
-      {/* footer tổng tài chính */}
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-line bg-white px-4 py-2.5 text-[13px]">
-        <span className="font-semibold text-navy">{list.length} đơn</span>
-        <span>COD: <b className="text-navy">{money(totals.cod)}</b></span>
-        <span>Trả trước: <b className="text-navy">{money(totals.prepaid)}</b></span>
-        <span>Cước VC: <b className="text-navy">{money(totals.cuoc)}</b></span>
-        <span>Phí VC thu khách: <b className="text-navy">{money(totals.phi)}</b></span>
+      {/* footer */}
+      <div className="sticky bottom-0 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-slate-200 bg-white px-5 py-3 text-[13px]">
+        <span className="font-semibold text-slate-800">{list.length} đơn</span>
+        <span className="text-slate-500">COD: <b className="text-slate-800">{money(totals.cod)}</b></span>
+        <span className="text-slate-500">Trả trước: <b className="text-slate-800">{money(totals.prepaid)}</b></span>
+        <span className="text-slate-500">Cước VC: <b className="text-slate-800">{money(totals.cuoc)}</b></span>
+        <span className="text-slate-500">Phí VC thu khách: <b className="text-slate-800">{money(totals.phi)}</b></span>
         <div className="flex-1" />
-        <a href="/dashboard" className="text-[12px] text-gold-deep underline">← Về dashboard</a>
+        <a href="/dashboard" className="text-[12px] font-medium text-blue-600 hover:underline">← Về dashboard</a>
       </div>
 
       {/* menu đổi trạng thái */}
       {menu && (
         <div
-          className="fixed z-50 w-52 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-xl"
+          className="fixed z-50 w-52 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
           style={{ left: Math.min(menu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 220), top: menu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          {MENU.map(({ label, Icon }) => (
+          {MENU.map(({ label, Icon, danger }) => (
             <button
               key={label}
               onClick={() => {
-                if (label === "Tạo trùng lặp") {
-                  setMenu(null);
-                  return;
-                }
+                if (label === "Tạo trùng lặp") return setMenu(null);
                 setStatusOf(menu.id, label as Status);
               }}
-              className="flex w-full items-center gap-2.5 border-b border-line/60 px-3 py-2.5 text-left text-[13px] text-ink last:border-0 hover:bg-cream-soft"
+              className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-slate-50 ${danger ? "text-rose-600" : "text-slate-700"}`}
             >
-              <span className="text-ink/60">
-                <Icon width={16} height={16} />
-              </span>
+              <Icon width={16} height={16} className={danger ? "text-rose-400" : "text-slate-400"} />
               {label}
             </button>
           ))}
-          <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink/45">
+          <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
             Bản demo · thật sẽ đồng bộ Pancake
           </div>
         </div>
       )}
     </main>
+  );
+}
+
+function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <th className={`border-b border-slate-200 px-3 py-2.5 ${className}`}>{children}</th>;
+}
+function Td({
+  children,
+  className = "",
+  title,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <td className={`border-b border-slate-100 px-3 py-2.5 ${className}`} title={title}>
+      {children}
+    </td>
   );
 }
 
@@ -304,10 +313,10 @@ function StatusTab({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-medium ${active ? "bg-navy text-cream" : "text-ink/60 hover:bg-cream-soft"}`}
+      className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${active ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}
     >
       {label}
-      <span className={`rounded-full px-1.5 text-[11px] ${active ? "bg-cream/25" : "bg-line/60 text-ink/60"}`}>{count}</span>
+      <span className={`rounded px-1.5 text-[11px] ${active ? "bg-white/25" : "bg-slate-200 text-slate-500"}`}>{count}</span>
     </button>
   );
 }

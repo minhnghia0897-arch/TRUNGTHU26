@@ -59,7 +59,7 @@ body {
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: #ece3d2;
+  background: #e6e2d8;
   border-radius: 8px;
 }
 .skeleton::after {

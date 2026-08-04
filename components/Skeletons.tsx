@@ -47,21 +47,21 @@ export function CatalogSkeleton() {
 
 export function DashboardSkeleton() {
   return (
-    <main className="mx-auto min-h-screen bg-cream">
+    <main className="mx-auto min-h-screen bg-slate-50">
       <div className="skeleton h-14 rounded-none" />
-      <div className="mx-auto max-w-[1080px] px-4">
-        <div className="my-4 flex gap-2">
-          <div className="skeleton h-9 w-40 rounded" />
-          <div className="skeleton h-9 w-32 rounded" />
+      <div className="mx-auto max-w-[1120px] px-5">
+        <div className="my-5 flex gap-2">
+          <div className="skeleton h-9 w-40 rounded-lg" />
+          <div className="skeleton h-9 w-32 rounded-lg" />
         </div>
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="skeleton h-20 rounded" />
+            <div key={i} className="skeleton h-20 rounded-xl" />
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <div className="skeleton h-80 rounded" />
-          <div className="skeleton h-80 rounded" />
+        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+          <div className="skeleton h-80 rounded-xl" />
+          <div className="skeleton h-80 rounded-xl" />
         </div>
       </div>
     </main>
