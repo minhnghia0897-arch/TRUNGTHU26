@@ -6,6 +6,7 @@ import { boxPrice } from "@/lib/pricing";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const EDITS_KEY = "tr_product_edits";
+const NEW_KEY = "tr_product_new";
 
 type InvItem = { name: string; qty: number; status: "ok" | "low" | "out" };
 
@@ -52,12 +53,21 @@ export default function ProductsAdmin({
   inventory: InvItem[];
 }) {
   const [ov, setOv] = useState<Record<string, Override>>({});
+  const [custom, setCustom] = useState<Product[]>([]);
   const [editKey, setEditKey] = useState<string | null>(null);
+  const [chooser, setChooser] = useState(false);
+  const [draft, setDraft] = useState<Product | null>(null);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(EDITS_KEY);
       if (raw) setOv(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+    try {
+      const rawNew = localStorage.getItem(NEW_KEY);
+      if (rawNew) setCustom(JSON.parse(rawNew));
     } catch {
       /* ignore */
     }
@@ -85,7 +95,7 @@ export default function ProductsAdmin({
     })),
   ];
 
-  const merged: Product[] = base.map((p) => {
+  const mergedBase: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
     const images = o.images ?? (o.image ? [o.image] : []);
     return {
@@ -101,6 +111,8 @@ export default function ProductsAdmin({
       flavorIds: o.flavorIds ?? p.flavorIds,
     };
   });
+  // sản phẩm tự thêm hiển thị trên cùng
+  const merged: Product[] = [...custom, ...mergedBase];
 
   const save = (key: string, patch: Override) => {
     setOv((cur) => {
@@ -114,7 +126,56 @@ export default function ProductsAdmin({
     });
   };
 
-  const editing = editKey ? merged.find((p) => p.key === editKey) ?? null : null;
+  const persistCustom = (next: Product[]) => {
+    setCustom(next);
+    try {
+      localStorage.setItem(NEW_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // gộp Override vào một Product đầy đủ (dùng cho sản phẩm tự thêm)
+  const applyOverride = (p: Product, o: Override): Product => ({
+    ...p,
+    name: o.name ?? p.name,
+    images: o.images ?? (o.image ? [o.image] : p.images),
+    cost: o.cost ?? p.cost,
+    priceVn: o.priceVn ?? p.priceVn,
+    priceKr: o.priceKr ?? p.priceKr,
+    discount: o.discount ?? p.discount,
+    stock: o.stock,
+    active: o.active ?? p.active,
+    flavorIds: o.flavorIds ?? p.flavorIds,
+  });
+
+  const newProduct = (type: Product["type"]): Product => ({
+    key: `custom:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    name: type === "Hộp" ? "Hộp mới" : type === "Combo" ? "Combo mới" : "Vị mới",
+    priceVn: 0, priceKr: 0, cost: 0, discount: 0,
+    images: [], active: true, flavorIds: [],
+  });
+
+  const handleSave = (patch: Override) => {
+    if (draft) {
+      persistCustom([applyOverride(draft, patch), ...custom]);
+      setDraft(null);
+    } else if (editKey?.startsWith("custom:")) {
+      persistCustom(custom.map((c) => (c.key === editKey ? applyOverride(c, patch) : c)));
+      setEditKey(null);
+    } else if (editKey) {
+      save(editKey, patch);
+      setEditKey(null);
+    }
+  };
+
+  const deleteCustom = (key: string) => {
+    persistCustom(custom.filter((c) => c.key !== key));
+    setEditKey(null);
+  };
+
+  const editing = draft ?? (editKey ? merged.find((p) => p.key === editKey) ?? null : null);
   const afterDiscount = (price: number, disc: number) => Math.round(price * (1 - disc / 100));
 
   const TypeIcon = ({ t }: { t: Product["type"] }) =>
@@ -125,7 +186,13 @@ export default function ProductsAdmin({
       <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
         <h1 className="text-[15px] font-semibold text-slate-800">Sản phẩm</h1>
         <span className="text-[13px] text-slate-400">{merged.length} mục</span>
-        <a href="/san-pham" className="ml-auto text-[13px] font-medium text-blue-600 hover:underline">Xem trang bán →</a>
+        <button
+          onClick={() => setChooser(true)}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
+        >
+          + Thêm sản phẩm
+        </button>
+        <a href="/san-pham" className="text-[13px] font-medium text-blue-600 hover:underline">Xem trang bán →</a>
       </header>
 
       <div className="p-5">
@@ -165,7 +232,10 @@ export default function ProductsAdmin({
                       </div>
                     </td>
                     <td className="px-4 py-2 font-medium text-slate-800">{p.name}</td>
-                    <td className="px-4 py-2 text-slate-500">{p.type}{p.premium ? " · Premium" : ""}</td>
+                    <td className="px-4 py-2 text-slate-500">
+                      {p.type}{p.premium ? " · Premium" : ""}
+                      {p.key.startsWith("custom:") && <span className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Tự thêm</span>}
+                    </td>
                     <td className="px-4 py-2 text-right text-slate-500">{p.cost ? krw(p.cost) : "—"}</td>
                     <td className="px-4 py-2 text-right text-slate-700">{krw(p.priceKr)}</td>
                     <td className="px-4 py-2 text-right">{p.discount ? <span className="text-rose-600">-{p.discount}%</span> : "—"}</td>
@@ -198,30 +268,78 @@ export default function ProductsAdmin({
         <p className="mt-3 text-[12px] text-slate-400">Bấm vào một sản phẩm để sửa. Thay đổi lưu tạm ở trình duyệt (demo) — bản thật ghi vào Supabase.</p>
       </div>
 
+      {chooser && (
+        <TypeChooser
+          onPick={(t) => { setChooser(false); setDraft(newProduct(t)); }}
+          onClose={() => setChooser(false)}
+        />
+      )}
+
       {editing && (
         <EditModal
           product={editing}
+          create={!!draft}
           flavors={flavors}
           inventory={inventory}
-          onSave={(patch) => { save(editing.key, patch); setEditKey(null); }}
-          onClose={() => setEditKey(null)}
+          onSave={handleSave}
+          onDelete={editing.key.startsWith("custom:") && !draft ? () => deleteCustom(editing.key) : undefined}
+          onClose={() => { setDraft(null); setEditKey(null); }}
         />
       )}
     </main>
   );
 }
 
+function TypeChooser({ onPick, onClose }: { onPick: (t: Product["type"]) => void; onClose: () => void }) {
+  const opts: { t: Product["type"]; icon: React.ReactNode; desc: string }[] = [
+    { t: "Hộp", icon: <IconShirt width={20} height={20} />, desc: "Vỏ hộp + chọn bánh cho vào set" },
+    { t: "Combo", icon: <IconGift width={20} height={20} />, desc: "Gộp nhiều bánh thành combo" },
+    { t: "Vị", icon: <IconCart width={20} height={20} />, desc: "Một vị bánh bán lẻ" },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="my-16 w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
+          <h3 className="text-[15px] font-semibold text-slate-800">Thêm sản phẩm — chọn loại</h3>
+          <button onClick={onClose} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
+            <IconXCircle width={20} height={20} />
+          </button>
+        </div>
+        <div className="space-y-2 p-5">
+          {opts.map((o) => (
+            <button
+              key={o.t}
+              onClick={() => onPick(o.t)}
+              className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-400 hover:bg-blue-50/40"
+            >
+              <span className="grid h-10 w-10 flex-none place-items-center rounded-lg bg-slate-100 text-slate-600">{o.icon}</span>
+              <span>
+                <span className="block text-[14px] font-semibold text-slate-800">{o.t}</span>
+                <span className="block text-[12px] text-slate-400">{o.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditModal({
   product,
+  create,
   flavors,
   inventory,
   onSave,
+  onDelete,
   onClose,
 }: {
   product: Product;
+  create?: boolean;
   flavors: Flavor[];
   inventory: InvItem[];
   onSave: (patch: Override) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(product.name);
@@ -266,7 +384,7 @@ function EditModal({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
       <div className="my-4 w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
-          <h3 className="text-[15px] font-semibold text-slate-800">Sửa sản phẩm</h3>
+          <h3 className="text-[15px] font-semibold text-slate-800">{create ? "Thêm sản phẩm" : "Sửa sản phẩm"}</h3>
           <span className="text-[12px] text-slate-400">· {product.type}</span>
           <button onClick={onClose} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
             <IconXCircle width={20} height={20} />
@@ -368,9 +486,12 @@ function EditModal({
           </label>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
-          <button onClick={onClose} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50">Huỷ</button>
-          <button onClick={submit} className="rounded-lg bg-blue-600 px-5 py-2 text-[13px] font-medium text-white hover:bg-blue-700">Lưu</button>
+        <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-3">
+          {onDelete && (
+            <button onClick={onDelete} className="rounded-lg border border-rose-200 bg-white px-4 py-2 text-[13px] font-medium text-rose-600 hover:bg-rose-50">Xoá</button>
+          )}
+          <button onClick={onClose} className="ml-auto rounded-lg border border-slate-200 bg-white px-4 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50">Huỷ</button>
+          <button onClick={submit} className="rounded-lg bg-blue-600 px-5 py-2 text-[13px] font-medium text-white hover:bg-blue-700">{create ? "Tạo sản phẩm" : "Lưu"}</button>
         </div>
       </div>
     </div>
