@@ -31,7 +31,7 @@ export default async function Home({
           Bánh Trung Thu thủ công
         </div>
         <nav className="mt-3 flex justify-center gap-5 text-[11px] uppercase tracking-widest text-maroon">
-          <a href="#ban" className="opacity-80">Sản phẩm</a>
+          <a href="/san-pham" className="opacity-80">Sản phẩm</a>
           <a href="/dat-hang" className="opacity-80">Đặt hàng</a>
           <a href="/tra-cuu" className="opacity-80">Tra cứu</a>
         </nav>
@@ -87,23 +87,29 @@ export default async function Home({
                   {b.name}
                 </h3>
                 <div className="mt-1 text-xs opacity-70">
-                  {b.slots} ô · bánh {b.weight}g
+                  {b.description ?? `${b.slots} ô · bánh ${b.weight}g`}
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <span className="font-serif text-base font-semibold text-maroon-deep">
                     {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)}
                   </span>
                   <a
-                    href="/dat-hang"
+                    href={`/dat-hang?box=${b.id}`}
                     className="rounded bg-gold px-3.5 py-2 font-serif text-xs font-semibold uppercase tracking-wide text-maroon-deep"
                   >
-                    Chọn
+                    Tự chọn vị
                   </a>
                 </div>
               </div>
             </div>
           ))}
         </div>
+        <a
+          href="/san-pham"
+          className="mt-4 block rounded border border-maroon py-3 text-center font-serif text-xs font-semibold uppercase tracking-widest text-maroon"
+        >
+          Xem chi tiết · Combo · Mua lẻ →
+        </a>
       </section>
 
       {/* editorial */}

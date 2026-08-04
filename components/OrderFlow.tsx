@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Box, Flavor, Region, Warehouse } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { Box, Combo, Flavor, Region, Warehouse } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import {
   boxPrice,
   flavorSurcharge,
+  flavorRetailPrice,
   validateBoxFill,
   computeBill,
   type CartLine,
@@ -20,19 +21,25 @@ type Recipient = {
   desiredDate: string;
 };
 
+export type InitialSelection = { box?: string; combo?: string; la?: string };
+
 let _id = 0;
 const nid = () => "u" + ++_id;
 
 export default function OrderFlow({
   boxes,
   flavors,
+  combos,
   warehouses,
   fx,
+  initial,
 }: {
   boxes: Box[];
   flavors: Flavor[];
+  combos: Combo[];
   warehouses: Warehouse[];
   fx: number;
+  initial?: InitialSelection;
 }) {
   const [step, setStep] = useState<number>(1);
   const [buyerRegion, setBuyerRegion] = useState<Region>("kr");
@@ -40,6 +47,7 @@ export default function OrderFlow({
   const [buyerPhone, setBuyerPhone] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [selectedBoxId, setSelectedBoxId] = useState<string>(boxes[0]?.id);
   const [picks, setPicks] = useState<string[]>([]);
   const [openSlot, setOpenSlot] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -50,8 +58,53 @@ export default function OrderFlow({
     simulated?: boolean;
   }>(null);
 
-  const box = boxes[0];
+  const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0];
   const fmt = (v: number) => formatMoney(v, buyerRegion);
+
+  const addCombo = (comboId: string) => {
+    const c = combos.find((x) => x.id === comboId);
+    if (!c) return;
+    const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
+    const unit = boxPrice(b, c.flavor_ids, flavors, buyerRegion);
+    setCart((cart) => [
+      ...cart,
+      { uid: nid(), kind: "combo", boxId: b.id, comboId: c.id, flavorIds: c.flavor_ids, qty: 1, unitPrice: unit, name: c.name, recipientUid: null },
+    ]);
+  };
+  const addFlavor = (flavorId: string) => {
+    const f = flavors.find((x) => x.id === flavorId);
+    if (!f) return;
+    const unit = flavorRetailPrice(f, buyerRegion);
+    setCart((cart) => {
+      const existing = cart.find((l) => l.kind === "la" && l.flavorIds?.[0] === f.id);
+      if (existing)
+        return cart.map((l) => (l === existing ? { ...l, qty: l.qty + 1 } : l));
+      return [
+        ...cart,
+        { uid: nid(), kind: "la", flavorIds: [f.id], qty: 1, unitPrice: unit, name: f.name + " (lẻ)", recipientUid: null },
+      ];
+    });
+  };
+  const setQty = (uid: string, delta: number) =>
+    setCart((cart) =>
+      cart.flatMap((l) =>
+        l.uid === uid ? (l.qty + delta <= 0 ? [] : [{ ...l, qty: l.qty + delta }]) : [l],
+      ),
+    );
+
+  // preselect từ URL (?box / ?combo / ?la) — chạy một lần
+  useEffect(() => {
+    if (!initial) return;
+    if (initial.combo) addCombo(initial.combo);
+    if (initial.la) addFlavor(initial.la);
+    if (initial.box) {
+      setSelectedBoxId(initial.box);
+      setPicks([]);
+      setOpenSlot(0);
+      setStep(1.5);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bill = useMemo(
     () =>
@@ -240,10 +293,17 @@ export default function OrderFlow({
                           .filter(Boolean)
                           .join(" · ") || "—"}
                       </div>
+                      {it.kind === "la" && (
+                        <div className="mt-2 inline-flex items-center rounded border border-line">
+                          <button onClick={() => setQty(it.uid, -1)} className="px-2.5 py-1 text-maroon">−</button>
+                          <span className="w-7 text-center font-serif text-sm">{it.qty}</span>
+                          <button onClick={() => setQty(it.uid, 1)} className="px-2.5 py-1 text-maroon">+</button>
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="font-serif font-semibold text-maroon-deep">
-                        {fmt(it.unitPrice)}
+                        {fmt(it.unitPrice * it.qty)}
                       </span>
                       <button
                         onClick={() => setCart((c) => c.filter((x) => x.uid !== it.uid))}
@@ -256,16 +316,68 @@ export default function OrderFlow({
                 </div>
               ))
             )}
-            <button
-              onClick={() => {
-                setPicks([]);
-                setOpenSlot(0);
-                setStep(1.5);
-              }}
-              className="mt-1 w-full rounded border border-dashed border-line bg-cream py-3 font-serif text-xs uppercase tracking-wide text-maroon"
-            >
-              + Hộp tự chọn
-            </button>
+
+            {/* Thêm sản phẩm */}
+            <div className="mt-4 rounded border border-line bg-white p-3.5">
+              <div className="eyebrow mb-2">Thêm sản phẩm</div>
+
+              {/* hộp tự chọn */}
+              <div className="mb-3">
+                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Hộp tự chọn</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {boxes.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => { setSelectedBoxId(b.id); setPicks([]); setOpenSlot(0); setStep(1.5); }}
+                      className="rounded border border-dashed border-line bg-cream px-3 py-2 text-[11px] text-maroon"
+                    >
+                      + {b.name} · {fmt(buyerRegion === "vn" ? b.price_vn : b.price_kr)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* combo */}
+              {combos.length > 0 && (
+                <div className="mb-3">
+                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Combo / Set</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {combos.map((c) => {
+                      const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => addCombo(c.id)}
+                          className="rounded border border-gold bg-cream px-3 py-2 text-[11px] text-maroon"
+                        >
+                          + {c.name} · {fmt(boxPrice(b, c.flavor_ids, flavors, buyerRegion))}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* mua lẻ */}
+              <div>
+                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Mua lẻ từng vị</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {flavors.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => addFlavor(f.id)}
+                      className={`rounded-full border px-2.5 py-1.5 text-[11px] ${f.premium ? "border-gold text-maroon" : "border-line"} bg-white`}
+                    >
+                      + {f.name} · {fmt(flavorRetailPrice(f, buyerRegion))}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <a href="/san-pham" className="mt-3 block text-center text-[11px] text-gold underline">
+                Xem chi tiết sản phẩm →
+              </a>
+            </div>
           </section>
         )}
 
@@ -275,12 +387,25 @@ export default function OrderFlow({
             <div className="eyebrow">Hộp tự chọn</div>
             <h2 className="title-heritage mb-4 text-lg">Lấp từng ô</h2>
             <div className="rounded border border-line bg-white p-3.5">
-              <div className="flex justify-between">
-                <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">
-                  {box.name}
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                {boxes.length > 1 ? (
+                  <select
+                    value={selectedBoxId}
+                    onChange={(e) => { setSelectedBoxId(e.target.value); setPicks([]); setOpenSlot(0); }}
+                    className="rounded border border-line bg-white px-2 py-1.5 font-serif text-[13px] uppercase tracking-wide text-maroon"
+                  >
+                    {boxes.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name} · {b.slots} ô</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">{box.name}</div>
+                )}
                 <span className="font-serif font-semibold text-maroon-deep">{fmt(builderTotal)}</span>
               </div>
+              {box.description && (
+                <p className="mt-1 text-[11px] opacity-65">{box.description}</p>
+              )}
               <div className="my-3 grid grid-cols-3 gap-2">
                 {Array.from({ length: box.slots }).map((_, i) => {
                   const f = picks[i] && flavors.find((x) => x.id === picks[i]);
