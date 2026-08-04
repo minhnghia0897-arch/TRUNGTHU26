@@ -240,7 +240,12 @@ export default function OrderDetailModal({
                 </select>
               </Field>
               <Field label="Dự kiến nhận">
-                <TextInput value={d.expected ?? ""} onChange={(v) => set("expected", v)} placeholder="dd/mm/yyyy" />
+                <input
+                  type="date"
+                  value={d.expected ?? ""}
+                  onChange={(e) => set("expected", e.target.value)}
+                  className="w-48 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-right text-[13px] text-slate-800 outline-none focus:border-blue-400"
+                />
               </Field>
             </Card>
           </div>
