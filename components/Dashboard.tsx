@@ -180,7 +180,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <Panel title="Doanh số theo ngày" src="web-native">
               <div className="flex h-32 items-end gap-1.5 pt-1.5">
                 {data.daily.map((d) => (
-                  <div key={d.d} className="flex flex-1 flex-col items-center justify-end gap-1">
+                  <div key={d.d} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                     <div
                       className="w-full rounded-t bg-gradient-to-t from-gold to-maroon"
                       style={{ height: `${(d.v / maxDaily) * 100}%`, minHeight: 3 }}
