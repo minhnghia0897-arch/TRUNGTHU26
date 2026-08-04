@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { OrderRow, OrderSource, Carrier, Status } from "@/lib/ordersMock";
 import { PIPELINE } from "@/lib/ordersMock";
+import { SETS, BANH, nameOf } from "@/lib/inventory";
+import { setConsume, cakeConsume } from "@/lib/stockStore";
 import { IconXCircle, IconPlus } from "@/components/icons";
 
 const CARRIERS: Carrier[] = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile"];
@@ -18,7 +20,9 @@ export default function CreateOrderModal({
   const [source, setSource] = useState<OrderSource>("web");
   const [region, setRegion] = useState<"vn" | "kr">("kr");
   const [status, setStatus] = useState<Status>("Mới");
-  const [product, setProduct] = useState("Set bánh Trung Thu (6 vị)");
+  const [prodType, setProdType] = useState<"set" | "cake">("set");
+  const [prodKey, setProdKey] = useState<string>(SETS[0]?.key ?? "");
+  const [prodQty, setProdQty] = useState(1);
   const [customer, setCustomer] = useState("");
   const [phone, setPhone] = useState("");
   const [carrier, setCarrier] = useState<Carrier>("");
@@ -32,6 +36,16 @@ export default function CreateOrderModal({
   const [err, setErr] = useState("");
 
   const cur = region === "kr" ? "₩" : "đ";
+
+  // tên sản phẩm + tiêu hao kho (BOM)
+  const set = SETS.find((s) => s.key === prodKey);
+  const cake = BANH.find((c) => c.key === prodKey);
+  const productName =
+    prodType === "set"
+      ? `${set?.name ?? "Set"} ×${prodQty}`
+      : `${(cake?.name ?? "Bánh").replace(" 150g", "")} (lẻ) ×${prodQty}`;
+  const consume =
+    prodType === "set" ? setConsume(prodKey, prodQty) : cakeConsume(prodKey, prodQty);
 
   function submit() {
     if (!customer.trim()) return setErr("Nhập tên khách hàng.");
@@ -52,7 +66,8 @@ export default function CreateOrderModal({
       prepaid,
       cuoc_vc: cuoc,
       phi_vc_thu_khach: 0,
-      product,
+      product: productName,
+      consume,
       expected: expected || undefined,
       assignee: "Do",
     });
@@ -84,9 +99,41 @@ export default function CreateOrderModal({
             </F>
           </div>
 
-          <F label="Sản phẩm">
-            <input value={product} onChange={(e) => setProduct(e.target.value)} className={inp} />
-          </F>
+          <div className="rounded-lg border border-slate-200 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-[12px] font-medium text-slate-500">Sản phẩm (trừ kho)</span>
+              <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-slate-200 text-[12px]">
+                {(["set", "cake"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setProdType(t); setProdKey(t === "set" ? SETS[0].key : BANH[0].key); }}
+                    className={`px-3 py-1 ${prodType === t ? "bg-blue-600 text-white" : "text-slate-500"}`}
+                  >
+                    {t === "set" ? "Set / Hộp" : "Bánh lẻ"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <select value={prodKey} onChange={(e) => setProdKey(e.target.value)} className={inp}>
+                {(prodType === "set" ? SETS : BANH).map((o) => (
+                  <option key={o.key} value={o.key}>{o.name}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={1}
+                value={prodQty}
+                onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
+                className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
+              />
+            </div>
+            <div className="mt-2 text-[11px] text-slate-400">
+              Sẽ trừ kho: {Object.entries(consume).length
+                ? Object.entries(consume).map(([k, v]) => `${v} ${nameOf(k)}`).join(" · ")
+                : "—"}
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <F label="Khách hàng *">

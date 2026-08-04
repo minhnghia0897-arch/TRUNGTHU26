@@ -137,6 +137,7 @@ webhook_event    { id, provider, external_id(unique), payload(jsonb), processed_
 - **Tồn set khả dụng** = `min( tồn_vỏ, ⌊ tồn_bánh_i / sl_bánh_i_trong_set ⌋ ∀ i )` → set giới hạn bởi thành phần thiếu nhất (vd yến sào = 0 ⇒ hộp có yến = 0 set dù vỏ còn nhiều).
 - **Trừ kho khi bán:** bán 1 set → trừ 1 vỏ + từng bánh theo định mức; bán 1 bánh lẻ → trừ bánh đó. **Cùng một vị bánh dùng CHUNG một kho** — set và lẻ rút cùng pool (vd bán 1 set 6 vị + 2 thập cẩm lẻ ⇒ thập cẩm −3).
 - **Đẩy Pancake:** "nổ" set thành các dòng thành phần (1 vỏ + các bánh) hoặc dùng tính năng combo/định mức của Pancake để nó tự trừ đúng. Tồn kho vẫn là **mirror từ Pancake** (§15), web không sửa tồn.
+- **Vòng đời đơn ↔ kho (một nguồn kho chung):** mỗi `order_line` mang **map tiêu hao SKU** (`consume`) tính từ BOM. Đơn ở trạng thái "sống" (Mới…Đã thu tiền) **trừ kho**; chuyển **Huỷ đơn / Khách trả lại / Đã hoàn toàn bộ** hoặc **xoá đơn** → **hoàn kho**. Idempotent bằng cờ `stock_applied` (chỉ trừ/hoàn một lần, đổi trạng thái qua lại không cộng dồn). Sản phẩm–kho–đơn dùng **chung một danh sách SKU**.
 
 ---
 
