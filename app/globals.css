@@ -3,39 +3,85 @@
 @tailwind utilities;
 
 :root {
-  --maroon: #5a1620;
-  --maroon-deep: #3b0e15;
-  --cream: #f7efe1;
+  --navy: #1c2b45;
+  --navy-deep: #14203a;
+  --cream: #f4eee2;
   --gold: #c6a24c;
-  --ink: #2b1a16;
+  --gold-deep: #a9822b;
+  --ink: #2b2620;
   --line: #e7dac3;
 }
 
 html,
 body {
-  background: #d8cdb8;
+  background: var(--cream);
   color: var(--ink);
 }
 
 body {
-  font-family: var(--font-lora), Georgia, serif;
+  font-family: var(--font-be), system-ui, -apple-system, sans-serif;
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Tiêu đề heritage: Playfair, UPPERCASE giãn chữ */
+/* Tiêu đề: Be Vietnam Pro, đậm, giãn chữ nhẹ */
 .title-heritage {
-  font-family: var(--font-playfair), Georgia, serif;
+  font-family: var(--font-be), system-ui, sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--maroon);
+  letter-spacing: 0.06em;
+  color: var(--navy);
   font-weight: 700;
 }
 
 .eyebrow {
-  font-family: var(--font-playfair), Georgia, serif;
+  font-family: var(--font-be), system-ui, sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   font-size: 11px;
-  color: var(--gold);
+  color: var(--gold-deep);
   font-weight: 600;
+}
+
+/* Giá kiểu tham chiếu: số gold đậm + đơn vị nhỏ */
+.price-lg {
+  font-weight: 700;
+  color: var(--gold-deep);
+  letter-spacing: 0.01em;
+}
+.price-lg .unit {
+  font-weight: 500;
+  font-size: 0.7em;
+  color: var(--ink);
+  opacity: 0.55;
+}
+
+/* Loading skeleton thông minh — shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #ece3d2;
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
 }

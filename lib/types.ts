@@ -2,6 +2,7 @@
 
 export type Region = "vn" | "kr";
 export type Currency = "vnd" | "krw";
+export type Badge = "best_seller" | "must_try" | null;
 
 export interface Box {
   id: string;
@@ -13,6 +14,7 @@ export interface Box {
   price_kr: number;
   allowed_flavor_weight: 150 | 60;
   specs: Record<string, unknown>;
+  badge?: Badge;
   active: boolean;
 }
 
@@ -27,6 +29,7 @@ export interface Flavor {
   price_vn: number;
   price_kr: number;
   sort: number;
+  badge?: Badge;
   active: boolean;
 }
 
