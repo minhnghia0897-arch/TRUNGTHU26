@@ -3,24 +3,42 @@
 import { useEffect, useRef, useState } from "react";
 import type { Box, Flavor, Combo } from "@/lib/types";
 import { boxPrice } from "@/lib/pricing";
+import { ALL_STOCK } from "@/lib/inventory";
+import { getStock, saveStock, getNames, STOCK_KEY, NAME_KEY } from "@/lib/stockStore";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const EDITS_KEY = "tr_product_edits";
 const NEW_KEY = "tr_product_new";
 
-type InvItem = { name: string; qty: number; status: "ok" | "low" | "out" };
+// mặt hàng kho — liên kết theo KEY (mã SKU), tên hiển thị lấy live từ kho
+type InvItem = { key: string; name: string; qty: number; threshold: number; status: "ok" | "low" | "out" };
+// map tên gốc → key (để nâng cấp các liên kết cũ lưu theo tên)
+const KEY_BY_DEFAULT_NAME: Record<string, string> = Object.fromEntries(ALL_STOCK.map((s) => [s.name, s.key]));
+
+// Mẫu mã (thuộc tính) — mỗi SET là 1 tổ hợp bánh, giống "Thuộc tính sản phẩm" của Pancake
+interface Variant {
+  name: string; // SET A, SET B…
+  contents: string; // "matcha, thập cẩm, đậu xanh…"
+}
 
 interface Override {
   name?: string;
+  code?: string; // Mã SP
+  category?: string; // Danh mục
   image?: string; // legacy 1 ảnh
   images?: string[]; // tối đa 4 ảnh
   cost?: number;
   priceVn?: number;
   priceKr?: number;
   discount?: number; // %
-  stock?: string; // tên mặt hàng kho
+  stock?: string; // legacy: tên mặt hàng kho (được nâng cấp sang stockKey)
+  stockKey?: string; // mã SKU kho được liên kết
+  allowNegative?: boolean; // cho phép bán tồn kho âm
+  note?: string; // ghi chú nội bộ
+  supplyLink?: string; // link nhập hàng
+  variants?: Variant[]; // mẫu mã
   active?: boolean;
-  flavorIds?: string[]; // bánh trong set (Hộp/Combo)
+  flavorIds?: string[]; // bánh cho vào set (Hộp/Combo)
   removed?: boolean; // đã xoá (ẩn khỏi danh sách, còn khôi phục được)
 }
 
@@ -29,14 +47,20 @@ interface Product {
   type: "Hộp" | "Combo" | "Vị";
   premium?: boolean;
   name: string;
+  code?: string;
+  category?: string;
   priceVn: number;
   priceKr: number;
   cost: number;
   discount: number;
   images: string[];
-  stock?: string;
+  stockKey?: string; // liên kết kho theo mã SKU
+  allowNegative?: boolean;
+  note?: string;
+  supplyLink?: string;
+  variants?: Variant[];
   active: boolean;
-  flavorIds?: string[]; // bánh trong set
+  flavorIds?: string[];
 }
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
@@ -46,12 +70,10 @@ export default function ProductsAdmin({
   boxes,
   flavors,
   combos,
-  inventory,
 }: {
   boxes: Box[];
   flavors: Flavor[];
   combos: Combo[];
-  inventory: InvItem[];
 }) {
   const [ov, setOv] = useState<Record<string, Override>>({});
   const [custom, setCustom] = useState<Product[]>([]);
@@ -59,6 +81,12 @@ export default function ProductsAdmin({
   const [chooser, setChooser] = useState(false);
   const [draft, setDraft] = useState<Product | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+
+  // ---- kho dùng chung (đồng bộ với trang Tồn kho) ----
+  const [stock, setStockState] = useState<Record<string, number>>(() =>
+    Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
+  );
+  const [names, setNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     try {
@@ -73,7 +101,33 @@ export default function ProductsAdmin({
     } catch {
       /* ignore */
     }
+    setStockState(getStock());
+    setNames(getNames());
+    const onChange = (e: StorageEvent) => {
+      if (!e.key || e.key === STOCK_KEY) setStockState(getStock());
+      if (!e.key || e.key === NAME_KEY) setNames(getNames());
+    };
+    window.addEventListener("storage", onChange);
+    return () => window.removeEventListener("storage", onChange);
   }, []);
+
+  // tồn kho live (tên + số lượng) — nguồn dùng cho liên kết & hiển thị "Có thể bán"
+  const liveInv: InvItem[] = ALL_STOCK.map((s) => {
+    const qty = stock[s.key] ?? s.qty;
+    const name = names[s.key] ?? s.name;
+    return { key: s.key, name, qty, threshold: s.threshold, status: qty <= 0 ? "out" : qty < s.threshold ? "low" : "ok" };
+  });
+  const invByKey = (k?: string) => (k ? liveInv.find((i) => i.key === k) : undefined);
+
+  // ghi tồn kho (dùng chung) — kẹp ≥ 0 trừ khi cho phép bán âm
+  const writeStock = (key: string, qty: number, allowNegative?: boolean) => {
+    const v = allowNegative ? Math.floor(qty) : Math.max(0, Math.floor(qty) || 0);
+    setStockState((cur) => {
+      const next = { ...cur, [key]: v };
+      saveStock(next);
+      return next;
+    });
+  };
 
   // sản phẩm gốc từ catalog
   const base: Omit<Product, "images">[] = [
@@ -100,15 +154,22 @@ export default function ProductsAdmin({
   const mergedBase: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
     const images = o.images ?? (o.image ? [o.image] : []);
+    const stockKey = o.stockKey ?? (o.stock ? KEY_BY_DEFAULT_NAME[o.stock] : undefined);
     return {
       ...p,
       images,
       name: o.name ?? p.name,
+      code: o.code ?? p.code,
+      category: o.category ?? p.category,
       priceVn: o.priceVn ?? p.priceVn,
       priceKr: o.priceKr ?? p.priceKr,
       cost: o.cost ?? p.cost,
       discount: o.discount ?? p.discount,
-      stock: o.stock ?? p.stock,
+      stockKey,
+      allowNegative: o.allowNegative ?? p.allowNegative,
+      note: o.note ?? p.note,
+      supplyLink: o.supplyLink ?? p.supplyLink,
+      variants: o.variants ?? p.variants,
       active: o.active ?? p.active,
       flavorIds: o.flavorIds ?? p.flavorIds,
     };
@@ -145,12 +206,18 @@ export default function ProductsAdmin({
   const applyOverride = (p: Product, o: Override): Product => ({
     ...p,
     name: o.name ?? p.name,
+    code: o.code ?? p.code,
+    category: o.category ?? p.category,
     images: o.images ?? (o.image ? [o.image] : p.images),
     cost: o.cost ?? p.cost,
     priceVn: o.priceVn ?? p.priceVn,
     priceKr: o.priceKr ?? p.priceKr,
     discount: o.discount ?? p.discount,
-    stock: o.stock,
+    stockKey: o.stockKey,
+    allowNegative: o.allowNegative,
+    note: o.note,
+    supplyLink: o.supplyLink,
+    variants: o.variants,
     active: o.active ?? p.active,
     flavorIds: o.flavorIds ?? p.flavorIds,
   });
@@ -159,8 +226,10 @@ export default function ProductsAdmin({
     key: `custom:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     type,
     name: type === "Hộp" ? "Hộp mới" : type === "Combo" ? "Combo mới" : "Vị mới",
+    code: "",
+    category: "",
     priceVn: 0, priceKr: 0, cost: 0, discount: 0,
-    images: [], active: true, flavorIds: [],
+    images: [], active: true, flavorIds: [], variants: [], allowNegative: false,
   });
 
   const handleSave = (patch: Override) => {
@@ -212,7 +281,7 @@ export default function ProductsAdmin({
             onClick={() => setChooser(true)}
             className={`${trashBase.length > 0 ? "" : "ml-auto"} inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700`}
           >
-            + Thêm sản phẩm
+            + Tạo sản phẩm
           </button>
         )}
         <a href="/san-pham" className="text-[13px] font-medium text-blue-600 hover:underline">Xem trang bán →</a>
@@ -220,23 +289,25 @@ export default function ProductsAdmin({
 
       <div className="p-5">
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[900px] text-[13px]">
+          <table className="w-full min-w-[1040px] text-[13px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
                 <th className="px-4 py-2.5">Ảnh</th>
-                <th className="px-4 py-2.5">Tên</th>
+                <th className="px-4 py-2.5">Mã SP</th>
+                <th className="px-4 py-2.5">Tên sản phẩm</th>
                 <th className="px-4 py-2.5">Loại</th>
-                <th className="px-4 py-2.5 text-right">Giá vốn</th>
+                <th className="px-4 py-2.5">Danh mục</th>
+                <th className="px-4 py-2.5 text-center">Số mẫu mã</th>
                 <th className="px-4 py-2.5 text-right">Giá bán (Hàn)</th>
-                <th className="px-4 py-2.5 text-right">Giảm</th>
-                <th className="px-4 py-2.5 text-right">Sau giảm</th>
-                <th className="px-4 py-2.5">Kho</th>
+                <th className="px-4 py-2.5">Kho · Có thể bán</th>
                 <th className="px-4 py-2.5 text-center">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {merged.map((p) => {
-                const inv = inventory.find((i) => i.name === p.stock);
+                const inv = invByKey(p.stockKey);
+                const sellable = inv ? inv.qty : null;
+                const negative = sellable !== null && sellable < 0;
                 return (
                   <tr key={p.key} className={showTrash ? "" : "cursor-pointer hover:bg-slate-50"} onClick={() => { if (!showTrash) setEditKey(p.key); }}>
                     <td className="px-4 py-2">
@@ -254,24 +325,26 @@ export default function ProductsAdmin({
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2 font-medium text-slate-800">{p.name}</td>
-                    <td className="px-4 py-2 text-slate-500">
-                      {p.type}{p.premium ? " · Premium" : ""}
+                    <td className="px-4 py-2 font-mono text-[12px] text-slate-500">{p.code || "—"}</td>
+                    <td className="px-4 py-2 font-medium text-slate-800">
+                      {p.name}
                       {p.key.startsWith("custom:") && <span className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Tự thêm</span>}
                     </td>
-                    <td className="px-4 py-2 text-right text-slate-500">{p.cost ? krw(p.cost) : "—"}</td>
-                    <td className="px-4 py-2 text-right text-slate-700">{krw(p.priceKr)}</td>
-                    <td className="px-4 py-2 text-right">{p.discount ? <span className="text-rose-600">-{p.discount}%</span> : "—"}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-slate-800">{krw(afterDiscount(p.priceKr, p.discount))}</td>
+                    <td className="px-4 py-2 text-slate-500">{p.type}{p.premium ? " · Premium" : ""}</td>
+                    <td className="px-4 py-2 text-slate-500">{p.category || "—"}</td>
+                    <td className="px-4 py-2 text-center text-slate-600">{p.variants?.length || 1}</td>
+                    <td className="px-4 py-2 text-right">
+                      <span className="font-semibold text-slate-800">{krw(afterDiscount(p.priceKr, p.discount))}</span>
+                      {p.discount ? <span className="ml-1 text-[11px] text-rose-500">-{p.discount}%</span> : null}
+                    </td>
                     <td className="px-4 py-2">
-                      {p.stock ? (
+                      {inv ? (
                         <span className="inline-flex items-center gap-1.5">
-                          <span className="text-slate-600">{p.stock}</span>
-                          {inv && (
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${inv.status === "ok" ? "bg-emerald-100 text-emerald-700" : inv.status === "low" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
-                              {inv.qty}
-                            </span>
-                          )}
+                          <span className="text-slate-600">{inv.name}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${negative ? "bg-rose-100 text-rose-700" : inv.status === "ok" ? "bg-emerald-100 text-emerald-700" : inv.status === "low" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                            {sellable}
+                          </span>
+                          {p.allowNegative && <span className="text-[10px] text-slate-400">(bán âm)</span>}
                         </span>
                       ) : (
                         <span className="text-slate-300">Chưa liên kết</span>
@@ -303,7 +376,7 @@ export default function ProductsAdmin({
         <p className="mt-3 text-[12px] text-slate-400">
           {showTrash
             ? "Sản phẩm đã xoá — bấm “Khôi phục” để đưa lại danh sách."
-            : "Bấm vào một sản phẩm để sửa/xoá. Thay đổi lưu tạm ở trình duyệt (demo) — bản thật ghi vào Supabase."}
+            : "Bấm vào một sản phẩm để sửa/xoá. “Có thể bán” lấy trực tiếp từ Tồn kho theo mã SKU (đổi tên/tồn bên kho là tự đồng bộ). Demo lưu ở trình duyệt — bản thật ghi vào Supabase."}
         </p>
       </div>
 
@@ -319,8 +392,9 @@ export default function ProductsAdmin({
           product={editing}
           create={!!draft}
           flavors={flavors}
-          inventory={inventory}
+          inventory={liveInv}
           onSave={handleSave}
+          writeStock={writeStock}
           onDelete={!draft ? () => removeAny(editing.key) : undefined}
           onClose={() => { setDraft(null); setEditKey(null); }}
         />
@@ -331,7 +405,7 @@ export default function ProductsAdmin({
 
 function TypeChooser({ onPick, onClose }: { onPick: (t: Product["type"]) => void; onClose: () => void }) {
   const opts: { t: Product["type"]; icon: React.ReactNode; desc: string }[] = [
-    { t: "Hộp", icon: <IconShirt width={20} height={20} />, desc: "Vỏ hộp + chọn bánh cho vào set" },
+    { t: "Hộp", icon: <IconShirt width={20} height={20} />, desc: "Vỏ hộp + nhiều mẫu mã (SET A/B/C…)" },
     { t: "Combo", icon: <IconGift width={20} height={20} />, desc: "Gộp nhiều bánh thành combo" },
     { t: "Vị", icon: <IconCart width={20} height={20} />, desc: "Một vị bánh bán lẻ" },
   ];
@@ -339,7 +413,7 @@ function TypeChooser({ onPick, onClose }: { onPick: (t: Product["type"]) => void
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
       <div className="my-16 w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
-          <h3 className="text-[15px] font-semibold text-slate-800">Thêm sản phẩm — chọn loại</h3>
+          <h3 className="text-[15px] font-semibold text-slate-800">Tạo sản phẩm — chọn loại</h3>
           <button onClick={onClose} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
             <IconXCircle width={20} height={20} />
           </button>
@@ -370,6 +444,7 @@ function EditModal({
   flavors,
   inventory,
   onSave,
+  writeStock,
   onDelete,
   onClose,
 }: {
@@ -378,17 +453,26 @@ function EditModal({
   flavors: Flavor[];
   inventory: InvItem[];
   onSave: (patch: Override) => void;
+  writeStock: (key: string, qty: number, allowNegative?: boolean) => void;
   onDelete?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(product.name);
+  const [code, setCode] = useState(product.code ?? "");
+  const [category, setCategory] = useState(product.category ?? "");
   const [images, setImages] = useState<string[]>(product.images ?? []);
   const [url, setUrl] = useState("");
   const [cost, setCost] = useState(product.cost);
   const [priceVn, setPriceVn] = useState(product.priceVn);
   const [priceKr, setPriceKr] = useState(product.priceKr);
   const [discount, setDiscount] = useState(product.discount);
-  const [stock, setStock] = useState(product.stock ?? "");
+  const [stockKey, setStockKey] = useState(product.stockKey ?? "");
+  const initQty = inventory.find((i) => i.key === product.stockKey)?.qty ?? 0;
+  const [stockQty, setStockQty] = useState(initQty);
+  const [allowNegative, setAllowNegative] = useState(!!product.allowNegative);
+  const [note, setNote] = useState(product.note ?? "");
+  const [supplyLink, setSupplyLink] = useState(product.supplyLink ?? "");
+  const [variants, setVariants] = useState<Variant[]>(product.variants ?? []);
   const [active, setActive] = useState(product.active);
   const [flavorIds, setFlavorIds] = useState<string[]>(product.flavorIds ?? []);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -414,23 +498,49 @@ function EditModal({
   const toggleFlavor = (id: string) =>
     setFlavorIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
-  const submit = () =>
-    onSave({ name, images, image: images[0] || undefined, cost, priceVn, priceKr, discount, stock: stock || undefined, active, flavorIds: hasSet ? flavorIds : undefined });
+  // mẫu mã (thuộc tính)
+  const addVariant = () => setVariants((v) => [...v, { name: `SET ${String.fromCharCode(65 + v.length)}`, contents: "" }]);
+  const setVariant = (i: number, patch: Partial<Variant>) =>
+    setVariants((v) => v.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const removeVariant = (i: number) => setVariants((v) => v.filter((_, j) => j !== i));
+
+  const onPickStock = (k: string) => {
+    setStockKey(k);
+    setStockQty(inventory.find((i) => i.key === k)?.qty ?? 0);
+  };
+
+  const submit = () => {
+    // ghi tồn kho vào kho dùng chung nếu có liên kết
+    if (stockKey) writeStock(stockKey, stockQty, allowNegative);
+    onSave({
+      name, code: code.trim() || undefined, category: category.trim() || undefined,
+      images, image: images[0] || undefined,
+      cost, priceVn, priceKr, discount,
+      stockKey: stockKey || undefined,
+      allowNegative,
+      note: note.trim() || undefined,
+      supplyLink: supplyLink.trim() || undefined,
+      variants: hasSet ? variants.filter((v) => v.name.trim()) : undefined,
+      active,
+      flavorIds: hasSet ? flavorIds : undefined,
+    });
+  };
 
   const inp = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
+  const selectedInv = inventory.find((i) => i.key === stockKey);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
-      <div className="my-4 w-full max-w-lg rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="my-4 w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
-          <h3 className="text-[15px] font-semibold text-slate-800">{create ? "Thêm sản phẩm" : "Sửa sản phẩm"}</h3>
+          <h3 className="text-[15px] font-semibold text-slate-800">{create ? "Tạo sản phẩm" : "Thiết lập sản phẩm"}</h3>
           <span className="text-[12px] text-slate-400">· {product.type}</span>
           <button onClick={onClose} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
             <IconXCircle width={20} height={20} />
           </button>
         </div>
 
-        <div className="max-h-[72vh] space-y-4 overflow-y-auto p-5">
+        <div className="max-h-[74vh] space-y-4 overflow-y-auto p-5">
           {/* ảnh — tối đa 4 */}
           <div>
             <span className="mb-1.5 block text-[12px] font-medium text-slate-500">Ảnh sản phẩm ({images.length}/{MAX})</span>
@@ -468,8 +578,14 @@ function EditModal({
             )}
           </div>
 
-          <L label="Tên sản phẩm"><input value={name} onChange={(e) => setName(e.target.value)} className={inp} /></L>
+          {/* mã + tên */}
+          <div className="grid grid-cols-2 gap-3">
+            <L label="Mã SP"><input value={code} onChange={(e) => setCode(e.target.value)} placeholder="VD: 5862_TLQC" className={inp} /></L>
+            <L label="Danh mục"><input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="VD: 3d, 2d…" className={inp} /></L>
+          </div>
+          <L label="Tên sản phẩm *"><input value={name} onChange={(e) => setName(e.target.value)} className={inp} /></L>
 
+          {/* giá */}
           <div className="grid grid-cols-2 gap-3">
             <L label="Giá vốn (₩)"><Num value={cost} onChange={setCost} /></L>
             <L label="Giảm giá (%)"><Num value={discount} onChange={setDiscount} /></L>
@@ -488,36 +604,82 @@ function EditModal({
             )}
           </div>
 
-          {/* liên kết kho */}
-          <L label="Liên kết kho hàng">
-            <select value={stock} onChange={(e) => setStock(e.target.value)} className={inp}>
-              <option value="">— Không liên kết —</option>
-              {inventory.map((i) => (
-                <option key={i.name} value={i.name}>{i.name} (tồn {i.qty})</option>
-              ))}
-            </select>
-          </L>
+          {/* liên kết kho + tồn + bán âm */}
+          <div className="rounded-lg border border-slate-200 p-3">
+            <span className="mb-2 block text-[12px] font-semibold text-slate-500">Kho hàng</span>
+            <div className="grid grid-cols-2 gap-3">
+              <L label="Liên kết SKU kho">
+                <select value={stockKey} onChange={(e) => onPickStock(e.target.value)} className={inp}>
+                  <option value="">— Không liên kết —</option>
+                  {inventory.map((i) => (
+                    <option key={i.key} value={i.key}>{i.name} (tồn {i.qty})</option>
+                  ))}
+                </select>
+              </L>
+              <L label="Tồn kho (Có thể bán)">
+                <input
+                  type="number"
+                  value={stockQty}
+                  disabled={!stockKey}
+                  onChange={(e) => setStockQty(Number(e.target.value) || 0)}
+                  className={`${inp} ${!stockKey ? "cursor-not-allowed bg-slate-50 text-slate-400" : ""}`}
+                />
+              </L>
+            </div>
+            <label className="mt-2 flex items-center gap-2 text-[13px] text-slate-700">
+              <input type="checkbox" checked={allowNegative} onChange={(e) => setAllowNegative(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+              Cho phép bán tồn kho âm
+            </label>
+            {stockKey && (
+              <p className="mt-1.5 text-[11px] text-slate-400">
+                Ghi vào Tồn kho dùng chung — mã <b>{selectedInv?.key}</b>. Đơn bán/huỷ sẽ tự cộng trừ số này.
+              </p>
+            )}
+          </div>
 
-          {/* biến thể: bánh cho vào set (Hộp / Combo) */}
+          {/* mẫu mã (thuộc tính) — Hộp / Combo */}
           {hasSet && (
-            <L label={`Bánh cho vào set — biến thể (${flavorIds.length})`}>
-              <div className="flex flex-wrap gap-1.5">
-                {flavors.map((f) => {
-                  const on = flavorIds.includes(f.id);
-                  return (
-                    <button
-                      key={f.id}
-                      onClick={() => toggleFlavor(f.id)}
-                      className={`rounded-full border px-2.5 py-1 text-[12px] ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"} ${f.premium ? (on ? "" : "border-gold text-gold-deep") : ""}`}
-                    >
-                      {on ? "✓ " : "+ "}{f.name}{f.premium ? " ★" : ""}
-                    </button>
-                  );
-                })}
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="mb-2 flex items-center">
+                <span className="text-[12px] font-semibold text-slate-500">Mẫu mã / Thuộc tính ({variants.length})</span>
+                <button onClick={addVariant} className="ml-auto rounded-lg bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700">+ Thêm mẫu mã</button>
               </div>
-              <p className="mt-1.5 text-[11px] text-slate-400">Chọn các vị bánh được phép cho vào set này.</p>
-            </L>
+              {variants.length === 0 && <p className="text-[12px] text-slate-400">Chưa có mẫu mã. VD: SET A → matcha, thập cẩm, đậu xanh, cốm dừa…</p>}
+              <div className="space-y-2">
+                {variants.map((v, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} placeholder="SET A" className="w-24 flex-none rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] font-medium outline-none focus:border-blue-400" />
+                    <input value={v.contents} onChange={(e) => setVariant(i, { contents: e.target.value })} placeholder="matcha, thập cẩm, đậu xanh…" className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] outline-none focus:border-blue-400" />
+                    <button onClick={() => removeVariant(i)} className="flex-none rounded-lg border border-slate-200 px-2 text-slate-400 hover:bg-rose-50 hover:text-rose-500">🗑</button>
+                  </div>
+                ))}
+              </div>
+
+              {/* biến thể bánh cho set (danh sách vị được phép) */}
+              <L label={`Bánh được phép cho vào set (${flavorIds.length})`}>
+                <div className="flex flex-wrap gap-1.5">
+                  {flavors.map((f) => {
+                    const on = flavorIds.includes(f.id);
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => toggleFlavor(f.id)}
+                        className={`rounded-full border px-2.5 py-1 text-[12px] ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600"} ${f.premium ? (on ? "" : "border-gold text-gold-deep") : ""}`}
+                      >
+                        {on ? "✓ " : "+ "}{f.name}{f.premium ? " ★" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </L>
+            </div>
           )}
+
+          {/* ghi chú + link nhập hàng */}
+          <div className="grid grid-cols-1 gap-3">
+            <L label="Ghi chú nội bộ"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={inp} /></L>
+            <L label="Link nhập hàng"><input value={supplyLink} onChange={(e) => setSupplyLink(e.target.value)} placeholder="Dán link sản phẩm nhập" className={inp} /></L>
+          </div>
 
           <label className="flex items-center gap-2 text-[13px] text-slate-700">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-blue-600" />
