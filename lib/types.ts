@@ -6,6 +6,7 @@ export type Currency = "vnd" | "krw";
 export interface Box {
   id: string;
   name: string;
+  description?: string;
   weight: 150 | 60;
   slots: number;
   price_vn: number;
@@ -18,6 +19,7 @@ export interface Box {
 export interface Flavor {
   id: string;
   name: string;
+  description?: string;
   weight: 150 | 60;
   premium: boolean;
   premium_surcharge_vn: number;
@@ -31,6 +33,7 @@ export interface Flavor {
 export interface Combo {
   id: string;
   name: string;
+  description?: string;
   box_id: string;
   flavor_ids: string[];
   active: boolean;

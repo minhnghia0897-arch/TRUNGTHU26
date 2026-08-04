@@ -1,13 +1,28 @@
-import { getBoxes, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
-import OrderFlow from "@/components/OrderFlow";
+import { getBoxes, getFlavors, getCombos, getWarehouses, getFxRate } from "@/lib/catalog";
+import OrderFlow, { type InitialSelection } from "@/components/OrderFlow";
 
-// Server wrapper: nạp danh mục rồi truyền xuống client flow.
-export default async function OrderPage() {
-  const [boxes, flavors, warehouses, fx] = await Promise.all([
+export default async function OrderPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ box?: string; combo?: string; la?: string }>;
+}) {
+  const sp = await searchParams;
+  const [boxes, flavors, combos, warehouses, fx] = await Promise.all([
     getBoxes(),
     getFlavors(),
+    getCombos(),
     getWarehouses(),
     getFxRate(),
   ]);
-  return <OrderFlow boxes={boxes} flavors={flavors} warehouses={warehouses} fx={fx} />;
+  const initial: InitialSelection = { box: sp.box, combo: sp.combo, la: sp.la };
+  return (
+    <OrderFlow
+      boxes={boxes}
+      flavors={flavors}
+      combos={combos}
+      warehouses={warehouses}
+      fx={fx}
+      initial={initial}
+    />
+  );
 }
