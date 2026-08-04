@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { VO, BANH, ALL_STOCK, SETS, availableSet, nameOf, type StockItem } from "@/lib/inventory";
-import { getStock, saveStock, STOCK_KEY } from "@/lib/stockStore";
+import { VO, BANH, ALL_STOCK, SETS, availableSet, type StockItem } from "@/lib/inventory";
+import { getStock, saveStock, STOCK_KEY, getNames, saveNames, NAME_KEY } from "@/lib/stockStore";
 
 const statusOf = (qty: number, th: number) => (qty <= 0 ? "out" : qty < th ? "low" : "ok");
 const badge = (s: string) =>
@@ -14,14 +14,29 @@ export default function InventoryView() {
   const [stock, setStock] = useState<Record<string, number>>(() =>
     Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
   );
+  // ---- tên mặt hàng (đổi tên được) ----
+  const [names, setNames] = useState<Record<string, string>>({});
   useEffect(() => {
     setStock(getStock());
+    setNames(getNames());
     const onChange = (e: StorageEvent) => {
       if (!e.key || e.key === STOCK_KEY) setStock(getStock());
+      if (!e.key || e.key === NAME_KEY) setNames(getNames());
     };
     window.addEventListener("storage", onChange);
     return () => window.removeEventListener("storage", onChange);
   }, []);
+  const DEFAULT_NAME: Record<string, string> = Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.name]));
+  const nameFor = (k: string) => names[k] ?? DEFAULT_NAME[k] ?? k;
+  const setName = (k: string, v: string) =>
+    setNames((cur) => {
+      const t = v.trim();
+      const next = { ...cur };
+      if (t && t !== DEFAULT_NAME[k]) next[k] = t;
+      else delete next[k]; // để trống hoặc trùng mặc định → về tên gốc
+      saveNames(next);
+      return next;
+    });
   const qtyOf = (k: string) => stock[k] ?? 0;
   const setStockQty = (k: string, v: number) =>
     setStock((cur) => {
@@ -76,7 +91,7 @@ export default function InventoryView() {
                   <tr key={set.key}>
                     <td className="px-3 py-2.5 font-medium text-slate-800">{set.name}</td>
                     <td className="px-3 py-2.5 text-slate-500">
-                      1 {nameOf(set.voKey)} + {set.cakes.map((c) => `${c.qty} ${nameOf(c.key).replace("Bánh ", "").replace(" 150g", "")}`).join(", ")}
+                      1 {nameFor(set.voKey)} + {set.cakes.map((c) => `${c.qty} ${nameFor(c.key).replace("Bánh ", "").replace(" 150g", "")}`).join(", ")}
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <span className={`rounded px-2 py-0.5 text-[12px] font-semibold ${badge(statusOf(av.count, 10))}`}>{av.count} set</span>
@@ -110,7 +125,7 @@ export default function InventoryView() {
               <div className="space-y-2">
                 {BANH.map((f) => (
                   <div key={f.key} className="flex items-center gap-2">
-                    <span className="flex-1 text-[13px] text-slate-700">{f.name}</span>
+                    <span className="flex-1 text-[13px] text-slate-700">{nameFor(f.key)}</span>
                     <Stepper value={looseQty[f.key] || 0} onChange={(v) => setLooseQty((s) => ({ ...s, [f.key]: v }))} />
                   </div>
                 ))}
@@ -135,7 +150,7 @@ export default function InventoryView() {
                     const left = qtyOf(s.key) - d;
                     return (
                       <tr key={s.key} className={left < 0 ? "bg-rose-50" : ""}>
-                        <td className="px-3 py-2 font-medium text-slate-800">{s.name}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{nameFor(s.key)}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{qtyOf(s.key)}</td>
                         <td className="px-3 py-2 text-right font-semibold text-rose-600">−{d}</td>
                         <td className={`px-3 py-2 text-right font-semibold ${left < 0 ? "text-rose-600" : "text-slate-800"}`}>
@@ -148,7 +163,7 @@ export default function InventoryView() {
               </table>
               <div className={`px-3 py-2 text-[13px] font-medium ${shortage.length ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
                 {shortage.length
-                  ? `⚠ Không đủ hàng: ${shortage.map((s) => s.name).join(", ")}`
+                  ? `⚠ Không đủ hàng: ${shortage.map((s) => nameFor(s.key)).join(", ")}`
                   : "✓ Đủ hàng cho đơn này"}
               </div>
             </div>
@@ -158,8 +173,8 @@ export default function InventoryView() {
 
         {/* ===== KHO VỎ + BÁNH (sửa số tồn) ===== */}
         <div className="grid gap-5 md:grid-cols-2">
-          <StockTable title="Kho vỏ hộp" items={VO} qtyOf={qtyOf} onChange={setStockQty} />
-          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={BANH} qtyOf={qtyOf} onChange={setStockQty} />
+          <StockTable title="Kho vỏ hộp" items={VO} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} />
+          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={BANH} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} />
         </div>
 
         <p className="text-[12px] text-slate-400">
@@ -189,22 +204,26 @@ function StockTable({
   items,
   qtyOf,
   onChange,
+  nameFor,
+  onRename,
 }: {
   title: string;
   items: StockItem[];
   qtyOf: (k: string) => number;
   onChange: (k: string, v: number) => void;
+  nameFor: (k: string) => string;
+  onRename: (k: string, v: string) => void;
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-800">
         {title}
-        <span className="text-[11px] font-normal text-slate-400">· sửa được</span>
+        <span className="text-[11px] font-normal text-slate-400">· sửa tên & tồn được</span>
       </div>
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            <th className="px-4 py-2">Mặt hàng</th>
+            <th className="px-4 py-2">Mặt hàng (sửa tên)</th>
             <th className="px-4 py-2 text-right">Tồn (sửa)</th>
             <th className="px-4 py-2 text-right">Ngưỡng</th>
             <th className="px-4 py-2 text-center">Trạng thái</th>
@@ -216,7 +235,13 @@ function StockTable({
             const st = statusOf(q, s.threshold);
             return (
               <tr key={s.key}>
-                <td className="px-4 py-2.5 font-medium text-slate-800">{s.name}</td>
+                <td className="px-4 py-2">
+                  <input
+                    value={nameFor(s.key)}
+                    onChange={(e) => onRename(s.key, e.target.value)}
+                    className="w-full min-w-[9rem] rounded-lg border border-transparent bg-transparent px-2 py-1 font-medium text-slate-800 outline-none hover:border-slate-200 focus:border-blue-400 focus:bg-white"
+                  />
+                </td>
                 <td className="px-4 py-2 text-right">
                   <input
                     type="number"
