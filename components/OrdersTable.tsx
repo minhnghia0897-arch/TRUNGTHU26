@@ -20,6 +20,8 @@ import {
   IconXCircle,
   IconReturn,
   IconCopyDoc,
+  IconTrash,
+  IconPlus,
 } from "@/components/icons";
 
 const FX = 18.5;
@@ -51,6 +53,9 @@ export default function OrdersTable() {
   const [q, setQ] = useState("");
   const [cur, setCur] = useState<Cur>("krw");
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [pageSize, setPageSize] = useState(500);
+  const [page, setPage] = useState(1);
 
   const money = (krw: number) =>
     cur === "vnd"
@@ -81,6 +86,31 @@ export default function OrdersTable() {
 
   const list = status === "all" ? baseRows : baseRows.filter((r) => r.status === status);
 
+  // phân trang
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const curPage = Math.min(page, totalPages);
+  const pageRows = list.slice((curPage - 1) * pageSize, curPage * pageSize);
+
+  // chọn nhiều
+  const allChecked = pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
+  const toggleAll = () =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (allChecked) pageRows.forEach((r) => n.delete(r.id));
+      else pageRows.forEach((r) => n.add(r.id));
+      return n;
+    });
+  const toggleOne = (id: number) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const deleteSelected = () => {
+    setRows((rs) => rs.filter((r) => !selected.has(r.id)));
+    setSelected(new Set());
+  };
+
   const totals = list.reduce(
     (a, r) => ({
       cod: a.cod + toKrw(r.cod, r.region),
@@ -107,10 +137,10 @@ export default function OrdersTable() {
     <main className="min-h-screen bg-slate-50 text-slate-700" onClick={() => menu && setMenu(null)}>
       {/* topbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
-        <a href="/dashboard" className="text-[15px] font-semibold text-slate-800">
-          Trăng Rằm
-        </a>
-        <span className="text-[13px] text-slate-400">· Quản lý đơn hàng</span>
+        <h1 className="text-[15px] font-semibold text-slate-800">Đơn hàng</h1>
+        <button className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700">
+          <IconPlus width={15} height={15} /> Tạo đơn
+        </button>
         <div className="relative ml-auto w-full max-w-md">
           <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" width={16} height={16} />
           <input
@@ -160,11 +190,41 @@ export default function OrdersTable() {
         ))}
       </div>
 
+      {/* bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-2.5 text-[13px]">
+          <span className="font-medium text-blue-700">Đã chọn {selected.size} đơn</span>
+          <button
+            onClick={deleteSelected}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-medium text-rose-600 hover:bg-rose-50"
+          >
+            <IconTrash width={15} height={15} /> Xoá
+          </button>
+          <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-50">
+            <IconPlus width={15} height={15} /> Thêm nhãn
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-slate-500 hover:underline"
+          >
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+
       {/* table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] border-separate border-spacing-0 text-[13px]">
+        <table className="w-full min-w-[1080px] border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              <Th className="w-10">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  onChange={toggleAll}
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-blue-600"
+                />
+              </Th>
               <Th>ID</Th>
               <Th>VC</Th>
               <Th>Thẻ</Th>
@@ -178,8 +238,16 @@ export default function OrdersTable() {
             </tr>
           </thead>
           <tbody>
-            {list.map((r) => (
-              <tr key={r.id} className="bg-white hover:bg-slate-50">
+            {pageRows.map((r) => (
+              <tr key={r.id} className={selected.has(r.id) ? "bg-blue-50/60" : "bg-white hover:bg-slate-50"}>
+                <Td>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.id)}
+                    onChange={() => toggleOne(r.id)}
+                    className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-blue-600"
+                  />
+                </Td>
                 <Td className="whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
                     <SourceIcon s={r.source} /> {r.id}
@@ -229,9 +297,9 @@ export default function OrdersTable() {
                 </Td>
               </tr>
             ))}
-            {list.length === 0 && (
+            {pageRows.length === 0 && (
               <tr>
-                <td colSpan={10} className="bg-white px-4 py-10 text-center text-slate-400">
+                <td colSpan={11} className="bg-white px-4 py-10 text-center text-slate-400">
                   Không có đơn khớp bộ lọc.
                 </td>
               </tr>
@@ -246,9 +314,42 @@ export default function OrdersTable() {
         <span className="text-slate-500">COD: <b className="text-slate-800">{money(totals.cod)}</b></span>
         <span className="text-slate-500">Trả trước: <b className="text-slate-800">{money(totals.prepaid)}</b></span>
         <span className="text-slate-500">Cước VC: <b className="text-slate-800">{money(totals.cuoc)}</b></span>
-        <span className="text-slate-500">Phí VC thu khách: <b className="text-slate-800">{money(totals.phi)}</b></span>
+        <span className="text-slate-500">Phí VC: <b className="text-slate-800">{money(totals.phi)}</b></span>
         <div className="flex-1" />
-        <a href="/dashboard" className="text-[12px] font-medium text-blue-600 hover:underline">← Về dashboard</a>
+        {/* pagination */}
+        <div className="flex items-center gap-2 text-slate-500">
+          <span>
+            {list.length === 0 ? 0 : (curPage - 1) * pageSize + 1}–{Math.min(curPage * pageSize, list.length)} / {list.length}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={curPage <= 1}
+            className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+          >
+            ‹
+          </button>
+          <span className="tabular-nums">{curPage}/{totalPages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={curPage >= totalPages}
+            className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+          >
+            ›
+          </button>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+            className="rounded border border-slate-200 bg-white px-2 py-1"
+          >
+            <option value={100}>100 / trang</option>
+            <option value={300}>300 / trang</option>
+            <option value={500}>500 / trang</option>
+            <option value={1000}>1000 / trang</option>
+          </select>
+        </div>
       </div>
 
       {/* menu đổi trạng thái */}
