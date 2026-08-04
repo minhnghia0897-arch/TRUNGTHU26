@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { DashboardData, DashShipment } from "@/lib/dashboard";
-import {
-  IconGrid,
-  IconTruck,
-  IconChevron,
-  IconArrowRight,
-  IconSearch,
-} from "@/components/icons";
+import { IconTruck, IconChevron, IconArrowRight, IconSearch } from "@/components/icons";
 
 type Cur = "krw" | "vnd";
 type Range = "today" | "7d" | "month";
@@ -49,29 +43,19 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-700">
-      {/* topbar */}
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-[1120px] items-center gap-3 px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white">
-              <IconGrid width={17} height={17} />
-            </span>
-            <div className="leading-tight">
-              <div className="text-[15px] font-semibold text-slate-800">Trăng Rằm</div>
-              <div className="text-[11px] text-slate-400">Bảng điều hành</div>
-            </div>
-          </div>
-          <div className="flex-1" />
-          <a
-            href="/dashboard/don-hang"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
-          >
-            Quản lý đơn hàng <IconArrowRight width={15} height={15} />
-          </a>
-        </div>
+      {/* page header */}
+      <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
+        <h1 className="text-[15px] font-semibold text-slate-800">Tổng quan</h1>
+        <div className="flex-1" />
+        <a
+          href="/dashboard/don-hang"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
+        >
+          Quản lý đơn hàng <IconArrowRight width={15} height={15} />
+        </a>
       </header>
 
-      <div className="mx-auto max-w-[1120px] px-5 pb-16 pt-5">
+      <div className="px-5 pb-16 pt-5">
         {/* filters */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
