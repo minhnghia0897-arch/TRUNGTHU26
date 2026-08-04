@@ -50,8 +50,14 @@ export default function Dashboard({ data }: { data: DashboardData }) {
             <div className="font-body text-[10px] opacity-60">Bảng điều hành lớp web</div>
           </div>
           <div className="flex-1" />
-          <div className="text-[10.5px] opacity-70">
-            Tồn kho &amp; vận chuyển <b className="text-gold">đọc mirror từ Pancake</b> · web không sửa ops
+          <a
+            href="/dashboard/don-hang"
+            className="rounded-full bg-gold px-4 py-2 text-[12px] font-semibold text-navy-deep"
+          >
+            Quản lý đơn hàng →
+          </a>
+          <div className="hidden text-[10.5px] opacity-70 lg:block">
+            Tồn kho &amp; vận chuyển <b className="text-gold">mirror Pancake</b>
           </div>
         </div>
       </div>
