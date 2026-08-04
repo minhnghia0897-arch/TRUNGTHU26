@@ -24,9 +24,11 @@ import {
   IconPlus,
 } from "@/components/icons";
 import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
+import CreateOrderModal from "@/components/CreateOrderModal";
 
 const HISTORY_KEY = "tr_order_history";
 const EDITS_KEY = "tr_order_edits";
+const NEW_KEY = "tr_order_new";
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -61,6 +63,7 @@ export default function OrdersTable() {
   const [pageSize, setPageSize] = useState(500);
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [history, setHistory] = useState<Record<number, HistoryEntry[]>>({});
 
   // nạp lịch sử + đơn đã sửa (localStorage) — demo persist; thật sẽ đọc DB/bảng audit
@@ -69,10 +72,10 @@ export default function OrdersTable() {
       const h = localStorage.getItem(HISTORY_KEY);
       if (h) setHistory(JSON.parse(h));
       const e = localStorage.getItem(EDITS_KEY);
-      if (e) {
-        const edits: Record<number, OrderRow> = JSON.parse(e);
-        setRows((rs) => rs.map((r) => edits[r.id] ?? r));
-      }
+      const edits: Record<number, OrderRow> = e ? JSON.parse(e) : {};
+      const n = localStorage.getItem(NEW_KEY);
+      const created: OrderRow[] = n ? JSON.parse(n) : [];
+      setRows((rs) => [...created, ...rs].map((r) => edits[r.id] ?? r));
     } catch {
       /* ignore */
     }
@@ -171,6 +174,32 @@ export default function OrdersTable() {
     { cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
   );
 
+  const createOrder = (payload: Omit<OrderRow, "id">) => {
+    const id = Math.max(1000, ...rows.map((r) => r.id)) + 1;
+    const order: OrderRow = { id, ...payload, created: stamp() };
+    setRows((rs) => [order, ...rs]);
+    // lưu đơn mới
+    try {
+      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
+      localStorage.setItem(NEW_KEY, JSON.stringify([order, ...created]));
+    } catch {
+      /* ignore */
+    }
+    // lịch sử
+    setHistory((h) => {
+      const entry: HistoryEntry = { at: stamp(), by: "Bạn", changes: ["Tạo đơn mới"] };
+      const next = { ...h, [id]: [entry] };
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+    setShowCreate(false);
+    setDetailId(id);
+  };
+
   const setStatusOf = (id: number, s: Status) => {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: s } : r)));
     setMenu(null);
@@ -188,7 +217,10 @@ export default function OrdersTable() {
       {/* topbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <h1 className="text-[15px] font-semibold text-slate-800">Đơn hàng</h1>
-        <button className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700">
+        <button
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
+        >
           <IconPlus width={15} height={15} /> Tạo đơn
         </button>
         <div className="relative ml-auto w-full max-w-md">
@@ -430,6 +462,9 @@ export default function OrdersTable() {
           </div>
         </div>
       )}
+
+      {/* form tạo đơn mới */}
+      {showCreate && <CreateOrderModal onCreate={createOrder} onClose={() => setShowCreate(false)} />}
 
       {/* popup chi tiết đơn */}
       {detailId !== null && (() => {
