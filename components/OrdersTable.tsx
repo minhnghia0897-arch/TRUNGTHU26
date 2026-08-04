@@ -23,6 +23,7 @@ import {
   IconTrash,
   IconPlus,
 } from "@/components/icons";
+import OrderDetailModal from "@/components/OrderDetailModal";
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -56,6 +57,7 @@ export default function OrdersTable() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pageSize, setPageSize] = useState(500);
   const [page, setPage] = useState(1);
+  const [detailId, setDetailId] = useState<number | null>(null);
 
   const money = (krw: number) =>
     cur === "vnd"
@@ -249,9 +251,12 @@ export default function OrdersTable() {
                   />
                 </Td>
                 <Td className="whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 font-semibold text-slate-800">
+                  <button
+                    onClick={() => setDetailId(r.id)}
+                    className="inline-flex items-center gap-1.5 font-semibold text-blue-600 hover:underline"
+                  >
                     <SourceIcon s={r.source} /> {r.id}
-                  </span>
+                  </button>
                 </Td>
                 <Td className="whitespace-nowrap text-slate-500">{r.vc || "—"}</Td>
                 <Td>
@@ -377,6 +382,12 @@ export default function OrdersTable() {
           </div>
         </div>
       )}
+
+      {/* popup chi tiết đơn */}
+      {detailId !== null && (() => {
+        const order = rows.find((r) => r.id === detailId);
+        return order ? <OrderDetailModal order={order} onClose={() => setDetailId(null)} /> : null;
+      })()}
     </main>
   );
 }
