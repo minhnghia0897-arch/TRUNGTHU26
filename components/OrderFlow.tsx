@@ -14,6 +14,7 @@ import {
 import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
+import { findLink, markUsed } from "@/lib/attribution";
 import { normalizePhone } from "@/lib/phone";
 import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc } from "@/components/icons";
 
@@ -28,7 +29,7 @@ type Recipient = {
   desiredDate: string;
 };
 
-export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string };
+export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string; ref?: string };
 
 let _id = 0;
 const nid = () => "u" + ++_id;
@@ -81,6 +82,7 @@ export default function OrderFlow({
 }) {
   const [step, setStep] = useState<number>(1);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
+  const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -127,6 +129,9 @@ export default function OrderFlow({
   // tên vị trong 1 món (để hiện rõ khi gán quà)
   const flavorNames = (ids?: string[]) =>
     (ids ?? []).map((id) => flavors.find((f) => f.id === id)?.name).filter(Boolean).join(" · ");
+
+  // khách Messenger đã map từ token ?ref (nếu có)
+  const refLink = ref ? findLink(ref) : undefined;
 
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
@@ -195,8 +200,6 @@ export default function OrderFlow({
         setOpenSlot(0);
         setStep(1.5);
       }
-      // dọn URL sau khi nhận deep-link → F5 sẽ khôi phục giỏ đã lưu thay vì lặp lại
-      try { window.history.replaceState({}, "", "/dat-hang"); } catch { /* ignore */ }
     } else {
       try {
         const raw = localStorage.getItem(CART_KEY);
@@ -207,6 +210,7 @@ export default function OrderFlow({
           if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
           if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
           if (Array.isArray(s.recipients)) setRecipients(s.recipients);
+          if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
           const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
             (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
             0,
@@ -217,6 +221,10 @@ export default function OrderFlow({
         /* ignore */
       }
     }
+    // dọn URL sau khi đã bắt deep-link / token → F5 khôi phục từ localStorage, không lặp
+    if (fromUrl || initial?.ref) {
+      try { window.history.replaceState({}, "", "/dat-hang"); } catch { /* ignore */ }
+    }
     hydrated.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -225,11 +233,11 @@ export default function OrderFlow({
   useEffect(() => {
     if (!hydrated.current) return;
     try {
-      localStorage.setItem(CART_KEY, JSON.stringify({ cart, buyerRegion, buyerName, buyerPhone, recipients }));
+      localStorage.setItem(CART_KEY, JSON.stringify({ cart, buyerRegion, buyerName, buyerPhone, recipients, ref }));
     } catch {
       /* ignore */
     }
-  }, [cart, buyerRegion, buyerName, buyerPhone, recipients]);
+  }, [cart, buyerRegion, buyerName, buyerPhone, recipients, ref]);
 
   const bill = useMemo(
     () =>
@@ -322,7 +330,7 @@ export default function OrderFlow({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          buyer: { name: buyerName, phone: buyerPhone, region: buyerRegion },
+          buyer: { name: buyerName, phone: buyerPhone, region: buyerRegion, refToken: ref || undefined },
           recipients: recipients.map((r) => ({
             uid: r.uid,
             name: r.name,
@@ -341,6 +349,9 @@ export default function OrderFlow({
       }
       // trừ kho theo BOM (demo, dùng chung kho với dashboard) — theo dòng đã tách người nhận
       applyStock(cartConsume(expandedLines), -1);
+      // định danh từ token Messenger (§10.1): map token → khách, đánh dấu đã dùng
+      const link = ref ? findLink(ref) : undefined;
+      if (ref && link) markUsed(ref, data.order.code);
       // lưu đơn để trang Tra cứu tìm theo SĐT
       saveWebOrder({
         code: data.order.code,
@@ -353,6 +364,8 @@ export default function OrderFlow({
         items: cart.map((l) => `${l.name} ×${l.qty}`),
         status: "Chờ thanh toán",
         createdAt: Date.now(),
+        ref: ref || undefined,
+        refCustomer: link?.customerName,
       });
       try { localStorage.removeItem(CART_KEY); } catch { /* ignore */ }
       setDone({
@@ -846,6 +859,9 @@ export default function OrderFlow({
               <div className="border-b border-dashed border-line py-2.5 text-[12px]">
                 <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
                 <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
+                {ref && (
+                  <div className="flex justify-between"><span className="opacity-60">Nguồn</span><span className="font-medium text-blue-600">Messenger{refLink ? ` · ${refLink.customerName}` : ""}</span></div>
+                )}
               </div>
 
               {/* quà theo từng người nhận */}

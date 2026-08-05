@@ -18,6 +18,8 @@ export interface WebOrder {
   items: string[]; // mô tả ngắn từng dòng
   status: string; // trạng thái đơn (demo)
   createdAt: number;
+  ref?: string; // token định danh từ link Messenger (§10.1)
+  refCustomer?: string; // tên khách Messenger đã map từ token
 }
 
 export function getWebOrders(): WebOrder[] {

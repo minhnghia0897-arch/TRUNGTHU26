@@ -4,7 +4,7 @@ import OrderFlow, { type InitialSelection } from "@/components/OrderFlow";
 export default async function OrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ box?: string; combo?: string; la?: string; region?: string }>;
+  searchParams: Promise<{ box?: string; combo?: string; la?: string; region?: string; ref?: string }>;
 }) {
   const sp = await searchParams;
   const [boxes, flavors, combos, warehouses, fx] = await Promise.all([
@@ -14,7 +14,7 @@ export default async function OrderPage({
     getWarehouses(),
     getFxRate(),
   ]);
-  const initial: InitialSelection = { box: sp.box, combo: sp.combo, la: sp.la, region: sp.region };
+  const initial: InitialSelection = { box: sp.box, combo: sp.combo, la: sp.la, region: sp.region, ref: sp.ref };
   return (
     <OrderFlow
       boxes={boxes}

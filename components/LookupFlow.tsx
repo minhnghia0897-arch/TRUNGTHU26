@@ -67,6 +67,11 @@ export default function LookupFlow() {
                       {o.status}
                     </span>
                   </div>
+                  {o.ref && (
+                    <div className="mt-1 text-[11px] font-medium text-blue-600">
+                      Nguồn: Messenger{o.refCustomer ? ` · ${o.refCustomer}` : ""}
+                    </div>
+                  )}
                   <div className="mt-1.5 text-xs opacity-70">
                     {o.items.join(" · ") || "—"}
                   </div>
