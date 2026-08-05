@@ -72,6 +72,14 @@ export function setConsume(setKey: string, n: number): Record<string, number> {
 export function cakeConsume(cakeKey: string, n: number): Record<string, number> {
   return n > 0 ? { [cakeKey]: n } : {};
 }
+/** Hộp tự chọn: 1 vỏ + các vị khách chọn (cho phép trùng vị). qty = số hộp giống nhau. */
+export function pickConsume(shellKey: string, picks: Record<string, number>, qty = 1): Record<string, number> {
+  if (qty <= 0) return {};
+  const c: Record<string, number> = {};
+  if (shellKey) c[shellKey] = qty;
+  for (const [k, n] of Object.entries(picks)) if (n > 0) c[k] = (c[k] ?? 0) + n * qty;
+  return c;
+}
 export function mergeConsume(...maps: Record<string, number>[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const m of maps) for (const [k, v] of Object.entries(m)) out[k] = (out[k] ?? 0) + v;
