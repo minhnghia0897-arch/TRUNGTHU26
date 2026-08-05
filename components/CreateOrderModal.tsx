@@ -3,8 +3,8 @@
 import { useState } from "react";
 import type { OrderRow, OrderSource, Carrier, Status } from "@/lib/ordersMock";
 import { PIPELINE } from "@/lib/ordersMock";
-import { SETS, BANH, nameOf } from "@/lib/inventory";
-import { setConsume, cakeConsume } from "@/lib/stockStore";
+import { VO, SETS, BANH, nameOf } from "@/lib/inventory";
+import { setConsume, cakeConsume, pickConsume } from "@/lib/stockStore";
 import { IconXCircle, IconPlus } from "@/components/icons";
 
 const CARRIERS: Carrier[] = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile"];
@@ -20,9 +20,12 @@ export default function CreateOrderModal({
   const [source, setSource] = useState<OrderSource>("web");
   const [region, setRegion] = useState<"vn" | "kr">("kr");
   const [status, setStatus] = useState<Status>("Mới");
-  const [prodType, setProdType] = useState<"set" | "cake">("set");
+  const [prodType, setProdType] = useState<"set" | "cake" | "custom">("set");
   const [prodKey, setProdKey] = useState<string>(SETS[0]?.key ?? "");
   const [prodQty, setProdQty] = useState(1);
+  // hộp tự chọn: 1 vỏ + các vị (cho phép trùng)
+  const [shellKey, setShellKey] = useState<string>(VO[0]?.key ?? "");
+  const [picks, setPicks] = useState<Record<string, number>>({});
   const [customer, setCustomer] = useState("");
   const [phone, setPhone] = useState("");
   const [carrier, setCarrier] = useState<Carrier>("");
@@ -40,16 +43,33 @@ export default function CreateOrderModal({
   // tên sản phẩm + tiêu hao kho (BOM)
   const set = SETS.find((s) => s.key === prodKey);
   const cake = BANH.find((c) => c.key === prodKey);
+  // hộp tự chọn: số ô mục tiêu = tổng bánh của set dùng chung vỏ (mặc định 4)
+  const shellSlots = SETS.find((s) => s.voKey === shellKey)?.cakes.reduce((n, c) => n + c.qty, 0) ?? 4;
+  const picked = Object.values(picks).reduce((a, b) => a + b, 0);
+  const shellName = VO.find((v) => v.key === shellKey)?.name ?? "Vỏ hộp";
+  const pickText = Object.entries(picks)
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${n} ${nameOf(k).replace("Bánh ", "").replace(" 150g", "")}`)
+    .join(", ");
+  const setPick = (k: string, n: number) => setPicks((s) => ({ ...s, [k]: Math.max(0, n) }));
+
   const productName =
     prodType === "set"
       ? `${set?.name ?? "Set"} ×${prodQty}`
-      : `${(cake?.name ?? "Bánh").replace(" 150g", "")} (lẻ) ×${prodQty}`;
+      : prodType === "cake"
+        ? `${(cake?.name ?? "Bánh").replace(" 150g", "")} (lẻ) ×${prodQty}`
+        : `Hộp tự chọn (${shellName})${pickText ? `: ${pickText}` : ""} ×${prodQty}`;
   const consume =
-    prodType === "set" ? setConsume(prodKey, prodQty) : cakeConsume(prodKey, prodQty);
+    prodType === "set"
+      ? setConsume(prodKey, prodQty)
+      : prodType === "cake"
+        ? cakeConsume(prodKey, prodQty)
+        : pickConsume(shellKey, picks, prodQty);
 
   function submit() {
     if (!customer.trim()) return setErr("Nhập tên khách hàng.");
     if (!phone.trim()) return setErr("Nhập số điện thoại.");
+    if (prodType === "custom" && picked === 0) return setErr("Chọn ít nhất 1 bánh cho hộp tự chọn.");
     onCreate({
       source,
       region,
@@ -103,31 +123,76 @@ export default function CreateOrderModal({
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[12px] font-medium text-slate-500">Sản phẩm (trừ kho)</span>
               <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-slate-200 text-[12px]">
-                {(["set", "cake"] as const).map((t) => (
+                {(["set", "cake", "custom"] as const).map((t) => (
                   <button
                     key={t}
-                    onClick={() => { setProdType(t); setProdKey(t === "set" ? SETS[0].key : BANH[0].key); }}
+                    onClick={() => {
+                      setProdType(t);
+                      if (t === "set") setProdKey(SETS[0].key);
+                      if (t === "cake") setProdKey(BANH[0].key);
+                    }}
                     className={`px-3 py-1 ${prodType === t ? "bg-blue-600 text-white" : "text-slate-500"}`}
                   >
-                    {t === "set" ? "Set / Hộp" : "Bánh lẻ"}
+                    {t === "set" ? "Combo có sẵn" : t === "cake" ? "Bánh lẻ" : "Hộp tự chọn"}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex gap-2">
-              <select value={prodKey} onChange={(e) => setProdKey(e.target.value)} className={inp}>
-                {(prodType === "set" ? SETS : BANH).map((o) => (
-                  <option key={o.key} value={o.key}>{o.name}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min={1}
-                value={prodQty}
-                onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
-                className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
-              />
-            </div>
+
+            {prodType !== "custom" ? (
+              <div className="flex gap-2">
+                <select value={prodKey} onChange={(e) => setProdKey(e.target.value)} className={inp}>
+                  {(prodType === "set" ? SETS : BANH).map((o) => (
+                    <option key={o.key} value={o.key}>{o.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  value={prodQty}
+                  onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <select value={shellKey} onChange={(e) => setShellKey(e.target.value)} className={inp}>
+                    {VO.map((v) => (
+                      <option key={v.key} value={v.key}>{v.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    value={prodQty}
+                    onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
+                    title="Số hộp giống nhau"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400">Chọn bánh cho hộp (được trùng vị)</span>
+                  <span className={picked === shellSlots ? "font-medium text-emerald-600" : "font-medium text-amber-600"}>
+                    Đã chọn {picked}/{shellSlots} ô
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {BANH.map((f) => {
+                    const n = picks[f.key] || 0;
+                    return (
+                      <div key={f.key} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1">
+                        <span className="flex-1 truncate text-[12px] text-slate-700">{f.name.replace(" 150g", "")}</span>
+                        <button onClick={() => setPick(f.key, n - 1)} className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100">−</button>
+                        <span className="w-4 text-center text-[13px] font-medium">{n}</span>
+                        <button onClick={() => setPick(f.key, n + 1)} className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100">+</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mt-2 text-[11px] text-slate-400">
               Sẽ trừ kho: {Object.entries(consume).length
                 ? Object.entries(consume).map(([k, v]) => `${v} ${nameOf(k)}`).join(" · ")

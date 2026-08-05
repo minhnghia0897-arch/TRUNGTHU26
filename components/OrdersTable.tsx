@@ -356,6 +356,7 @@ export default function OrdersTable() {
               <Th>ID</Th>
               <Th>VC</Th>
               <Th>Thẻ</Th>
+              <Th>Sản phẩm</Th>
               <Th>Ghi chú</Th>
               <Th>Khách hàng</Th>
               <Th>Người nhận</Th>
@@ -396,6 +397,7 @@ export default function OrdersTable() {
                     <span className="text-slate-300">—</span>
                   )}
                 </Td>
+                <Td className="max-w-[220px] truncate text-slate-700" title={r.product}>{r.product || <span className="text-slate-300">—</span>}</Td>
                 <Td className="max-w-[120px] truncate text-slate-500" title={r.note}>{r.note || <span className="text-slate-300">—</span>}</Td>
                 <Td className="whitespace-nowrap text-slate-700">{r.customer}</Td>
                 <Td className="whitespace-nowrap text-slate-700">{r.recipient}</Td>
