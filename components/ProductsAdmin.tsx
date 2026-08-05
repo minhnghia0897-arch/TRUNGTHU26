@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Box, Flavor, Combo } from "@/lib/types";
 import { boxPrice } from "@/lib/pricing";
 import { ALL_STOCK } from "@/lib/inventory";
-import { getStock, saveStock, getNames, STOCK_KEY, NAME_KEY } from "@/lib/stockStore";
+import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const EDITS_KEY = "tr_product_edits";
@@ -87,6 +87,7 @@ export default function ProductsAdmin({
     Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
   );
   const [names, setNames] = useState<Record<string, string>>({});
+  const [items, setItems] = useState<CustomItem[]>([]);
 
   useEffect(() => {
     try {
@@ -103,17 +104,20 @@ export default function ProductsAdmin({
     }
     setStockState(getStock());
     setNames(getNames());
+    setItems(getItems());
     const onChange = (e: StorageEvent) => {
       if (!e.key || e.key === STOCK_KEY) setStockState(getStock());
       if (!e.key || e.key === NAME_KEY) setNames(getNames());
+      if (!e.key || e.key === ITEMS_KEY) { setItems(getItems()); setStockState(getStock()); }
     };
     window.addEventListener("storage", onChange);
     return () => window.removeEventListener("storage", onChange);
   }, []);
 
-  // tồn kho live (tên + số lượng) — nguồn dùng cho liên kết & hiển thị "Có thể bán"
-  const liveInv: InvItem[] = ALL_STOCK.map((s) => {
-    const qty = stock[s.key] ?? s.qty;
+  // tồn kho live (gồm cả mặt hàng tự thêm) — nguồn cho liên kết & "Có thể bán"
+  const skus = [...ALL_STOCK, ...items.map((i) => ({ key: i.key, name: i.name, threshold: i.threshold }))];
+  const liveInv: InvItem[] = skus.map((s) => {
+    const qty = stock[s.key] ?? 0;
     const name = names[s.key] ?? s.name;
     return { key: s.key, name, qty, threshold: s.threshold, status: qty <= 0 ? "out" : qty < s.threshold ? "low" : "ok" };
   });
