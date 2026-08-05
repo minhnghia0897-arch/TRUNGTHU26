@@ -204,6 +204,11 @@ export default function OrderFlow({
   function setR(uid: string, k: keyof Recipient, val: string) {
     setRecipients((rs) => rs.map((r) => (r.uid === uid ? { ...r, [k]: val } : r)));
   }
+  function removeRecipient(uid: string) {
+    setRecipients((rs) => rs.filter((r) => r.uid !== uid));
+    // bỏ gán quà cho người vừa xoá
+    setCart((c) => c.map((it) => (it.recipientUid === uid ? { ...it, recipientUid: null } : it)));
+  }
   function assign(itemUid: string, rUid: string) {
     setCart((c) =>
       c.map((it) =>
@@ -546,9 +551,18 @@ export default function OrderFlow({
                   <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">
                     Người nhận {i + 1}
                   </div>
-                  <span className="rounded-sm border border-line bg-cream px-2 py-0.5 text-[10px] uppercase">
-                    {r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-sm border border-line bg-cream px-2 py-0.5 text-[10px] uppercase">
+                      {r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}
+                    </span>
+                    <button
+                      onClick={() => removeRecipient(r.uid)}
+                      aria-label={`Xoá người nhận ${i + 1}`}
+                      className="grid h-6 w-6 place-items-center rounded-full border border-line text-maroon/60 hover:border-maroon hover:bg-maroon hover:text-cream"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
