@@ -15,7 +15,7 @@ import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
 import { normalizePhone } from "@/lib/phone";
-import { IconTrash, IconPlus } from "@/components/icons";
+import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar } from "@/components/icons";
 
 const CART_KEY = "tr_cart";
 
@@ -393,7 +393,7 @@ export default function OrderFlow({
       <div className="px-4 py-5">
         {/* STEP 1 — GIỎ */}
         {step === 1 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Bước 1</div>
             <h2 className="title-heritage mb-4 text-lg">Giỏ hàng</h2>
             {cart.length === 0 ? (
@@ -516,7 +516,7 @@ export default function OrderFlow({
 
         {/* STEP 1.5 — BUILDER */}
         {step === 1.5 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Hộp tự chọn</div>
             <h2 className="title-heritage mb-4 text-lg">Lấp từng ô</h2>
             <div className="rounded border border-line bg-white p-3.5">
@@ -526,7 +526,7 @@ export default function OrderFlow({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={boxImg(box.id)} alt={box.name} className="h-40 w-full object-cover" />
                 ) : (
-                  <div className="flex h-28 items-center justify-center bg-cream-soft text-4xl text-gold/50">✦</div>
+                  <div className="flex h-28 items-center justify-center bg-cream-soft text-gold/40"><IconLotus width={40} height={40} /></div>
                 )}
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -566,7 +566,7 @@ export default function OrderFlow({
                         </>
                       ) : (
                         <>
-                          <span className="text-lg text-gold">{f ? "✦" : "＋"}</span>
+                          <span className="text-gold">{f ? <IconStar width={18} height={18} /> : <IconPlus width={18} height={18} />}</span>
                           {f ? f.name : `Ô ${i + 1}`}
                         </>
                       )}
@@ -588,7 +588,7 @@ export default function OrderFlow({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={fi} alt="" className="h-5 w-5 rounded-full object-cover" />
                       ) : (
-                        <span className="grid h-5 w-5 place-items-center rounded-full bg-cream-soft text-[10px] text-gold">✦</span>
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-cream-soft text-gold"><IconStar width={11} height={11} /></span>
                       )}
                       {f.name}
                       {f.premium && (
@@ -610,7 +610,7 @@ export default function OrderFlow({
 
         {/* STEP 2 — NGƯỜI ĐẶT */}
         {step === 2 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Bước 2</div>
             <h2 className="title-heritage mb-4 text-lg">Người đặt</h2>
             <div className="rounded border border-line bg-white p-3.5">
@@ -636,7 +636,7 @@ export default function OrderFlow({
 
         {/* STEP 3 — NGƯỜI NHẬN */}
         {step === 3 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Bước 3</div>
             <h2 className="title-heritage mb-4 text-lg">Người nhận &amp; chia quà</h2>
             {recipients.map((r, i) => (
@@ -694,9 +694,9 @@ export default function OrderFlow({
                       <button
                         type="button"
                         onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
-                        className={`mt-1.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+                        className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
                       >
-                        🌕 Trước Trung Thu 1 tuần · {suggestedDDMM}
+                        <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
                       </button>
                     )}
                   </div>
@@ -738,7 +738,7 @@ export default function OrderFlow({
 
         {/* STEP 4 — XEM LẠI */}
         {step === 4 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Bước 4</div>
             <h2 className="title-heritage mb-4 text-lg">Xem lại</h2>
             <div className="rounded border border-line bg-white p-3.5">
@@ -758,7 +758,7 @@ export default function OrderFlow({
 
         {/* STEP 5 — THANH TOÁN */}
         {step === 5 && (
-          <section>
+          <section className="step-in">
             <div className="eyebrow">Bước 5</div>
             <h2 className="title-heritage mb-4 text-lg">Chuyển khoản</h2>
             <div className="rounded border border-line bg-white p-4 text-center">
@@ -786,8 +786,10 @@ export default function OrderFlow({
 
         {/* STEP 6 — XONG */}
         {step === 6 && done && (
-          <section className="py-8 text-center">
-            <div className="text-5xl text-gold">✦</div>
+          <section className="step-in py-8 text-center">
+            <div className="mx-auto mb-1 grid h-16 w-16 place-items-center rounded-full bg-gold/15 text-gold ring-1 ring-gold/30">
+              <IconLotus width={34} height={34} />
+            </div>
             <h2 className="title-heritage my-3 text-xl">Đã nhận đơn</h2>
             <p className="text-sm opacity-80">
               Mã đơn <b className="font-serif">{done.code}</b> · Nội dung CK{" "}
