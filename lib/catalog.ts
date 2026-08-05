@@ -4,7 +4,7 @@ import type { Box, Flavor, Combo, Warehouse } from "./types";
 // Fallback seed (khớp 0002_seed.sql) khi Supabase chưa cấu hình — để dev chạy được ngay.
 const FALLBACK_BOXES: Box[] = [
   { id: "seed-box6", name: "Hộp gấm 6 vị", description: "Vỏ hộp gấm đỏ dập nổi hoa văn gold, 6 ô — anh tự chọn từng vị. Quà biếu sang trọng.", weight: 150, slots: 6, price_vn: 480000, price_kr: 48000, allowed_flavor_weight: 150, specs: { material: "gấm gold", pieces: "6 bánh 150g" }, badge: "best_seller", active: true },
-  { id: "seed-set", name: "Set Đoàn Viên", description: "Hộp 4 ô gọn nhẹ, hợp ăn nhà hoặc biếu thân mật.", weight: 150, slots: 4, price_vn: 390000, price_kr: 39000, allowed_flavor_weight: 150, specs: { material: "giấy mỹ thuật", pieces: "4 bánh 150g" }, badge: "must_try", active: true },
+  { id: "seed-set", name: "Hộp Đoàn Viên 4 ô", description: "Hộp 4 ô gọn nhẹ, tự chọn vị, hợp ăn nhà hoặc biếu thân mật.", weight: 150, slots: 4, price_vn: 390000, price_kr: 39000, allowed_flavor_weight: 150, specs: { material: "giấy mỹ thuật", pieces: "4 bánh 150g" }, badge: "must_try", active: true },
 ];
 
 const FALLBACK_FLAVORS: Flavor[] = [
