@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { VO, BANH, ALL_STOCK, SETS, availableSet, type StockItem } from "@/lib/inventory";
-import { getStock, saveStock, STOCK_KEY, getNames, saveNames, NAME_KEY } from "@/lib/stockStore";
+import { getStock, saveStock, STOCK_KEY, getNames, saveNames, NAME_KEY, getItems, saveItems, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
 
 const statusOf = (qty: number, th: number) => (qty <= 0 ? "out" : qty < th ? "low" : "ok");
 const badge = (s: string) =>
@@ -14,19 +14,38 @@ export default function InventoryView() {
   const [stock, setStock] = useState<Record<string, number>>(() =>
     Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
   );
-  // ---- tên mặt hàng (đổi tên được) ----
+  // ---- tên mặt hàng (đổi tên được) + mặt hàng tự thêm ----
   const [names, setNames] = useState<Record<string, string>>({});
+  const [items, setItems] = useState<CustomItem[]>([]);
   useEffect(() => {
     setStock(getStock());
     setNames(getNames());
+    setItems(getItems());
     const onChange = (e: StorageEvent) => {
       if (!e.key || e.key === STOCK_KEY) setStock(getStock());
       if (!e.key || e.key === NAME_KEY) setNames(getNames());
+      if (!e.key || e.key === ITEMS_KEY) { setItems(getItems()); setStock(getStock()); }
     };
     window.addEventListener("storage", onChange);
     return () => window.removeEventListener("storage", onChange);
   }, []);
-  const DEFAULT_NAME: Record<string, string> = Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.name]));
+  // gộp mặt hàng gốc + tự thêm theo nhóm
+  const voItems: StockItem[] = [...VO, ...items.filter((i) => i.group === "vo").map((i) => ({ key: i.key, name: i.name, unit: i.unit, qty: 0, threshold: i.threshold }))];
+  const banhItems: StockItem[] = [...BANH, ...items.filter((i) => i.group === "banh").map((i) => ({ key: i.key, name: i.name, unit: i.unit, qty: 0, threshold: i.threshold }))];
+  const DEFAULT_NAME: Record<string, string> = Object.fromEntries([...ALL_STOCK.map((s) => [s.key, s.name] as const), ...items.map((i) => [i.key, i.name] as const)]);
+  const isCustom = (k: string) => items.some((i) => i.key === k);
+
+  const addItem = (group: "vo" | "banh") => {
+    const key = `cust-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    const next = [...items, { key, name: group === "vo" ? "Vỏ hộp mới" : "Bánh mới", unit: group === "vo" ? "vỏ" : "bánh", threshold: group === "vo" ? 30 : 40, group }];
+    setItems(next);
+    saveItems(next);
+  };
+  const deleteItem = (key: string) => {
+    const next = items.filter((i) => i.key !== key);
+    setItems(next);
+    saveItems(next);
+  };
   const nameFor = (k: string) => names[k] ?? DEFAULT_NAME[k] ?? k;
   const setName = (k: string, v: string) =>
     setNames((cur) => {
@@ -173,8 +192,8 @@ export default function InventoryView() {
 
         {/* ===== KHO VỎ + BÁNH (sửa số tồn) ===== */}
         <div className="grid gap-5 md:grid-cols-2">
-          <StockTable title="Kho vỏ hộp" items={VO} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} />
-          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={BANH} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} />
+          <StockTable title="Kho vỏ hộp" items={voItems} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} isCustom={isCustom} onAdd={() => addItem("vo")} onDelete={deleteItem} />
+          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={banhItems} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} isCustom={isCustom} onAdd={() => addItem("banh")} onDelete={deleteItem} />
         </div>
 
         <p className="text-[12px] text-slate-400">
@@ -206,6 +225,9 @@ function StockTable({
   onChange,
   nameFor,
   onRename,
+  isCustom,
+  onAdd,
+  onDelete,
 }: {
   title: string;
   items: StockItem[];
@@ -213,12 +235,16 @@ function StockTable({
   onChange: (k: string, v: number) => void;
   nameFor: (k: string) => string;
   onRename: (k: string, v: string) => void;
+  isCustom: (k: string) => boolean;
+  onAdd: () => void;
+  onDelete: (k: string) => void;
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-800">
         {title}
         <span className="text-[11px] font-normal text-slate-400">· sửa tên & tồn được</span>
+        <button onClick={onAdd} className="ml-auto rounded-lg bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700">+ Thêm mặt hàng</button>
       </div>
       <table className="w-full text-[13px]">
         <thead>
@@ -227,20 +253,25 @@ function StockTable({
             <th className="px-4 py-2 text-right">Tồn (sửa)</th>
             <th className="px-4 py-2 text-right">Ngưỡng</th>
             <th className="px-4 py-2 text-center">Trạng thái</th>
+            <th className="px-2 py-2"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {items.map((s) => {
             const q = qtyOf(s.key);
             const st = statusOf(q, s.threshold);
+            const custom = isCustom(s.key);
             return (
               <tr key={s.key}>
                 <td className="px-4 py-2">
-                  <input
-                    value={nameFor(s.key)}
-                    onChange={(e) => onRename(s.key, e.target.value)}
-                    className="w-full min-w-[9rem] rounded-lg border border-transparent bg-transparent px-2 py-1 font-medium text-slate-800 outline-none hover:border-slate-200 focus:border-blue-400 focus:bg-white"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={nameFor(s.key)}
+                      onChange={(e) => onRename(s.key, e.target.value)}
+                      className="w-full min-w-[8rem] rounded-lg border border-transparent bg-transparent px-2 py-1 font-medium text-slate-800 outline-none hover:border-slate-200 focus:border-blue-400 focus:bg-white"
+                    />
+                    {custom && <span className="flex-none rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Tự thêm</span>}
+                  </div>
                 </td>
                 <td className="px-4 py-2 text-right">
                   <input
@@ -252,6 +283,11 @@ function StockTable({
                 </td>
                 <td className="px-4 py-2.5 text-right text-slate-400">{s.threshold}</td>
                 <td className="px-4 py-2.5 text-center"><span className={`rounded px-2 py-0.5 text-[11px] font-medium ${badge(st)}`}>{label(st)}</span></td>
+                <td className="px-2 py-2.5 text-center">
+                  {custom && (
+                    <button onClick={() => onDelete(s.key)} title="Xoá mặt hàng" className="rounded-lg px-2 py-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500">🗑</button>
+                  )}
+                </td>
               </tr>
             );
           })}

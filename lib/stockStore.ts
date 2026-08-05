@@ -7,6 +7,33 @@ import { ALL_STOCK, SETS } from "./inventory";
 
 export const STOCK_KEY = "tr_stock_qty";
 export const NAME_KEY = "tr_stock_name";
+export const ITEMS_KEY = "tr_stock_items";
+
+// ---- mặt hàng kho tự thêm (vỏ hộp / bánh mới) ----
+export interface CustomItem {
+  key: string;
+  name: string;
+  unit: string; // "vỏ" | "bánh"
+  threshold: number;
+  group: "vo" | "banh";
+}
+export function getItems(): CustomItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ITEMS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+export function saveItems(items: CustomItem[]) {
+  try {
+    localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
+    window.dispatchEvent(new StorageEvent("storage", { key: ITEMS_KEY }));
+  } catch {
+    /* ignore */
+  }
+}
 
 // ---- tên mặt hàng kho (đổi tên vỏ hộp / bánh) ----
 export function getNames(): Record<string, string> {
@@ -27,8 +54,11 @@ export function saveNames(n: Record<string, string>) {
   }
 }
 
-const baseStock = (): Record<string, number> =>
-  Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty]));
+const baseStock = (): Record<string, number> => {
+  const base: Record<string, number> = Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty]));
+  for (const it of getItems()) if (!(it.key in base)) base[it.key] = 0; // mặt hàng tự thêm: mặc định 0
+  return base;
+};
 
 export function getStock(): Record<string, number> {
   const base = baseStock();
