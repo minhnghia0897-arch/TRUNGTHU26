@@ -124,7 +124,7 @@ export default function OrderFlow({
     const unit = boxPrice(b, c.flavor_ids, flavors, buyerRegion);
     setCart((cart) => [
       ...cart,
-      { uid: nid(), kind: "combo", boxId: b.id, comboId: c.id, flavorIds: c.flavor_ids, qty: 1, unitPrice: unit, name: c.name, recipientUid: null },
+      { uid: nid(), kind: "combo", boxId: b.id, comboId: c.id, flavorIds: c.flavor_ids, qty: 1, unitPrice: unit, name: c.name, recipientUids: [] },
     ]);
   };
   const addFlavor = (flavorId: string) => {
@@ -137,7 +137,7 @@ export default function OrderFlow({
         return cart.map((l) => (l === existing ? { ...l, qty: l.qty + 1 } : l));
       return [
         ...cart,
-        { uid: nid(), kind: "la", flavorIds: [f.id], qty: 1, unitPrice: unit, name: f.name + " (lẻ)", recipientUid: null },
+        { uid: nid(), kind: "la", flavorIds: [f.id], qty: 1, unitPrice: unit, name: f.name + " (lẻ)", recipientUids: [] },
       ];
     });
   };
@@ -236,7 +236,7 @@ export default function OrderFlow({
         qty: 1,
         unitPrice: unit,
         name: box.name,
-        recipientUid: null,
+        recipientUids: [],
       },
     ]);
     setPicks([]);
@@ -257,17 +257,29 @@ export default function OrderFlow({
   function removeRecipient(uid: string) {
     setRecipients((rs) => rs.filter((r) => r.uid !== uid));
     // bỏ gán quà cho người vừa xoá
-    setCart((c) => c.map((it) => (it.recipientUid === uid ? { ...it, recipientUid: null } : it)));
+    setCart((c) => c.map((it) => ({ ...it, recipientUids: it.recipientUids.filter((x) => x !== uid) })));
   }
   function assign(itemUid: string, rUid: string) {
     setCart((c) =>
       c.map((it) =>
         it.uid === itemUid
-          ? { ...it, recipientUid: it.recipientUid === rUid ? null : rUid }
+          ? { ...it, recipientUids: it.recipientUids.includes(rUid) ? it.recipientUids.filter((x) => x !== rUid) : [...it.recipientUids, rUid] }
           : it,
       ),
     );
   }
+
+  // mỗi món gán N người nhận → tách thành N dòng (mỗi người 1 phần) — tiền & kho tự nhân
+  const expandedLines = cart.flatMap((l) =>
+    l.recipientUids.map((ruid) => ({
+      kind: l.kind,
+      boxId: l.boxId,
+      comboId: l.comboId,
+      flavorIds: l.flavorIds,
+      qty: l.qty,
+      recipientUid: ruid,
+    })),
+  );
 
   // ---- submit ----
   async function submit() {
@@ -286,14 +298,7 @@ export default function OrderFlow({
             region: r.region,
             desiredDate: r.desiredDate,
           })),
-          lines: cart.map((l) => ({
-            kind: l.kind,
-            boxId: l.boxId,
-            comboId: l.comboId,
-            flavorIds: l.flavorIds,
-            qty: l.qty,
-            recipientUid: l.recipientUid,
-          })),
+          lines: expandedLines,
         }),
       });
       const data = await res.json();
@@ -301,8 +306,8 @@ export default function OrderFlow({
         alert(data.error ?? "Tạo đơn thất bại.");
         return;
       }
-      // trừ kho theo BOM (demo, dùng chung kho với dashboard)
-      applyStock(cartConsume(cart), -1);
+      // trừ kho theo BOM (demo, dùng chung kho với dashboard) — theo dòng đã tách người nhận
+      applyStock(cartConsume(expandedLines), -1);
       // lưu đơn để trang Tra cứu tìm theo SĐT
       saveWebOrder({
         code: data.order.code,
@@ -342,7 +347,7 @@ export default function OrderFlow({
       return setStep(3);
     }
     if (step === 3) {
-      if (cart.some((it) => !it.recipientUid))
+      if (cart.some((it) => it.recipientUids.length === 0))
         return alert("Còn món chưa gán người nhận.");
       if (recipients.some((r) => !r.name.trim() || !r.address.trim()))
         return alert("Người nhận thiếu tên hoặc địa chỉ.");
@@ -697,9 +702,10 @@ export default function OrderFlow({
                   </div>
                 </div>
                 <Label>Gán quà cho người này</Label>
+                <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Cùng một món gán cho nhiều người → mỗi người một phần, tiền tự cộng.</p>
                 <div className="flex flex-wrap gap-1.5">
                   {cart.map((it) => {
-                    const sel = it.recipientUid === r.uid;
+                    const sel = it.recipientUids.includes(r.uid);
                     const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
                     return (
                       <button
@@ -736,7 +742,7 @@ export default function OrderFlow({
             <div className="eyebrow">Bước 4</div>
             <h2 className="title-heritage mb-4 text-lg">Xem lại</h2>
             <div className="rounded border border-line bg-white p-3.5">
-              <Row k={`Tạm tính (${cart.length} món)`} v={fmt(bill.subtotal)} />
+              <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty * Math.max(1, l.recipientUids.length), 0)} phần)`} v={fmt(bill.subtotal)} />
               <Row k={`Phí ship`} v={fmt(bill.shipping)} />
               {bill.handling > 0 && <Row k="Phí handling chéo vùng" v={fmt(bill.handling)} />}
               <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
