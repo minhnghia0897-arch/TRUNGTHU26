@@ -774,6 +774,16 @@ export default function OrderFlow({
           <section className="step-in">
             <div className="eyebrow">Bước 4</div>
             <h2 className="title-heritage mb-4 text-lg">Xem lại</h2>
+
+            {/* chi tiết hàng + địa chỉ để khách kiểm tra */}
+            <div className="mb-3 rounded border border-line bg-white p-3.5">
+              <div className="border-b border-dashed border-line pb-2 text-[12px]">
+                <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
+              </div>
+              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+            </div>
+
             <div className="rounded border border-line bg-white p-3.5">
               <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty * Math.max(1, l.recipientUids.length), 0)} phần)`} v={fmt(bill.subtotal)} />
               <Row k={`Phí ship`} v={fmt(bill.shipping)} />
@@ -839,34 +849,8 @@ export default function OrderFlow({
               </div>
 
               {/* quà theo từng người nhận */}
-              {recipients.map((r, i) => {
-                const items = cart.filter((it) => it.recipientUids.includes(r.uid));
-                if (!items.length) return null;
-                return (
-                  <div key={r.uid} className="border-b border-dashed border-line py-2.5">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span className="font-serif font-semibold uppercase tracking-wide text-maroon">Người nhận {i + 1}: {r.name || "—"}</span>
-                      <span className="text-[10px] uppercase opacity-60">{r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}</span>
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-ink/70">
-                      {r.address || "—"}{r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
-                    </div>
-                    <div className="mt-1.5 space-y-1">
-                      {items.map((it) => (
-                        <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
-                          <span className="min-w-0">
-                            <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
-                            {it.kind !== "la" && flavorNames(it.flavorIds) && (
-                              <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
-                            )}
-                          </span>
-                          <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+              <div className="border-b border-dashed border-line" />
 
               {/* tổng */}
               <div className="pt-2.5 text-[12px]">
@@ -1051,5 +1035,54 @@ function KV({ k, v }: { k: string; v: string }) {
       <span className="opacity-60">{k}</span>
       <span className="font-medium">{v}</span>
     </div>
+  );
+}
+
+// Danh sách quà theo từng người nhận (kèm địa chỉ, ngày) — dùng ở Xem lại & Hoá đơn.
+function RecipientBlocks({
+  recipients,
+  cart,
+  flavorNames,
+  fmt,
+}: {
+  recipients: { uid: string; name: string; address: string; region: Region; desiredDate: string }[];
+  cart: CartLine[];
+  flavorNames: (ids?: string[]) => string;
+  fmt: (v: number) => string;
+}) {
+  return (
+    <>
+      {recipients.map((r, i) => {
+        const items = cart.filter((it) => it.recipientUids.includes(r.uid));
+        if (!items.length) return null;
+        return (
+          <div key={r.uid} className="border-b border-dashed border-line py-2.5 last:border-b-0">
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="font-serif font-semibold uppercase tracking-wide text-maroon">
+                Người nhận {i + 1}: {r.name || "—"}
+              </span>
+              <span className="text-[10px] uppercase opacity-60">{r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}</span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-ink/70">
+              {r.address || "—"}
+              {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
+            </div>
+            <div className="mt-1.5 space-y-1">
+              {items.map((it) => (
+                <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
+                  <span className="min-w-0">
+                    <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
+                    {it.kind !== "la" && flavorNames(it.flavorIds) && (
+                      <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                    )}
+                  </span>
+                  <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 }
