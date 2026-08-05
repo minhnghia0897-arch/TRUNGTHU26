@@ -67,6 +67,26 @@ export default function OrderFlow({
   const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0];
   const fmt = (v: number) => formatMoney(v, buyerRegion);
 
+  // ảnh sản phẩm lấy từ Dashboard (localStorage tr_product_edits) — key box:<id> / flavor:<id>
+  const [imgs, setImgs] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("tr_product_edits");
+      if (!raw) return;
+      const ov = JSON.parse(raw) as Record<string, { images?: string[]; image?: string }>;
+      const m: Record<string, string> = {};
+      for (const [k, v] of Object.entries(ov)) {
+        const first = v?.images?.[0] ?? v?.image;
+        if (first) m[k] = first;
+      }
+      setImgs(m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const boxImg = (id: string) => imgs[`box:${id}`];
+  const flavorImg = (id: string) => imgs[`flavor:${id}`];
+
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
     if (!c) return;
@@ -453,6 +473,15 @@ export default function OrderFlow({
             <div className="eyebrow">Hộp tự chọn</div>
             <h2 className="title-heritage mb-4 text-lg">Lấp từng ô</h2>
             <div className="rounded border border-line bg-white p-3.5">
+              {/* ảnh set quà */}
+              <div className="mb-3 overflow-hidden rounded border border-line">
+                {boxImg(box.id) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={boxImg(box.id)} alt={box.name} className="h-40 w-full object-cover" />
+                ) : (
+                  <div className="flex h-28 items-center justify-center bg-cream-soft text-4xl text-gold/50">✦</div>
+                )}
+              </div>
               <div className="flex items-center justify-between gap-2">
                 {boxes.length > 1 ? (
                   <select
@@ -475,34 +504,52 @@ export default function OrderFlow({
               <div className="my-3 grid grid-cols-3 gap-2">
                 {Array.from({ length: box.slots }).map((_, i) => {
                   const f = picks[i] && flavors.find((x) => x.id === picks[i]);
+                  const fi = picks[i] ? flavorImg(picks[i]) : undefined;
                   return (
                     <button
                       key={i}
                       onClick={() => setOpenSlot(i)}
-                      className={`flex aspect-square flex-col items-center justify-center rounded border p-1 text-[11px] ${f ? "border-gold bg-white" : "border-dashed border-line bg-cream"} ${openSlot === i ? "ring-1 ring-gold" : ""}`}
+                      className={`relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded border p-1 text-center text-[11px] ${f ? "border-gold bg-white" : "border-dashed border-line bg-cream"} ${openSlot === i ? "ring-1 ring-gold" : ""}`}
                     >
-                      <span className="text-lg text-gold">{f ? "✦" : "＋"}</span>
-                      {f ? f.name : `Ô ${i + 1}`}
+                      {f && fi ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={fi} alt={f.name} className="absolute inset-0 h-full w-full object-cover" />
+                          <span className="absolute inset-x-0 bottom-0 bg-maroon-deep/70 px-1 py-0.5 text-[10px] leading-tight text-cream">{f.name}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-lg text-gold">{f ? "✦" : "＋"}</span>
+                          {f ? f.name : `Ô ${i + 1}`}
+                        </>
+                      )}
                     </button>
                   );
                 })}
               </div>
               <div className="eyebrow">Chọn vị cho ô đang mở</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {flavors.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => pick(f.id)}
-                    className={`rounded-full border px-2.5 py-1.5 text-[11px] ${f.premium ? "border-gold text-maroon" : "border-line"} bg-white`}
-                  >
-                    {f.name}
-                    {f.premium && (
-                      <span className="ml-1 text-[10px] text-gold">
-                        +{fmt(flavorSurcharge(f, buyerRegion))}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {flavors.map((f) => {
+                  const fi = flavorImg(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => pick(f.id)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-[11px] ${f.premium ? "border-gold text-maroon" : "border-line"} bg-white`}
+                    >
+                      {fi ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={fi} alt="" className="h-5 w-5 rounded-full object-cover" />
+                      ) : (
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-cream-soft text-[10px] text-gold">✦</span>
+                      )}
+                      {f.name}
+                      {f.premium && (
+                        <span className="text-[10px] text-gold">+{fmt(flavorSurcharge(f, buyerRegion))}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <button
