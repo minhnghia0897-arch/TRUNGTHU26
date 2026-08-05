@@ -893,9 +893,9 @@ export default function OrderFlow({
       {step !== 6 && (
         <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
           <div className="flex-1 text-[11px] uppercase tracking-wide opacity-70">
-            Tạm tính
+            Tạm tính<span className="normal-case tracking-normal opacity-70"> (chưa gồm ship)</span>
             <b className="block font-serif text-[17px] normal-case tracking-normal text-maroon">
-              {fmt(bill.grand || cart.reduce((a, i) => a + i.unitPrice * i.qty, 0))}
+              {fmt(bill.subtotal)}
             </b>
           </div>
           {step > 1 && (
