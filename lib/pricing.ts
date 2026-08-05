@@ -79,7 +79,7 @@ export interface CartLine {
   qty: number;
   unitPrice: number; // đã theo vùng người đặt
   name: string;
-  recipientUid?: string | null;
+  recipientUids: string[]; // gán cho nhiều người nhận → mỗi người 1 phần (qty)
 }
 export interface CartRecipient {
   uid: string;
@@ -99,11 +99,12 @@ export function computeBill(
   warehouses: Warehouse[],
   fxKrwVnd: number,
 ): Bill {
-  const subtotal = cart.reduce((a, l) => a + l.unitPrice * l.qty, 0);
+  // mỗi người nhận được gán = 1 phần (qty) → tiền nhân theo số người nhận
+  const subtotal = cart.reduce((a, l) => a + l.unitPrice * l.qty * Math.max(1, l.recipientUids.length), 0);
   let shipping = 0;
   let handling = 0;
   for (const r of recipients) {
-    const hasItems = cart.some((l) => l.recipientUid === r.uid);
+    const hasItems = cart.some((l) => l.recipientUids.includes(r.uid));
     if (!hasItems) continue;
     const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd);
     shipping += fee.shipping;
