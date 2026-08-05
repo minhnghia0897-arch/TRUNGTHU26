@@ -15,7 +15,7 @@ import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
 import { normalizePhone } from "@/lib/phone";
-import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar } from "@/components/icons";
+import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc } from "@/components/icons";
 
 const CART_KEY = "tr_cart";
 
@@ -52,6 +52,17 @@ function midAutumnMinusWeek(): string {
   d.setDate(d.getDate() - 7);
   return isoLocal(d);
 }
+
+// Tài khoản nhận tiền (demo — thay bằng TK thật của anh sau).
+const BANKS = {
+  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY TRANG RAM" },
+  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "TRANG RAM" },
+};
+const vietqrUrl = (amountVnd?: number) => {
+  const num = BANKS.vn.number.replace(/\s/g, "");
+  const q = amountVnd ? `?amount=${amountVnd}&addInfo=${encodeURIComponent("Trang Ram")}` : "";
+  return `https://img.vietqr.io/image/${BANKS.vn.bin}-${num}-compact2.png${q}`;
+};
 
 export default function OrderFlow({
   boxes,
@@ -760,24 +771,19 @@ export default function OrderFlow({
         {step === 5 && (
           <section className="step-in">
             <div className="eyebrow">Bước 5</div>
-            <h2 className="title-heritage mb-4 text-lg">Chuyển khoản</h2>
-            <div className="rounded border border-line bg-white p-4 text-center">
-              <div
-                className="mx-auto my-2 flex h-44 w-44 items-center justify-center rounded border border-line"
-                style={{
-                  backgroundImage:
-                    "repeating-linear-gradient(45deg,#2b1a16 0 6px,transparent 6px 12px)",
-                }}
-              >
-                QR
-              </div>
-              <p className="text-[11px] opacity-65">
-                {buyerRegion === "vn" ? "VietQR · napas247" : "QR Toss / chuyển khoản Hàn"}
-              </p>
-            </div>
-            <p className="mt-3 text-center text-sm">
-              Số tiền: <b className="font-serif text-maroon">{fmt(bill.grand)}</b>
+            <h2 className="title-heritage mb-1 text-lg">Chuyển khoản</h2>
+            <p className="mb-4 text-sm">
+              Số tiền: <b className="font-serif text-maroon">{fmt(bill.grand)}</b> · chuyển tới <b>một trong hai</b> tài khoản dưới.
             </p>
+
+            <BankCard
+              data={BANKS.vn}
+              primary={buyerRegion === "vn"}
+              qrUrl={vietqrUrl(buyerRegion === "vn" ? bill.grand : undefined)}
+            />
+            <div className="h-3" />
+            <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
+
             <div className="mt-3 rounded border border-gold bg-[#fff8ec] p-3 text-xs text-[#b8862f]">
               ⚠ Bấm xác nhận để tạo đơn &amp; sinh mã đối soát; ghi đúng mã ở nội dung CK.
             </div>
@@ -875,6 +881,89 @@ function Row({ k, v }: { k: string; v: string }) {
     <div className="flex justify-between border-b border-dashed border-line py-2 text-[13px]">
       <span>{k}</span>
       <span>{v}</span>
+    </div>
+  );
+}
+
+function CopyBtn({ value }: { value: string }) {
+  const [ok, setOk] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      /* ignore */
+    }
+    setOk(true);
+    setTimeout(() => setOk(false), 1500);
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition active:scale-95 ${ok ? "border-emerald-300 bg-emerald-50 text-emerald-600" : "border-line bg-white text-maroon hover:bg-cream"}`}
+    >
+      {ok ? <IconCheck width={12} height={12} /> : <IconCopyDoc width={12} height={12} />}
+      {ok ? "Đã copy" : "Copy"}
+    </button>
+  );
+}
+
+function BankCard({
+  data,
+  primary,
+  qrUrl,
+}: {
+  data: { title: string; bank: string; number: string; holder: string };
+  primary?: boolean;
+  qrUrl?: string;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 ${primary ? "border-gold bg-[#fffdf7]" : "border-line bg-white"}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-[13px] font-semibold text-maroon">{data.title}</span>
+        {primary && (
+          <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-maroon-deep">Nên dùng</span>
+        )}
+      </div>
+
+      {qrUrl && (
+        <div className="mt-3 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qrUrl} alt="Mã QR chuyển khoản" className="mx-auto h-44 w-44 rounded border border-line bg-white object-contain" />
+          <div className="mt-2 flex justify-center">
+            <a
+              href={qrUrl}
+              download="trang-ram-qr.png"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-gold bg-white px-3.5 py-1.5 text-[12px] font-medium text-maroon transition active:scale-95 hover:bg-cream"
+            >
+              ⤓ Tải mã QR
+            </a>
+          </div>
+          <p className="mt-1 text-[10.5px] opacity-55">Quét bằng app ngân hàng · hoặc chụp màn hình lại</p>
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2 text-[13px]">
+        <KV k="Ngân hàng" v={data.bank} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="opacity-60">Số tài khoản</span>
+          <span className="flex items-center gap-2">
+            <b className="font-serif tracking-wide text-maroon-deep">{data.number}</b>
+            <CopyBtn value={data.number.replace(/\s/g, "")} />
+          </span>
+        </div>
+        <KV k="Chủ tài khoản" v={data.holder} />
+      </div>
+    </div>
+  );
+}
+function KV({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="opacity-60">{k}</span>
+      <span className="font-medium">{v}</span>
     </div>
   );
 }
