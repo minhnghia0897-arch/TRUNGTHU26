@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Box, Combo, Flavor, Region, Warehouse } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import {
@@ -11,6 +11,12 @@ import {
   computeBill,
   type CartLine,
 } from "@/lib/pricing";
+import { applyStock } from "@/lib/stockStore";
+import { cartConsume } from "@/lib/webInventory";
+import { saveWebOrder } from "@/lib/webOrders";
+import { normalizePhone } from "@/lib/phone";
+
+const CART_KEY = "tr_cart";
 
 type Recipient = {
   uid: string;
@@ -21,7 +27,7 @@ type Recipient = {
   desiredDate: string;
 };
 
-export type InitialSelection = { box?: string; combo?: string; la?: string };
+export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string };
 
 let _id = 0;
 const nid = () => "u" + ++_id;
@@ -42,7 +48,7 @@ export default function OrderFlow({
   initial?: InitialSelection;
 }) {
   const [step, setStep] = useState<number>(1);
-  const [buyerRegion, setBuyerRegion] = useState<Region>("kr");
+  const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -92,19 +98,55 @@ export default function OrderFlow({
       ),
     );
 
-  // preselect từ URL (?box / ?combo / ?la) — chạy một lần
+  const hydrated = useRef(false);
+
+  // preselect từ URL (?box / ?combo / ?la) — hoặc khôi phục giỏ đã lưu (F5 không mất)
   useEffect(() => {
-    if (!initial) return;
-    if (initial.combo) addCombo(initial.combo);
-    if (initial.la) addFlavor(initial.la);
-    if (initial.box) {
-      setSelectedBoxId(initial.box);
-      setPicks([]);
-      setOpenSlot(0);
-      setStep(1.5);
+    const fromUrl = !!(initial?.box || initial?.combo || initial?.la);
+    if (fromUrl) {
+      if (initial!.combo) addCombo(initial!.combo);
+      if (initial!.la) addFlavor(initial!.la);
+      if (initial!.box) {
+        setSelectedBoxId(initial!.box);
+        setPicks([]);
+        setOpenSlot(0);
+        setStep(1.5);
+      }
+      // dọn URL sau khi nhận deep-link → F5 sẽ khôi phục giỏ đã lưu thay vì lặp lại
+      try { window.history.replaceState({}, "", "/dat-hang"); } catch { /* ignore */ }
+    } else {
+      try {
+        const raw = localStorage.getItem(CART_KEY);
+        if (raw) {
+          const s = JSON.parse(raw);
+          if (Array.isArray(s.cart)) setCart(s.cart);
+          if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
+          if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
+          if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
+          if (Array.isArray(s.recipients)) setRecipients(s.recipients);
+          const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
+            (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
+            0,
+          );
+          _id = Math.max(_id, maxU); // tránh trùng uid khi thêm món mới
+        }
+      } catch {
+        /* ignore */
+      }
     }
+    hydrated.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // lưu giỏ để F5 không mất
+  useEffect(() => {
+    if (!hydrated.current) return;
+    try {
+      localStorage.setItem(CART_KEY, JSON.stringify({ cart, buyerRegion, buyerName, buyerPhone, recipients }));
+    } catch {
+      /* ignore */
+    }
+  }, [cart, buyerRegion, buyerName, buyerPhone, recipients]);
 
   const bill = useMemo(
     () =>
@@ -204,6 +246,22 @@ export default function OrderFlow({
         alert(data.error ?? "Tạo đơn thất bại.");
         return;
       }
+      // trừ kho theo BOM (demo, dùng chung kho với dashboard)
+      applyStock(cartConsume(cart), -1);
+      // lưu đơn để trang Tra cứu tìm theo SĐT
+      saveWebOrder({
+        code: data.order.code,
+        transferCode: data.order.transferCode,
+        phone: normalizePhone(buyerPhone, buyerRegion) ?? buyerPhone.trim(),
+        buyerName: buyerName.trim(),
+        region: buyerRegion,
+        currency: buyerRegion === "vn" ? "VND" : "KRW",
+        grandTotal: data.order.grandTotal,
+        items: cart.map((l) => `${l.name} ×${l.qty}`),
+        status: "Chờ thanh toán",
+        createdAt: Date.now(),
+      });
+      try { localStorage.removeItem(CART_KEY); } catch { /* ignore */ }
       setDone({
         code: data.order.code,
         transferCode: data.order.transferCode,

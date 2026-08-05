@@ -110,7 +110,7 @@ export default async function Home({
                   {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)} <span className="unit">/ hộp</span>
                 </span>
                 <a
-                  href={`/dat-hang?box=${b.id}`}
+                  href={`/dat-hang?box=${b.id}&region=${region}`}
                   className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
                 >
                   Tự chọn vị <IconArrowRight width={14} height={14} />
