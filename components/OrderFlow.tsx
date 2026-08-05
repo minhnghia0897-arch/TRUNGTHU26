@@ -33,6 +33,26 @@ export type InitialSelection = { box?: string; combo?: string; la?: string; regi
 let _id = 0;
 const nid = () => "u" + ++_id;
 
+// Trung Thu (15/8 âm lịch) theo dương lịch — tra cứu sẵn vài năm (demo).
+const MID_AUTUMN: Record<number, string> = {
+  2024: "2024-09-17", 2025: "2025-10-06", 2026: "2026-09-25",
+  2027: "2027-09-15", 2028: "2028-10-03", 2029: "2029-09-22", 2030: "2030-09-12",
+};
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const isoLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+// Trước Trung Thu 1 tuần: lấy Trung Thu năm nay (nếu đã qua thì năm sau) − 7 ngày.
+function midAutumnMinusWeek(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  let iso = MID_AUTUMN[y];
+  if (iso && new Date(iso + "T00:00:00").getTime() < now.getTime()) iso = MID_AUTUMN[y + 1];
+  else iso = MID_AUTUMN[y] ?? MID_AUTUMN[y + 1];
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() - 7);
+  return isoLocal(d);
+}
+
 export default function OrderFlow({
   boxes,
   flavors,
@@ -87,6 +107,15 @@ export default function OrderFlow({
   }, []);
   const boxImg = (id: string) => imgs[`box:${id}`];
   const flavorImg = (id: string) => imgs[`flavor:${id}`];
+
+  // ngày gợi ý "trước Trung Thu 1 tuần" — tính ở client để không lệch SSR
+  const [suggestedDate, setSuggestedDate] = useState("");
+  useEffect(() => setSuggestedDate(midAutumnMinusWeek()), []);
+  const suggestedDDMM = suggestedDate ? `${suggestedDate.slice(8, 10)}/${suggestedDate.slice(5, 7)}` : "";
+
+  // tên vị trong 1 món (để hiện rõ khi gán quà)
+  const flavorNames = (ids?: string[]) =>
+    (ids ?? []).map((id) => flavors.find((f) => f.id === id)?.name).filter(Boolean).join(" · ");
 
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
@@ -656,19 +685,39 @@ export default function OrderFlow({
                       onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
                       className="w-full rounded border border-line bg-white p-2.5 text-sm"
                     />
+                    {suggestedDate && (
+                      <button
+                        type="button"
+                        onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
+                        className={`mt-1.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+                      >
+                        🌕 Trước Trung Thu 1 tuần · {suggestedDDMM}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <Label>Gán quà cho người này</Label>
                 <div className="flex flex-wrap gap-1.5">
-                  {cart.map((it) => (
-                    <button
-                      key={it.uid}
-                      onClick={() => assign(it.uid, r.uid)}
-                      className={`rounded-full border px-2.5 py-1.5 text-[11px] ${it.recipientUid === r.uid ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
-                    >
-                      {it.name}
-                    </button>
-                  ))}
+                  {cart.map((it) => {
+                    const sel = it.recipientUid === r.uid;
+                    const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
+                    return (
+                      <button
+                        key={it.uid}
+                        onClick={() => assign(it.uid, r.uid)}
+                        className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${sel ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
+                      >
+                        <span className="block font-medium">
+                          {sel ? "✓ " : ""}{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
+                        </span>
+                        {fl && (
+                          <span className={`mt-0.5 block text-[10px] leading-snug ${sel ? "text-cream/80" : "opacity-60"}`}>
+                            {fl}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
