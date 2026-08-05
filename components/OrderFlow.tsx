@@ -15,6 +15,7 @@ import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
 import { normalizePhone } from "@/lib/phone";
+import { IconTrash, IconPlus } from "@/components/icons";
 
 const CART_KEY = "tr_cart";
 
@@ -368,8 +369,8 @@ export default function OrderFlow({
             ) : (
               cart.map((it) => (
                 <div key={it.uid} className="mb-3 rounded border border-line bg-white p-3.5">
-                  <div className="flex justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">
                         {it.name}
                       </div>
@@ -379,25 +380,37 @@ export default function OrderFlow({
                           .filter(Boolean)
                           .join(" · ") || "—"}
                       </div>
-                      {it.kind === "la" && (
-                        <div className="mt-2 inline-flex items-center rounded border border-line">
-                          <button onClick={() => setQty(it.uid, -1)} className="px-2.5 py-1 text-maroon">−</button>
-                          <span className="w-7 text-center font-serif text-sm">{it.qty}</span>
-                          <button onClick={() => setQty(it.uid, 1)} className="px-2.5 py-1 text-maroon">+</button>
-                        </div>
-                      )}
                     </div>
-                    <div className="text-right">
-                      <span className="font-serif font-semibold text-maroon-deep">
-                        {fmt(it.unitPrice * it.qty)}
-                      </span>
+                    <button
+                      onClick={() => setCart((c) => c.filter((x) => x.uid !== it.uid))}
+                      aria-label="Xoá món"
+                      className="grid h-8 w-8 flex-none place-items-center rounded-full border border-line text-maroon/50 hover:border-maroon hover:bg-maroon hover:text-cream"
+                    >
+                      <IconTrash width={15} height={15} />
+                    </button>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    {/* số lượng — cho mọi loại (hộp / combo / lẻ) */}
+                    <div className="inline-flex items-center overflow-hidden rounded-full border border-line">
                       <button
-                        onClick={() => setCart((c) => c.filter((x) => x.uid !== it.uid))}
-                        className="mt-1.5 block text-xs text-maroon opacity-60"
+                        onClick={() => setQty(it.uid, -1)}
+                        aria-label="Giảm số lượng"
+                        className="grid h-8 w-8 place-items-center text-maroon hover:bg-cream"
                       >
-                        🗑 Xoá
+                        <span className="block h-[2px] w-3 bg-current" />
+                      </button>
+                      <span className="w-8 text-center font-serif text-sm tabular-nums">{it.qty}</span>
+                      <button
+                        onClick={() => setQty(it.uid, 1)}
+                        aria-label="Tăng số lượng"
+                        className="grid h-8 w-8 place-items-center text-maroon hover:bg-cream"
+                      >
+                        <IconPlus width={14} height={14} />
                       </button>
                     </div>
+                    <span className="font-serif text-[15px] font-semibold text-maroon-deep">
+                      {fmt(it.unitPrice * it.qty)}
+                    </span>
                   </div>
                 </div>
               ))
