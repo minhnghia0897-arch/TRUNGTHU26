@@ -1045,7 +1045,7 @@ function RecipientBlocks({
   flavorNames,
   fmt,
 }: {
-  recipients: { uid: string; name: string; address: string; region: Region; desiredDate: string }[];
+  recipients: { uid: string; name: string; phone: string; address: string; region: Region; desiredDate: string }[];
   cart: CartLine[];
   flavorNames: (ids?: string[]) => string;
   fmt: (v: number) => string;
@@ -1064,7 +1064,7 @@ function RecipientBlocks({
               <span className="text-[10px] uppercase opacity-60">{r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}</span>
             </div>
             <div className="mt-0.5 text-[11px] text-ink/70">
-              {r.address || "—"}
+              SĐT {r.phone || "—"} · {r.address || "—"}
               {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
             </div>
             <div className="mt-1.5 space-y-1">
