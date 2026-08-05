@@ -160,6 +160,28 @@ export default function OrderFlow({
     );
 
   const hydrated = useRef(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
+
+  // tải ảnh hoá đơn (PNG)
+  async function downloadBill() {
+    const el = receiptRef.current;
+    if (!el) return;
+    try {
+      const html2canvas = (await import("html2canvas-pro")).default;
+      const canvas = await html2canvas(el, { backgroundColor: "#ffffff", scale: 2 });
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `bill-${done?.code ?? "trang-ram"}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    } catch {
+      alert("Không tạo được ảnh bill — anh chụp màn hình giúp nhé.");
+    }
+  }
 
   // preselect từ URL (?box / ?combo / ?la) — hoặc khôi phục giỏ đã lưu (F5 không mất)
   useEffect(() => {
@@ -792,29 +814,93 @@ export default function OrderFlow({
 
         {/* STEP 6 — XONG */}
         {step === 6 && done && (
-          <section className="step-in py-8 text-center">
-            <div className="mx-auto mb-1 grid h-16 w-16 place-items-center rounded-full bg-gold/15 text-gold ring-1 ring-gold/30">
-              <IconLotus width={34} height={34} />
+          <section className="step-in py-6">
+            <div className="text-center">
+              <div className="mx-auto mb-1 grid h-16 w-16 place-items-center rounded-full bg-gold/15 text-gold ring-1 ring-gold/30">
+                <IconLotus width={34} height={34} />
+              </div>
+              <h2 className="title-heritage my-3 text-xl">Đã nhận đơn</h2>
             </div>
-            <h2 className="title-heritage my-3 text-xl">Đã nhận đơn</h2>
-            <p className="text-sm opacity-80">
-              Mã đơn <b className="font-serif">{done.code}</b> · Nội dung CK{" "}
-              <b className="font-serif">{done.transferCode}</b>
-            </p>
-            <p className="mt-1 text-sm">
-              Số tiền cần CK: <b className="font-serif text-maroon">{fmt(done.grandTotal)}</b>
-            </p>
+
+            {/* ===== HOÁ ĐƠN (chụp/tải ảnh) ===== */}
+            <div ref={receiptRef} className="rounded-lg border border-line bg-white p-4">
+              <div className="border-b border-dashed border-line pb-3 text-center">
+                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="eyebrow mt-0.5">Phiếu đặt hàng</div>
+                <div className="mt-1.5 text-[12px] text-ink/70">
+                  Mã đơn <b className="font-serif text-maroon">{done.code}</b> · Nội dung CK{" "}
+                  <b className="font-serif text-maroon">{done.transferCode}</b>
+                </div>
+              </div>
+
+              <div className="border-b border-dashed border-line py-2.5 text-[12px]">
+                <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
+              </div>
+
+              {/* quà theo từng người nhận */}
+              {recipients.map((r, i) => {
+                const items = cart.filter((it) => it.recipientUids.includes(r.uid));
+                if (!items.length) return null;
+                return (
+                  <div key={r.uid} className="border-b border-dashed border-line py-2.5">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="font-serif font-semibold uppercase tracking-wide text-maroon">Người nhận {i + 1}: {r.name || "—"}</span>
+                      <span className="text-[10px] uppercase opacity-60">{r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}</span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-ink/70">
+                      {r.address || "—"}{r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
+                    </div>
+                    <div className="mt-1.5 space-y-1">
+                      {items.map((it) => (
+                        <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
+                          <span className="min-w-0">
+                            <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
+                            {it.kind !== "la" && flavorNames(it.flavorIds) && (
+                              <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                            )}
+                          </span>
+                          <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* tổng */}
+              <div className="pt-2.5 text-[12px]">
+                <div className="flex justify-between py-0.5"><span className="opacity-60">Tạm tính</span><span>{fmt(bill.subtotal)}</span></div>
+                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{fmt(bill.shipping)}</span></div>
+                {bill.handling > 0 && <div className="flex justify-between py-0.5"><span className="opacity-60">Handling</span><span>{fmt(bill.handling)}</span></div>}
+                <div className="mt-1 flex justify-between border-t-2 border-maroon pt-1.5 font-serif text-[15px] text-maroon">
+                  <span>Tổng cần CK</span><span>{fmt(done.grandTotal)}</span>
+                </div>
+              </div>
+            </div>
+
             {done.simulated && (
-              <p className="mt-3 text-[11px] opacity-60">
+              <p className="mt-2 text-center text-[11px] opacity-60">
                 (Đơn mô phỏng — chưa cấu hình Supabase nên không lưu vào DB.)
               </p>
             )}
-            <a
-              href="/tra-cuu"
-              className="mt-5 inline-block rounded bg-gold px-6 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep"
-            >
-              Theo dõi đơn
-            </a>
+
+            {/* hành động */}
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              <button
+                onClick={downloadBill}
+                className="inline-flex items-center justify-center gap-1.5 rounded border border-gold bg-white px-4 py-3 font-serif text-xs font-semibold uppercase tracking-wide text-maroon transition active:scale-95 hover:bg-cream"
+              >
+                ⤓ Tải ảnh bill
+              </button>
+              <a
+                href="/tra-cuu"
+                className="inline-flex items-center justify-center rounded bg-gold px-4 py-3 font-serif text-xs font-semibold uppercase tracking-wide text-maroon-deep transition active:scale-95"
+              >
+                Theo dõi đơn
+              </a>
+            </div>
+            <a href="/" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
           </section>
         )}
       </div>
