@@ -9,6 +9,7 @@ import {
   IconBoxes,
   IconDollar,
   IconUsers,
+  IconFacebook,
   IconGear,
   IconPanelLeft,
 } from "@/components/icons";
@@ -20,6 +21,7 @@ const NAV = [
   { href: "/dashboard/ton-kho", label: "Tồn kho", Icon: IconBoxes },
   { href: "/dashboard/thu-chi", label: "Thu chi", Icon: IconDollar },
   { href: "/dashboard/khach-hang", label: "Khách hàng", Icon: IconUsers },
+  { href: "/dashboard/messenger", label: "Link Messenger", Icon: IconFacebook },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
