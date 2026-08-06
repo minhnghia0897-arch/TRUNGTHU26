@@ -10,6 +10,7 @@ export default function MessengerLinks() {
   const [name, setName] = useState("");
   const [psid, setPsid] = useState("");
   const [phone, setPhone] = useState("");
+  const [bulk, setBulk] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,15 +34,26 @@ export default function MessengerLinks() {
     setPhone("");
   };
 
-  const copy = async (token: string) => {
+  const createBulk = () => {
+    const names = bulk.split("\n").map((s) => s.trim()).filter(Boolean);
+    if (!names.length) return;
+    for (const n of names) addLink({ customerName: n });
+    setLinks(getLinks());
+    setBulk("");
+  };
+
+  const templateLink = origin ? `${origin}/dat-hang?ref={{customer_id}}` : "";
+
+  const copyText = async (text: string, key: string) => {
     try {
-      await navigator.clipboard.writeText(linkFor(token));
+      await navigator.clipboard.writeText(text);
     } catch {
       /* ignore */
     }
-    setCopied(token);
-    setTimeout(() => setCopied((c) => (c === token ? null : c)), 1500);
+    setCopied(key);
+    setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
   };
+  const copy = (token: string) => copyText(linkFor(token), token);
 
   const del = (token: string) => {
     removeLink(token);
@@ -63,9 +75,49 @@ export default function MessengerLinks() {
           khi khách đặt, đơn tự gắn đúng khách (PSID / Pancake). Demo lưu ở trình duyệt này.
         </p>
 
-        {/* tạo link */}
+        {/* CÁCH NHANH — link mẫu dán 1 lần */}
+        <section className="rounded-xl border-2 border-blue-200 bg-blue-50/40 p-4">
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Nên dùng</span>
+            <span className="text-[14px] font-semibold text-slate-800">Link mẫu — dán 1 lần cho mọi khách</span>
+          </div>
+          <p className="mt-1 text-[12px] text-slate-500">
+            Dán link này vào kịch bản trả lời tự động Pancake/Botcake. Hệ thống <b>tự điền mã khách</b> (<code className="rounded bg-white px-1">{"{{customer_id}}"}</code>) cho từng người → 1000 khách vẫn <b>không phải tạo tay link nào</b>.
+          </p>
+          <div className="mt-2.5 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg border border-blue-200 bg-white px-3 py-2 text-[12px] text-slate-700">{templateLink}</code>
+            <button
+              onClick={() => copyText(templateLink, "tpl")}
+              className={`inline-flex flex-none items-center gap-1 rounded-lg border px-3 py-2 text-[12px] font-medium transition ${copied === "tpl" ? "border-emerald-300 bg-emerald-50 text-emerald-600" : "border-blue-300 bg-white text-blue-700 hover:bg-blue-50"}`}
+            >
+              {copied === "tpl" ? <IconCheck width={13} height={13} /> : <IconCopyDoc width={13} height={13} />}
+              {copied === "tpl" ? "Đã copy" : "Copy link mẫu"}
+            </button>
+          </div>
+        </section>
+
+        {/* tạo hàng loạt */}
         <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 text-[14px] font-semibold text-slate-800">Tạo link cho khách</div>
+          <div className="mb-1 text-[14px] font-semibold text-slate-800">Tạo hàng loạt (dán danh sách)</div>
+          <p className="mb-2 text-[12px] text-slate-500">Mỗi dòng một tên khách — mô phỏng sinh token tự động khi gửi broadcast.</p>
+          <textarea
+            value={bulk}
+            onChange={(e) => setBulk(e.target.value)}
+            rows={3}
+            placeholder={"Chị Lan FB\nAnh Minh\nBé Na"}
+            className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400"
+          />
+          <button
+            onClick={createBulk}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
+          >
+            + Tạo hàng loạt
+          </button>
+        </section>
+
+        {/* tạo link lẻ */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 text-[14px] font-semibold text-slate-800">Tạo link cho 1 khách (để test)</div>
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-slate-500">Tên khách (Messenger)</span>
