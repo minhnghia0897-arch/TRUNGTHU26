@@ -41,11 +41,11 @@ export function genToken(): string {
   return `fb-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export function addLink(input: { customerName: string; psid: string; phone?: string; pancakeCustomerId?: string }): OrderLink {
+export function addLink(input: { customerName: string; psid?: string; phone?: string; pancakeCustomerId?: string }): OrderLink {
   const link: OrderLink = {
     token: genToken(),
     customerName: input.customerName.trim() || "Khách Messenger",
-    psid: input.psid.trim() || `psid_${Math.random().toString(36).slice(2, 10)}`,
+    psid: (input.psid ?? "").trim() || `psid_${Math.random().toString(36).slice(2, 10)}`,
     phone: input.phone?.trim() || undefined,
     pancakeCustomerId: input.pancakeCustomerId?.trim() || `pck_${Math.random().toString(36).slice(2, 8)}`,
     createdAt: Date.now(),
