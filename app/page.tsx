@@ -23,7 +23,7 @@ export default function Gateway() {
     <main className="mx-auto min-h-screen max-w-app bg-[#0a1526] text-cream">
       {/* hotline */}
       <div className="border-b border-[#C6A24C]/20 bg-[#081221] px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
-        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">1900 6060</b>
+        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">0982 576 263</b>
       </div>
 
       {/* brand */}

@@ -119,7 +119,7 @@ export default async function DoanhNghiepPage({ searchParams }: { searchParams: 
     <main className="min-h-screen bg-[#0a1526] text-cream">
       {/* hotline */}
       <div className="border-b border-[#C6A24C]/20 bg-[#081221] px-4 py-2 text-center text-[11px] tracking-wide text-cream/80 md:text-[12px]">
-        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">1900 6060</b> · Zalo/Messenger tư vấn số lượng
+        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">0982 576 263</b> · Zalo/Messenger tư vấn số lượng
       </div>
 
       {/* header */}
@@ -234,11 +234,11 @@ export default async function DoanhNghiepPage({ searchParams }: { searchParams: 
             Gọi hotline hoặc nhắn Zalo/Messenger, gửi số lượng &amp; loại hộp — bên em báo giá và xuất VAT trong ngày.
           </p>
           <div className="mx-auto mt-6 flex max-w-md flex-col gap-3 sm:flex-row sm:justify-center">
-            <a href="tel:19006060" className="rounded-lg bg-gradient-to-b from-[#E8C877] to-[#C6A24C] px-6 py-3 text-[14px] font-bold text-[#14203A]">
-              📞 Gọi 1900 6060
+            <a href="tel:0982576263" className="rounded-lg bg-gradient-to-b from-[#E8C877] to-[#C6A24C] px-6 py-3 text-[14px] font-bold text-[#14203A]">
+              📞 Gọi 0982 576 263
             </a>
-            <a href="https://zalo.me/19006060" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
-              💬 Chat Zalo
+            <a href="https://zalo.me/0982576263" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
+              💬 Zalo 0982 576 263
             </a>
             <a href="https://m.me/trangram" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
               Ⓜ️ Messenger
