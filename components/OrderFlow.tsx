@@ -14,6 +14,7 @@ import {
 import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
+import { addDashboardOrder } from "@/lib/dashboardOrders";
 import { findLink, markUsed } from "@/lib/attribution";
 import { normalizePhone } from "@/lib/phone";
 import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc } from "@/components/icons";
@@ -352,6 +353,37 @@ export default function OrderFlow({
       // định danh từ token Messenger (§10.1): map token → khách, đánh dấu đã dùng
       const link = ref ? findLink(ref) : undefined;
       if (ref && link) markUsed(ref, data.order.code);
+      // đưa đơn web vào Dashboard → Đơn hàng (đã trừ kho ở web nên stockApplied=true)
+      const r0 = recipients[0];
+      const st = new Date();
+      const p2 = (x: number) => String(x).padStart(2, "0");
+      try {
+        addDashboardOrder({
+          source: ref ? "facebook" : "web",
+          vc: "",
+          tags: ref ? ["Messenger"] : ["Web"],
+          note: `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}`,
+          customer: buyerName.trim(),
+          recipient: r0?.name || buyerName.trim(),
+          phone: buyerPhone.trim(),
+          carrier: "",
+          address: r0?.address || "",
+          region: buyerRegion,
+          cod: 0,
+          prepaid: data.order.grandTotal,
+          cuoc_vc: 0,
+          phi_vc_thu_khach: 0,
+          status: "Mới",
+          created: `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`,
+          assignee: "Web",
+          product: cart.map((l) => `${l.name}${l.qty > 1 ? ` ×${l.qty}` : ""}`).join(", "),
+          expected: r0?.desiredDate || undefined,
+          consume: cartConsume(expandedLines),
+          stockApplied: true,
+        });
+      } catch {
+        /* ignore */
+      }
       // lưu đơn để trang Tra cứu tìm theo SĐT
       saveWebOrder({
         code: data.order.code,
@@ -408,10 +440,10 @@ export default function OrderFlow({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
       <header className="relative flex items-center bg-maroon-deep px-4 py-3.5">
-        <a href="/" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
+        <a href="/le" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] text-cream hover:text-gold">Trăng Rằm</a>
+        <a href="/le" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
       </header>
 
       {/* stepper */}
@@ -900,7 +932,7 @@ export default function OrderFlow({
                 Theo dõi đơn
               </a>
             </div>
-            <a href="/" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
+            <a href="/le" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
           </section>
         )}
       </div>

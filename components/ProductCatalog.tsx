@@ -77,7 +77,7 @@ export default function ProductCatalog({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
       <header className="bg-navy px-4 py-3.5 text-center">
-        <a href="/" className="title-heritage text-base tracking-[0.18em] text-cream">
+        <a href="/le" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
           Trăng Rằm
         </a>
       </header>
@@ -216,7 +216,7 @@ export default function ProductCatalog({
 
       {/* sticky cta */}
       <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
-        <a href="/" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
+        <a href="/le" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
           ← Trang chủ
         </a>
         <a
