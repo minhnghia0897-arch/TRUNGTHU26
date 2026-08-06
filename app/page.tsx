@@ -2,162 +2,223 @@ import { getBoxes, getFlavors } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import type { Badge, Region } from "@/lib/types";
-import { IconLotus, IconCrown, IconStar, IconCheck, IconArrowRight } from "@/components/icons";
+import { IconLotus, IconStar } from "@/components/icons";
 
-function CardBadge({ badge }: { badge?: Badge }) {
-  if (!badge) return null;
-  const isBest = badge === "best_seller";
+// hash ổn định từ id → dùng cho “đánh giá”/“% giảm” demo (server component: không dùng random)
+function seed(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  return h;
+}
+const ratingOf = (id: string) => 4.6 + (seed(id) % 4) * 0.1; // 4.6–4.9
+const reviewsOf = (id: string) => 80 + (seed(id + "r") % 3200);
+const discountOf = (id: string) => 8 + (seed(id + "d") % 5) * 5; // 8,13,18,23,28%
+
+type Tile = {
+  id: string;
+  name: string;
+  price: number;
+  region: Region;
+  badge?: Badge;
+  weight: number;
+  href: string;
+  tag: string;
+};
+
+function StarRow({ id }: { id: string }) {
+  const r = ratingOf(id);
   return (
-    <div
-      className={`absolute right-2.5 top-2.5 flex h-12 w-12 flex-col items-center justify-center rounded-full text-center text-[7px] font-bold uppercase leading-tight text-white shadow-md ${isBest ? "bg-gradient-to-br from-gold to-gold-deep" : "bg-navy"}`}
-    >
-      {isBest ? <IconCrown width={13} height={13} /> : <IconStar width={13} height={13} />}
-      <span className="mt-0.5">{isBest ? "Best\nSeller" : "Must\nTry"}</span>
+    <div className="flex items-center gap-1 text-[11px]">
+      <span className="flex items-center gap-0.5 text-[#ff6f61]">
+        <IconStar width={11} height={11} />
+        <b className="font-semibold text-ink">{r.toFixed(1)}</b>
+      </span>
+      <span className="text-ink/40">({reviewsOf(id).toLocaleString("en-US")})</span>
     </div>
   );
 }
 
-// Storefront — server component. Vùng hiển thị mặc định KR (thị trường chính §5).
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ region?: string }>;
-}) {
+function ProductCard({ t }: { t: Tile }) {
+  const disc = discountOf(t.id);
+  const original = Math.round((t.price / (100 - disc)) * 100);
+  const isBest = t.badge === "best_seller";
+  return (
+    <a href={t.href} className="group flex flex-col overflow-hidden rounded-lg border border-slate-100 bg-white">
+      {/* ảnh (placeholder — bản thật thay bằng ảnh sản phẩm) */}
+      <div className="relative flex aspect-square items-center justify-center bg-gradient-to-br from-[#F6E9CE] via-[#EFD9A8] to-[#E4C078]">
+        <span className="text-[52px] drop-shadow-sm transition group-hover:scale-105">🥮</span>
+        <IconLotus width={26} height={26} className="absolute right-2 top-2 text-white/35" />
+        {t.badge && (
+          <span
+            className={`absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[9px] font-bold text-white ${isBest ? "bg-[#cf1a1a]" : "bg-[#346aff]"}`}
+          >
+            {isBest ? "BÁN CHẠY" : "NÊN THỬ"}
+          </span>
+        )}
+        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+          {t.weight}g
+        </span>
+      </div>
+
+      <div className="flex flex-1 flex-col p-2">
+        {/* badge giao nhanh kiểu 로켓배송 */}
+        <div className="mb-1 flex items-center gap-1 text-[10px] font-bold text-[#346aff]">
+          <span>🚀</span>
+          <span>Giao nhanh</span>
+        </div>
+        <h3 className="line-clamp-2 min-h-[32px] text-[12.5px] leading-snug text-ink/90">{t.name}</h3>
+
+        {/* giá đỏ + % giảm kiểu Coupang */}
+        <div className="mt-1.5 flex items-baseline gap-1.5">
+          <span className="text-[13px] font-extrabold text-[#cf1a1a]">{disc}%</span>
+          <span className="text-[15px] font-extrabold text-ink">{formatMoney(t.price, t.region)}</span>
+        </div>
+        <div className="text-[10.5px] text-ink/35 line-through">{formatMoney(original, t.region)}</div>
+
+        <div className="mt-1.5">
+          <StarRow id={t.id} />
+        </div>
+        <div className="mt-1 text-[10px] font-medium text-emerald-600">Miễn phí giao · nhận trong ngày</div>
+      </div>
+    </a>
+  );
+}
+
+// Storefront — server component, look Coupang. Vùng mặc định KR (§5).
+export default async function Home({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
   const sp = await searchParams;
   const region: Region = sp.region === "vn" ? "vn" : "kr";
   const [boxes, flavors] = await Promise.all([getBoxes(), getFlavors()]);
+  const price = (o: { price_vn: number; price_kr: number }) => (region === "vn" ? o.price_vn : o.price_kr);
 
-  const cheapestBox = boxes.reduce((a, b) =>
-    (region === "vn" ? b.price_vn < a.price_vn : b.price_kr < a.price_kr) ? b : a,
-  );
+  const tiles: Tile[] = [
+    ...boxes.map((b) => ({
+      id: b.id,
+      name: b.name,
+      price: price(b),
+      region,
+      badge: b.badge,
+      weight: b.weight,
+      href: `/dat-hang?box=${b.id}&region=${region}`,
+      tag: "hộp",
+    })),
+    ...flavors.map((f) => ({
+      id: f.id,
+      name: `Bánh ${f.name}`,
+      price: price(f),
+      region,
+      badge: f.badge,
+      weight: f.weight,
+      href: `/san-pham?region=${region}`,
+      tag: "bánh",
+    })),
+  ];
+
+  const cats = [
+    { icon: "🎁", label: "Hộp quà" },
+    { icon: "🥮", label: "Bánh lẻ" },
+    { icon: "⭐", label: "Bán chạy" },
+    { icon: "🍃", label: "Chay" },
+    { icon: "🚀", label: "Giao nhanh" },
+    { icon: "🏷️", label: "Khuyến mãi" },
+  ];
 
   return (
-    <main className="mx-auto min-h-screen max-w-app bg-cream pb-24 shadow-2xl">
-      {/* hotline */}
-      <div className="bg-maroon-deep px-3 py-2 text-center text-[11.5px] tracking-wide text-cream">
-        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-gold">1900 6060</b>
-      </div>
-
-      {/* header */}
-      <header className="border-b border-line bg-cream px-4 pb-3 pt-4 text-center">
-        <div className="title-heritage text-xl tracking-[0.18em]">Trăng Rằm</div>
-        <div className="mt-1 font-body text-[11px] italic opacity-70">
-          Bánh Trung Thu thủ công
+    <main className="mx-auto min-h-screen max-w-app bg-slate-100 pb-16">
+      {/* top bar Coupang blue */}
+      <header className="sticky top-0 z-20 bg-[#346aff]">
+        <div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
+          <div className="text-[19px] font-extrabold italic tracking-tight text-white">Trăng Rằm</div>
+          <a href="/tra-cuu" className="ml-auto text-white" aria-label="Tra cứu đơn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+          </a>
         </div>
-        <nav className="mt-3 flex justify-center gap-5 text-[11px] uppercase tracking-widest text-maroon">
-          <a href="/san-pham" className="opacity-80">Sản phẩm</a>
-          <a href="/dat-hang" className="opacity-80">Đặt hàng</a>
-          <a href="/tra-cuu" className="opacity-80">Tra cứu</a>
+        {/* ô tìm kiếm */}
+        <div className="px-3 pb-2.5">
+          <a href="/san-pham" className="flex items-center gap-2 rounded-md bg-white px-3 py-2 text-[12.5px] text-ink/45">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#346aff" strokeWidth="2.4">
+              <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            Tìm bánh trung thu, hộp quà…
+          </a>
+        </div>
+        {/* danh mục cuộn ngang */}
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 [scrollbar-width:none]">
+          {cats.map((c) => (
+            <a
+              key={c.label}
+              href="/san-pham"
+              className="flex shrink-0 flex-col items-center gap-0.5 rounded-md px-2.5 py-1 text-[10.5px] font-medium text-white/95"
+            >
+              <span className="text-[17px]">{c.icon}</span>
+              {c.label}
+            </a>
+          ))}
         </nav>
       </header>
 
-      {/* hero */}
-      <section className="relative overflow-hidden bg-[radial-gradient(120%_80%_at_50%_-10%,#2a3d5f_0%,#1C2B45_45%,#14203A_100%)] px-6 py-11 text-center text-cream">
-        <div className="eyebrow">Trung Thu · Mùa đoàn viên</div>
-        <h1 className="my-4 font-serif text-[32px] font-bold uppercase leading-tight tracking-[0.04em]">
-          Trọn vị đoàn viên
-        </h1>
-        <p className="mx-auto mb-5 max-w-[300px] text-sm opacity-90">
-          Bánh nướng · bánh dẻo thủ công, hộp quà biếu tinh tế cho mùa Trung Thu.
-        </p>
-        <a
-          href="/san-pham"
-          className="inline-flex items-center gap-1.5 rounded-full bg-gold px-6 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
-        >
-          Đặt ngay <IconArrowRight width={14} height={14} />
-        </a>
+      {/* promo banner */}
+      <section className="bg-white">
+        <div className="m-2 flex items-center justify-between rounded-lg bg-gradient-to-r from-[#1C2B45] to-[#2a3d5f] px-4 py-3.5 text-cream">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gold">Trung Thu 2026</div>
+            <div className="mt-0.5 text-[16px] font-bold">Trọn vị đoàn viên</div>
+            <div className="text-[11px] opacity-80">Giao toàn quốc VN &amp; Hàn · nhận trong ngày</div>
+          </div>
+          <a href="/san-pham" className="rounded-full bg-gold px-4 py-2 text-[12px] font-bold text-[#14203A]">
+            Mua ngay
+          </a>
+        </div>
       </section>
 
       {/* region switch */}
-      <div className="flex justify-center gap-2 bg-cream px-4 py-3 text-[11px]">
+      <div className="flex gap-2 bg-white px-2 pb-2 text-[11.5px]">
         <a
           href="/?region=kr"
-          className={`rounded-full border px-4 py-2 font-semibold uppercase tracking-wide ${region === "kr" ? "border-navy bg-navy text-cream" : "border-line bg-white text-navy"}`}
+          className={`flex-1 rounded-md border py-1.5 text-center font-semibold ${region === "kr" ? "border-[#346aff] bg-[#eef3ff] text-[#346aff]" : "border-slate-200 text-ink/60"}`}
         >
-          🇰🇷 Đặt ở Hàn · ₩
+          🇰🇷 Giao ở Hàn · ₩
         </a>
         <a
           href="/?region=vn"
-          className={`rounded-full border px-4 py-2 font-semibold uppercase tracking-wide ${region === "vn" ? "border-navy bg-navy text-cream" : "border-line bg-white text-navy"}`}
+          className={`flex-1 rounded-md border py-1.5 text-center font-semibold ${region === "vn" ? "border-[#346aff] bg-[#eef3ff] text-[#346aff]" : "border-slate-200 text-ink/60"}`}
         >
-          🇻🇳 Đặt ở VN · đ
+          🇻🇳 Giao ở VN · đ
         </a>
       </div>
 
-      {/* sản phẩm */}
-      <section id="ban" className="px-5 py-8">
-        <div className="mb-5 text-center">
-          <div className="eyebrow">Ba cách chọn quà</div>
-          <h2 className="title-heritage mt-1 text-xl">Bộ sưu tập</h2>
-        </div>
-        <div className="grid gap-4">
-          {boxes.map((b) => (
-            <article key={b.id} className="overflow-hidden rounded-card bg-white shadow-card">
-              <div className="relative flex h-40 items-center justify-center bg-cream-soft">
-                <IconLotus width={54} height={54} className="text-gold/45" />
-                <CardBadge badge={b.badge} />
-                <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded bg-gold/90 px-2 py-0.5 text-[10px] font-semibold text-white">
-                  <IconCheck width={11} height={11} /> {b.weight}GR
-                </div>
-              </div>
-              <div className="p-4 text-center">
-                <h3 className="font-semibold text-navy">{b.name}</h3>
-                <p className="mx-auto mt-1 max-w-[280px] text-xs text-ink/60">
-                  {b.description ?? `${b.slots} ô · bánh ${b.weight}g`}
-                </p>
-                <div className="mx-auto my-3 h-px w-16 bg-line" />
-                <span className="price-lg text-lg">
-                  {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)} <span className="unit">/ hộp</span>
-                </span>
-                <a
-                  href={`/dat-hang?box=${b.id}&region=${region}`}
-                  className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
-                >
-                  Tự chọn vị <IconArrowRight width={14} height={14} />
-                </a>
-              </div>
-            </article>
-          ))}
-        </div>
-        <a
-          href="/san-pham"
-          className="mt-4 flex items-center justify-center gap-1.5 rounded-full border border-navy py-3 text-center text-xs font-semibold uppercase tracking-wide text-navy"
-        >
-          Xem chi tiết · Combo · Mua lẻ <IconArrowRight width={14} height={14} />
-        </a>
+      {/* section title */}
+      <div className="flex items-center gap-2 bg-white px-3 pb-1 pt-2">
+        <span className="text-[15px] font-bold text-ink">🚀 Giao nhanh hôm nay</span>
+        <span className="text-[11px] text-ink/40">{tiles.length} sản phẩm</span>
+      </div>
+
+      {/* lưới sản phẩm 2 cột */}
+      <section className="grid grid-cols-2 gap-1.5 bg-white p-1.5">
+        {tiles.map((t) => (
+          <ProductCard key={t.id} t={t} />
+        ))}
       </section>
 
-      {/* editorial */}
-      <div className="bg-navy px-6 py-11 text-center text-cream">
-        <div className="mx-auto mb-4 flex items-center justify-center gap-2 text-gold">
-          <span className="h-px w-8 bg-gold/50" />
-          <IconLotus width={18} height={18} />
-          <span className="h-px w-8 bg-gold/50" />
-        </div>
-        <h2 className="text-[21px] font-semibold italic leading-snug">
-          “Mỗi chiếc bánh là một lời chúc gửi người thương.”
-        </h2>
-        <p className="mx-auto mt-3.5 max-w-[320px] text-sm opacity-85">
-          Công thức truyền thống, nhân sên tay trong ngày, không chất bảo quản công nghiệp.
-        </p>
+      {/* nguồn dữ liệu */}
+      <div className="px-3 py-3 text-center text-[10px] text-ink/40">
+        Nguồn: {isSupabaseConfigured ? "Supabase" : "seed demo"} · {boxes.length} hộp · {flavors.length} vị · giá & %
+        giảm minh hoạ
       </div>
 
-      {/* trạng thái nguồn dữ liệu (dev) */}
-      <div className="px-5 py-4 text-center text-[10.5px] opacity-50">
-        Nguồn dữ liệu: {isSupabaseConfigured ? "Supabase" : "seed fallback (chưa cấu hình Supabase)"} ·{" "}
-        {flavors.length} vị · giá rẻ nhất {formatMoney(region === "vn" ? cheapestBox.price_vn : cheapestBox.price_kr, region)}
-      </div>
-
-      {/* sticky cta */}
-      <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
-        <span className="flex-1 text-[11px] uppercase tracking-wide text-maroon opacity-70">
-          Chọn hộp & vị anh thích
-        </span>
+      {/* sticky CTA */}
+      <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-slate-200 bg-white px-3 py-2">
+        <a href="/tra-cuu" className="rounded-md border border-slate-200 px-3 py-2.5 text-[12px] font-semibold text-ink/70">
+          Tra đơn
+        </a>
         <a
-          href="/san-pham"
-          className="rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+          href="/dat-hang"
+          className="flex-1 rounded-md bg-[#346aff] py-2.5 text-center text-[13px] font-bold text-white"
         >
-          Đặt bánh
+          Đặt bánh ngay
         </a>
       </div>
     </main>
