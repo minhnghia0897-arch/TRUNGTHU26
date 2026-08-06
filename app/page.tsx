@@ -3,64 +3,11 @@ import { formatMoney } from "@/lib/money";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import type { Box, Region } from "@/lib/types";
 
-// ---- tiện ích ----
 const GOLD = "bg-gradient-to-b from-[#F7EBC0] via-[#E8C877] to-[#C6A24C] bg-clip-text text-transparent";
-const tier = (p: number, k: number) => Math.round((p * k) / 1000) * 1000;
-
-function GoldIcon({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[#C6A24C]/55 bg-white/[0.02] text-[#E8C877]">
-      {children}
-    </div>
-  );
-}
-
-function Feature({ icon, title, sub }: { icon: React.ReactNode; title: string; sub: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-[#C6A24C]/45 bg-white/[0.03] p-3">
-      <GoldIcon>{icon}</GoldIcon>
-      <div className="min-w-0">
-        <div className={`text-[12.5px] font-bold leading-tight ${GOLD}`}>{title}</div>
-        <div className="mt-0.5 text-[11px] leading-snug text-cream/65">{sub}</div>
-      </div>
-    </div>
-  );
-}
-
-function PriceTable({ box, region }: { box: Box; region: Region }) {
-  const retail = region === "vn" ? box.price_vn : box.price_kr;
-  const cells = [
-    ["Bán lẻ", formatMoney(retail, region)],
-    ["10–50", formatMoney(tier(retail, 0.9), region)],
-    ["51–100", formatMoney(tier(retail, 0.82), region)],
-    ["101–300", "Liên hệ"],
-  ];
-  return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-[#C6A24C]/40">
-      <table className="w-full text-center text-[10.5px]">
-        <thead>
-          <tr className="bg-[#C6A24C]/12 text-[#E8C877]">
-            <th className="px-1 py-1.5 font-semibold">SỐ LƯỢNG</th>
-            {cells.map((c) => (
-              <th key={c[0]} className="px-1 py-1.5 font-semibold">{c[0]}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-t border-[#C6A24C]/25">
-            <td className="px-1 py-1.5 font-bold text-[#E8C877]">GIÁ BÁN</td>
-            {cells.map((c) => (
-              <td key={c[0]} className="px-1 py-1.5 font-semibold text-cream/90">{c[1]}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 function BoxShowcase({ box, region }: { box: Box; region: Region }) {
   const specs = (box.specs ?? {}) as { material?: string; pieces?: string };
+  const price = region === "vn" ? box.price_vn : box.price_kr;
   const bullets = [
     box.description ?? `${box.slots} bánh ${box.weight}g`,
     specs.pieces ?? `${box.slots} bánh nướng truyền thống`,
@@ -96,7 +43,11 @@ function BoxShowcase({ box, region }: { box: Box; region: Region }) {
           ))}
         </ul>
 
-        <PriceTable box={box} region={region} />
+        <div className="mt-3 flex items-baseline gap-2 border-t border-[#C6A24C]/25 pt-3">
+          <span className="text-[10px] uppercase tracking-wide text-cream/50">Giá bán</span>
+          <span className={`text-[20px] font-extrabold ${GOLD}`}>{formatMoney(price, region)}</span>
+          <span className="text-[11px] text-cream/50">/ hộp</span>
+        </div>
 
         <a
           href={`/dat-hang?box=${box.id}&region=${region}`}
@@ -109,7 +60,7 @@ function BoxShowcase({ box, region }: { box: Box; region: Region }) {
   );
 }
 
-// Storefront — phong cách navy + gold cao cấp (tin cậy, quà biếu doanh nghiệp).
+// Storefront — phong cách navy + gold cao cấp.
 export default async function Home({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
   const sp = await searchParams;
   const region: Region = sp.region === "vn" ? "vn" : "kr";
@@ -155,62 +106,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         </div>
       </section>
 
-      {/* dịch vụ / tin cậy */}
-      <section className="px-4 py-7">
-        <h2 className={`text-center text-[19px] font-extrabold uppercase tracking-wide ${GOLD}`}>
-          Dịch vụ doanh nghiệp
-        </h2>
-        <div className="mt-4 grid gap-2.5">
-          <Feature
-            icon={<span className="text-[11px] font-bold">VAT</span>}
-            title="Xuất hoá đơn VAT đầy đủ"
-            sub="Cho mọi đơn hàng doanh nghiệp"
-          />
-          <Feature
-            icon={<span className="text-[10px] font-bold tracking-tight">LOGO</span>}
-            title="In logo / thư chúc mừng"
-            sub="Miễn phí với đơn đủ số lượng"
-          />
-          <Feature
-            icon={
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-                <path d="M1 3h13v11H1zM14 7h4l3 3v4h-7z" /><circle cx="5.5" cy="17.5" r="1.6" /><circle cx="17.5" cy="17.5" r="1.6" />
-              </svg>
-            }
-            title="Giao hàng toàn quốc"
-            sub="Hoả tốc cho đơn hàng gấp"
-          />
-          <Feature
-            icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="10" /><path d="M8 8h.01M16 16h.01M16 8 8 16" />
-              </svg>
-            }
-            title="Chiết khấu theo số lượng"
-            sub="Tốt hơn từ 50 hộp trở lên"
-          />
-        </div>
-
-        {/* điểm tin cậy */}
-        <div className="mt-4 rounded-2xl border border-[#C6A24C]/45 bg-[#0d1a30]/70 p-5">
-          <ul className="space-y-3">
-            {[
-              ["100+", "Doanh nghiệp tin dùng"],
-              ["5 năm", "Kinh nghiệm làm bánh"],
-              ["30+", "Vị bánh ngon"],
-              ["", "Công thức bánh độc bản"],
-            ].map(([k, v], i) => (
-              <li key={i} className="flex items-center gap-3 text-[17px] font-extrabold leading-tight">
-                <span className="text-[#E8C877]">•</span>
-                <span className={GOLD}>{k ? `${k} ${v}` : v}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
       {/* region switch */}
-      <div className="flex gap-2 px-4 pb-1 text-[11.5px]">
+      <div className="flex gap-2 px-4 pb-1 pt-6 text-[11.5px]">
         <a
           href="/?region=kr"
           className={`flex-1 rounded-lg border py-2 text-center font-semibold ${region === "kr" ? "border-[#C6A24C] bg-[#C6A24C]/12 text-[#E8C877]" : "border-[#C6A24C]/30 text-cream/60"}`}
@@ -253,8 +150,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
       {/* nguồn dữ liệu */}
       <div className="px-4 py-4 text-center text-[10px] text-cream/40">
-        Nguồn: {isSupabaseConfigured ? "Supabase" : "seed demo"} · {boxes.length} hộp · {flavors.length} vị · bảng giá
-        số lượng minh hoạ
+        Nguồn: {isSupabaseConfigured ? "Supabase" : "seed demo"} · {boxes.length} hộp · {flavors.length} vị
       </div>
 
       {/* sticky CTA */}

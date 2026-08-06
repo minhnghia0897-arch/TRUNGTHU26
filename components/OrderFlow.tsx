@@ -443,7 +443,7 @@ export default function OrderFlow({
         <a href="/" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] text-cream hover:text-gold">Trăng Rằm</a>
+        <a href="/" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
       </header>
 
       {/* stepper */}

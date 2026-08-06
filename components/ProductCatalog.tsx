@@ -77,7 +77,7 @@ export default function ProductCatalog({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
       <header className="bg-navy px-4 py-3.5 text-center">
-        <a href="/" className="title-heritage text-base tracking-[0.18em] text-cream">
+        <a href="/" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
           Trăng Rằm
         </a>
       </header>
