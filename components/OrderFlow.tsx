@@ -30,7 +30,7 @@ type Recipient = {
   desiredDate: string;
 };
 
-export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string; ref?: string };
+export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string; ref?: string; express?: boolean };
 
 let _id = 0;
 const nid = () => "u" + ++_id;
@@ -82,6 +82,8 @@ export default function OrderFlow({
   initial?: InitialSelection;
 }) {
   const [step, setStep] = useState<number>(1);
+  const [express, setExpress] = useState<boolean>(!!initial?.express); // đặt nhanh 1 trang (như TikTok)
+  const [zaloHint, setZaloHint] = useState(false);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
   const [buyerName, setBuyerName] = useState("");
@@ -167,6 +169,8 @@ export default function OrderFlow({
 
   const hydrated = useRef(false);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const remember = useRef<{ name?: string; phone?: string; address?: string; region?: Region }>({});
+  const prefilled = useRef(false);
 
   // tải ảnh hoá đơn (PNG)
   async function downloadBill() {
@@ -200,6 +204,8 @@ export default function OrderFlow({
         setPicks([]);
         setOpenSlot(0);
         setStep(1.5);
+      } else if (initial!.express) {
+        setStep(2); // combo/lẻ + express → vào thẳng checkout 1 trang
       }
     } else {
       try {
@@ -222,6 +228,18 @@ export default function OrderFlow({
         /* ignore */
       }
     }
+    // nhớ thông tin người mua từ lần trước (sống qua cả khi đặt xong)
+    try {
+      const rb = JSON.parse(localStorage.getItem("tr_buyer") || "null");
+      if (rb && typeof rb === "object") {
+        remember.current = rb;
+        if (rb.region === "vn" || rb.region === "kr") setBuyerRegion(rb.region);
+        if (typeof rb.name === "string" && rb.name) setBuyerName((v) => v || rb.name);
+        if (typeof rb.phone === "string" && rb.phone) setBuyerPhone((v) => v || rb.phone);
+      }
+    } catch {
+      /* ignore */
+    }
     // dọn URL sau khi đã bắt deep-link / token → F5 khôi phục từ localStorage, không lặp
     if (fromUrl || initial?.ref) {
       try { window.history.replaceState({}, "", "/dat-hang"); } catch { /* ignore */ }
@@ -239,6 +257,47 @@ export default function OrderFlow({
       /* ignore */
     }
   }, [cart, buyerRegion, buyerName, buyerPhone, recipients, ref]);
+
+  // EXPRESS: luôn có đúng 1 người nhận & gán mọi món cho người đó (checkout 1 trang)
+  useEffect(() => {
+    if (!express) return;
+    if (recipients.length === 0) {
+      const r = remember.current;
+      setRecipients([
+        {
+          uid: nid(),
+          name: r.name ?? "",
+          phone: r.phone ?? "",
+          address: r.address ?? "",
+          region: (r.region as Region) ?? buyerRegion,
+          desiredDate: "",
+        },
+      ]);
+      prefilled.current = true;
+      return;
+    }
+    const r0 = recipients[0].uid;
+    setCart((c) => {
+      let changed = false;
+      const next = c.map((it) =>
+        it.recipientUids.length === 1 && it.recipientUids[0] === r0
+          ? it
+          : ((changed = true), { ...it, recipientUids: [r0] }),
+      );
+      return changed ? next : c;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [express, cart, recipients]);
+
+  // express: form giao hàng ghi đồng thời vào người đặt + người nhận[0] (1 địa chỉ, ít gõ)
+  const r0 = recipients[0];
+  const exName = r0?.name ?? buyerName;
+  const exPhone = r0?.phone ?? buyerPhone;
+  const exAddress = r0?.address ?? "";
+  const exDate = r0?.desiredDate ?? "";
+  const setExName = (v: string) => { setBuyerName(v); if (r0) setR(r0.uid, "name", v); };
+  const setExPhone = (v: string) => { setBuyerPhone(v); if (r0) setR(r0.uid, "phone", v); };
+  const setExRegion = (v: Region) => { setBuyerRegion(v); if (r0) setR(r0.uid, "region", v); };
 
   const bill = useMemo(
     () =>
@@ -283,7 +342,7 @@ export default function OrderFlow({
     ]);
     setPicks([]);
     setOpenSlot(0);
-    setStep(1);
+    setStep(express ? 2 : 1); // express: thêm hộp xong vào thẳng checkout
   }
 
   // ---- recipients ----
@@ -400,6 +459,15 @@ export default function OrderFlow({
         refCustomer: link?.customerName,
       });
       try { localStorage.removeItem(CART_KEY); } catch { /* ignore */ }
+      // nhớ thông tin cho lần đặt sau (sống qua khi xoá giỏ)
+      try {
+        localStorage.setItem("tr_buyer", JSON.stringify({
+          name: buyerName.trim(),
+          phone: buyerPhone.trim(),
+          address: recipients[0]?.address ?? "",
+          region: buyerRegion,
+        }));
+      } catch { /* ignore */ }
       setDone({
         code: data.order.code,
         transferCode: data.order.transferCode,
@@ -410,6 +478,37 @@ export default function OrderFlow({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // express: xác nhận đặt (1 trang)
+  function expressSubmit() {
+    if (!cart.length) return alert("Chưa có món nào.");
+    if (!buyerName.trim()) return alert("Nhập tên người nhận.");
+    if (!buyerPhone.trim()) return alert("SĐT là bắt buộc.");
+    if (!recipients[0]?.address?.trim()) return alert("Nhập địa chỉ nhận hàng.");
+    submit();
+  }
+
+  // đặt qua Zalo 1 chạm: soạn sẵn nội dung, copy rồi mở Zalo
+  function orderViaZalo() {
+    const lines = cart
+      .map((l) => {
+        const fl = l.kind !== "la" && flavorNames(l.flavorIds) ? ` (${flavorNames(l.flavorIds)})` : "";
+        return `• ${l.name}${l.qty > 1 ? ` ×${l.qty}` : ""}${fl} — ${fmt(l.unitPrice * l.qty)}`;
+      })
+      .join("\n");
+    const msg =
+      `ĐẶT BÁNH — TRĂNG RẰM\n${lines}\n` +
+      `Tạm tính: ${fmt(bill.subtotal)}\n` +
+      (buyerName ? `Tên: ${buyerName}\n` : "") +
+      (buyerPhone ? `SĐT: ${buyerPhone}\n` : "") +
+      (exAddress ? `Địa chỉ: ${exAddress}\n` : "");
+    try {
+      navigator.clipboard.writeText(msg);
+      setZaloHint(true);
+      setTimeout(() => setZaloHint(false), 4000);
+    } catch { /* ignore */ }
+    try { window.open("https://zalo.me/0982576263", "_blank"); } catch { /* ignore */ }
   }
 
   // ---- nav guards ----
@@ -686,8 +785,84 @@ export default function OrderFlow({
           </section>
         )}
 
+        {/* EXPRESS — CHECKOUT 1 TRANG (đặt nhanh như TikTok) */}
+        {express && step >= 2 && step <= 5 && (
+          <section className="step-in">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="title-heritage text-lg">Đặt nhanh</h2>
+              <button onClick={() => setStep(1)} className="text-[12px] text-gold underline">← Sửa giỏ</button>
+            </div>
+
+            {/* tóm tắt giỏ gọn */}
+            <div className="rounded border border-line bg-white p-3.5">
+              {cart.map((it) => (
+                <div key={it.uid} className="flex items-center justify-between gap-2 border-b border-dashed border-line py-1.5 text-[12.5px] last:border-b-0">
+                  <span className="min-w-0">
+                    <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
+                    {it.kind !== "la" && flavorNames(it.flavorIds) && (
+                      <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                    )}
+                  </span>
+                  <div className="flex flex-none items-center gap-2">
+                    <div className="inline-flex items-center overflow-hidden rounded-full border border-line">
+                      <button onClick={() => setQty(it.uid, -1)} aria-label="Giảm" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><span className="block h-[2px] w-2.5 bg-current" /></button>
+                      <span className="w-6 text-center font-serif text-[13px] tabular-nums">{it.qty}</span>
+                      <button onClick={() => setQty(it.uid, 1)} aria-label="Tăng" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><IconPlus width={12} height={12} /></button>
+                    </div>
+                    <span className="font-serif text-[13px] font-semibold text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* thông tin nhận hàng — 1 form, ghi cả người đặt + người nhận */}
+            <div className="mt-3 rounded border border-line bg-white p-3.5">
+              <Label>Vùng giao · tiền tệ</Label>
+              <select value={buyerRegion} onChange={(e) => setExRegion(e.target.value as Region)} className="w-full rounded border border-line bg-white p-2.5 text-sm">
+                <option value="kr">🇰🇷 Ở Hàn → thanh toán ₩ KRW</option>
+                <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
+              </select>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div><Label>Họ tên</Label><Input value={exName} onChange={setExName} placeholder="Nguyễn Văn A" /></div>
+                <div><Label>SĐT · bắt buộc</Label><Input value={exPhone} onChange={setExPhone} placeholder="010-xxxx-xxxx" /></div>
+              </div>
+              <Label>Địa chỉ nhận</Label>
+              <Input value={exAddress} onChange={(v) => r0 && setR(r0.uid, "address", v)} placeholder="Số nhà, đường, quận, thành phố" />
+              <Label>Ngày muốn nhận</Label>
+              <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
+              {suggestedDate && (
+                <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
+                  <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+                </button>
+              )}
+              <button onClick={() => { setExpress(false); if (recipients.length === 0) addRecipient(); setStep(3); }} className="mt-3 block w-full text-center text-[12px] text-gold underline">
+                Gửi tặng nhiều người / nhiều địa chỉ? →
+              </button>
+            </div>
+
+            {/* thanh toán */}
+            <div className="mt-3">
+              <div className="eyebrow mb-2">Chuyển khoản</div>
+              <BankCard data={BANKS.vn} primary={buyerRegion === "vn"} qrUrl={vietqrUrl(buyerRegion === "vn" ? bill.grand : undefined)} />
+              <div className="h-3" />
+              <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
+            </div>
+
+            {/* tổng */}
+            <div className="mt-3 rounded border border-line bg-white p-3.5">
+              <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty, 0)} món)`} v={fmt(bill.subtotal)} />
+              <Row k="Phí ship" v={fmt(bill.shipping)} />
+              {bill.handling > 0 && <Row k="Handling chéo vùng" v={fmt(bill.handling)} />}
+              <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
+                <span>Tổng · {buyerRegion === "vn" ? "VND" : "KRW"}</span>
+                <span>{fmt(bill.grand)}</span>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* STEP 2 — NGƯỜI ĐẶT */}
-        {step === 2 && (
+        {!express && step === 2 && (
           <section className="step-in">
             <div className="eyebrow">Bước 2</div>
             <h2 className="title-heritage mb-4 text-lg">Người đặt</h2>
@@ -713,7 +888,7 @@ export default function OrderFlow({
         )}
 
         {/* STEP 3 — NGƯỜI NHẬN */}
-        {step === 3 && (
+        {!express && step === 3 && (
           <section className="step-in">
             <div className="eyebrow">Bước 3</div>
             <h2 className="title-heritage mb-4 text-lg">Người nhận &amp; chia quà</h2>
@@ -815,7 +990,7 @@ export default function OrderFlow({
         )}
 
         {/* STEP 4 — XEM LẠI */}
-        {step === 4 && (
+        {!express && step === 4 && (
           <section className="step-in">
             <div className="eyebrow">Bước 4</div>
             <h2 className="title-heritage mb-4 text-lg">Xem lại</h2>
@@ -845,7 +1020,7 @@ export default function OrderFlow({
         )}
 
         {/* STEP 5 — THANH TOÁN */}
-        {step === 5 && (
+        {!express && step === 5 && (
           <section className="step-in">
             <div className="eyebrow">Bước 5</div>
             <h2 className="title-heritage mb-1 text-lg">Chuyển khoản</h2>
@@ -937,8 +1112,40 @@ export default function OrderFlow({
         )}
       </div>
 
-      {/* navbar */}
-      {step !== 6 && (
+      {/* toast copy Zalo */}
+      {zaloHint && (
+        <div className="fixed inset-x-0 bottom-[68px] z-30 mx-auto max-w-app px-4">
+          <div className="rounded-lg border border-gold bg-[#fff8ec] px-3 py-2 text-center text-[12px] text-[#b8862f] shadow">
+            Đã copy nội dung đơn — dán vào khung chat Zalo rồi gửi nhé.
+          </div>
+        </div>
+      )}
+
+      {/* navbar EXPRESS — thanh mua dính đáy, có giá + đặt nhanh + Zalo */}
+      {express && step >= 2 && step <= 5 && (
+        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-line bg-cream px-3 py-2.5">
+          <div className="flex-1 leading-tight">
+            <span className="text-[10px] uppercase tracking-wide text-maroon/60">Tổng cộng</span>
+            <b className="block font-serif text-[17px] text-maroon">{fmt(bill.grand)}</b>
+          </div>
+          <button
+            onClick={orderViaZalo}
+            className="rounded-lg border border-gold px-3 py-2.5 text-[12px] font-semibold text-maroon"
+          >
+            💬 Zalo
+          </button>
+          <button
+            onClick={expressSubmit}
+            disabled={submitting}
+            className="rounded-lg bg-gold px-5 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep disabled:opacity-40"
+          >
+            {submitting ? "Đang tạo…" : "Đặt hàng"}
+          </button>
+        </div>
+      )}
+
+      {/* navbar thường (wizard) — cả khi express đang ở bước 1 (sửa giỏ) */}
+      {(!express || step === 1) && step !== 6 && (
         <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
           <div className="flex-1 text-[11px] uppercase tracking-wide opacity-70">
             Tạm tính<span className="normal-case tracking-normal opacity-70"> (chưa gồm ship)</span>

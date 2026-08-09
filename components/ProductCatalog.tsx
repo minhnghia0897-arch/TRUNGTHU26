@@ -133,7 +133,7 @@ export default function ProductCatalog({
                   <div className="mx-auto my-3 h-px w-16 bg-line" />
                   <Price v={region === "vn" ? b.price_vn : b.price_kr} region={region} />
                   <a
-                    href={`/dat-hang?box=${b.id}&region=${region}`}
+                    href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
                     className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
                   >
                     Tự chọn vị <IconArrowRight width={14} height={14} />
@@ -170,10 +170,10 @@ export default function ProductCatalog({
                     <div className="mx-auto my-3 h-px w-16 bg-line" />
                     <Price v={price} region={region} />
                     <a
-                      href={`/dat-hang?combo=${c.id}&region=${region}`}
+                      href={`/dat-hang?combo=${c.id}&region=${region}&express=1`}
                       className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
                     >
-                      Thêm vào giỏ <IconArrowRight width={14} height={14} />
+                      Mua ngay <IconArrowRight width={14} height={14} />
                     </a>
                   </div>
                 </article>
@@ -201,10 +201,10 @@ export default function ProductCatalog({
                       <div className="text-[9.5px] text-ink/45">+{formatMoney(flavorSurcharge(f, region), region)} trong hộp</div>
                     )}
                     <a
-                      href={`/dat-hang?la=${f.id}&region=${region}`}
+                      href={`/dat-hang?la=${f.id}&region=${region}&express=1`}
                       className="mt-2 block rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep"
                     >
-                      Thêm
+                      Mua ngay
                     </a>
                   </div>
                 </div>

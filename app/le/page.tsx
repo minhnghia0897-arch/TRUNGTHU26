@@ -52,10 +52,10 @@ function BoxShowcase({ box, region }: { box: Box; region: Region }) {
         </div>
 
         <a
-          href={`/dat-hang?box=${box.id}&region=${region}`}
+          href={`/dat-hang?box=${box.id}&region=${region}&express=1`}
           className="mt-3 block rounded-lg bg-gradient-to-b from-[#E8C877] to-[#C6A24C] py-2.5 text-center text-[13px] font-bold text-[#14203A]"
         >
-          Đặt hộp này
+          Mua ngay
         </a>
       </div>
     </article>
