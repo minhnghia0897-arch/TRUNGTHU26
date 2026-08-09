@@ -530,11 +530,10 @@ export default function OrderFlow({
         return alert("Người nhận thiếu tên hoặc địa chỉ.");
       return setStep(4);
     }
-    if (step === 4) return setStep(5);
-    if (step === 5) return submit();
+    if (step === 4) return submit(); // đặt xong → trang thanh toán riêng
   }
 
-  const STEPS = ["Giỏ", "Người đặt", "Người nhận", "Xem lại", "Thanh toán"];
+  const STEPS = ["Giỏ", "Người đặt", "Người nhận", "Xem lại"];
 
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
@@ -840,14 +839,6 @@ export default function OrderFlow({
               </button>
             </div>
 
-            {/* thanh toán */}
-            <div className="mt-3">
-              <div className="eyebrow mb-2">Chuyển khoản</div>
-              <BankCard data={BANKS.vn} primary={buyerRegion === "vn"} qrUrl={vietqrUrl(buyerRegion === "vn" ? bill.grand : undefined)} />
-              <div className="h-3" />
-              <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
-            </div>
-
             {/* tổng */}
             <div className="mt-3 rounded border border-line bg-white p-3.5">
               <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty, 0)} món)`} v={fmt(bill.subtotal)} />
@@ -858,6 +849,7 @@ export default function OrderFlow({
                 <span>{fmt(bill.grand)}</span>
               </div>
             </div>
+            <p className="mt-2 text-center text-[11px] opacity-60">Bấm “Đặt hàng” — chuyển khoản ở bước sau.</p>
           </section>
         )}
 
@@ -1019,37 +1011,38 @@ export default function OrderFlow({
           </section>
         )}
 
-        {/* STEP 5 — THANH TOÁN */}
-        {!express && step === 5 && (
-          <section className="step-in">
-            <div className="eyebrow">Bước 5</div>
-            <h2 className="title-heritage mb-1 text-lg">Chuyển khoản</h2>
-            <p className="mb-4 text-sm">
-              Số tiền: <b className="font-serif text-maroon">{fmt(bill.grand)}</b> · chuyển tới <b>một trong hai</b> tài khoản dưới.
-            </p>
-
-            <BankCard
-              data={BANKS.vn}
-              primary={buyerRegion === "vn"}
-              qrUrl={vietqrUrl(buyerRegion === "vn" ? bill.grand : undefined)}
-            />
-            <div className="h-3" />
-            <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
-
-            <div className="mt-3 rounded border border-gold bg-[#fff8ec] p-3 text-xs text-[#b8862f]">
-              ⚠ Bấm xác nhận để tạo đơn &amp; sinh mã đối soát; ghi đúng mã ở nội dung CK.
-            </div>
-          </section>
-        )}
-
-        {/* STEP 6 — XONG */}
+        {/* STEP 6 — ĐẶT XONG → THANH TOÁN (trang riêng) */}
         {step === 6 && done && (
           <section className="step-in py-6">
             <div className="text-center">
-              <div className="mx-auto mb-1 grid h-16 w-16 place-items-center rounded-full bg-gold/15 text-gold ring-1 ring-gold/30">
-                <IconLotus width={34} height={34} />
+              <div className="mx-auto mb-1 grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-2xl text-emerald-600 ring-1 ring-emerald-300">
+                ✓
               </div>
-              <h2 className="title-heritage my-3 text-xl">Đã nhận đơn</h2>
+              <h2 className="title-heritage my-2 text-xl">Đặt đơn thành công</h2>
+              <p className="text-[12.5px] opacity-70">
+                Mã đơn <b className="font-serif text-maroon">{done.code}</b> — chuyển khoản để hoàn tất.
+              </p>
+            </div>
+
+            {/* ===== THANH TOÁN (trang riêng sau khi đặt) ===== */}
+            <div className="mt-4 rounded-lg border-2 border-gold bg-[#fffdf7] p-4">
+              <div className="flex items-center justify-between">
+                <span className="eyebrow">Thanh toán</span>
+                <span className="font-serif text-[18px] font-bold text-maroon">{fmt(done.grandTotal)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between rounded border border-gold/50 bg-white px-2.5 py-1.5 text-[12px]">
+                <span className="opacity-60">Nội dung CK</span>
+                <span className="flex items-center gap-2">
+                  <b className="font-serif tracking-wide text-maroon-deep">{done.transferCode}</b>
+                  <CopyBtn value={done.transferCode} />
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] text-[#b8862f]">Chuyển tới <b>một trong hai</b> tài khoản dưới · ghi đúng nội dung CK ở trên.</p>
+              <div className="mt-3">
+                <BankCard data={BANKS.vn} primary={buyerRegion === "vn"} qrUrl={vietqrUrl(buyerRegion === "vn" ? done.grandTotal : undefined)} />
+                <div className="h-3" />
+                <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
+              </div>
             </div>
 
             {/* ===== HOÁ ĐƠN (chụp/tải ảnh) ===== */}
@@ -1167,7 +1160,7 @@ export default function OrderFlow({
               disabled={submitting}
               className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep disabled:opacity-40"
             >
-              {step === 5 ? (submitting ? "Đang tạo…" : "Xác nhận") : "Tiếp"}
+              {step === 4 ? (submitting ? "Đang tạo…" : "Đặt hàng") : "Tiếp"}
             </button>
           )}
         </div>
