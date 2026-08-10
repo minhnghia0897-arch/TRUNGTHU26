@@ -65,12 +65,12 @@ const ZALO_LINK = "https://zalo.me/0982576263";
 
 // Tài khoản nhận tiền (demo — thay bằng TK thật của anh sau).
 const BANKS = {
-  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY TRANG RAM" },
-  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "TRANG RAM" },
+  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY DORAN KING" },
+  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "DORAN KING" },
 };
 const vietqrUrl = (amountVnd?: number) => {
   const num = BANKS.vn.number.replace(/\s/g, "");
-  const q = amountVnd ? `?amount=${amountVnd}&addInfo=${encodeURIComponent("Trang Ram")}` : "";
+  const q = amountVnd ? `?amount=${amountVnd}&addInfo=${encodeURIComponent("Doran King")}` : "";
   return `https://img.vietqr.io/image/${BANKS.vn.bin}-${num}-compact2.png${q}`;
 };
 
@@ -196,7 +196,7 @@ export default function OrderFlow({
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `bill-${done?.code ?? "trang-ram"}.png`;
+        a.download = `bill-${done?.code ?? "doran-king"}.png`;
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -675,7 +675,7 @@ export default function OrderFlow({
         <a href="/san-pham" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Doran King</a>
       </header>
 
       {/* stepper */}
@@ -1109,7 +1109,7 @@ export default function OrderFlow({
             {/* bill đầy đủ */}
             <div className="rounded-lg border border-line bg-white p-4">
               <div className="border-b border-dashed border-line pb-3 text-center">
-                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="title-heritage text-base tracking-[0.16em]">Doran King</div>
                 <div className="eyebrow mt-0.5">Chi tiết đơn hàng</div>
               </div>
 
@@ -1184,7 +1184,7 @@ export default function OrderFlow({
             {/* ===== HOÁ ĐƠN (chụp/tải ảnh) ===== */}
             <div ref={receiptRef} className="rounded-lg border border-line bg-white p-4">
               <div className="border-b border-dashed border-line pb-3 text-center">
-                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="title-heritage text-base tracking-[0.16em]">Doran King</div>
                 <div className="eyebrow mt-0.5">Phiếu đặt hàng</div>
                 <div className="mt-1.5 text-[12px] text-ink/70">
                   Mã đơn <b className="font-serif text-maroon">{done.code}</b> · Nội dung CK{" "}
@@ -1461,7 +1461,7 @@ function BankCard({
           <div className="mt-2 flex justify-center">
             <a
               href={qrUrl}
-              download="trang-ram-qr.png"
+              download="doran-king-qr.png"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-full border border-gold bg-white px-3.5 py-1.5 text-[12px] font-medium text-maroon transition active:scale-95 hover:bg-cream"

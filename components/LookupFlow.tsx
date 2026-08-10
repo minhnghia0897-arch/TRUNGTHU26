@@ -21,7 +21,7 @@ export default function LookupFlow() {
         </a>
       </div>
       <header className="mb-5 text-center">
-        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em]">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em]">Doran King</a>
         <div className="eyebrow mt-2">Tra cứu</div>
         <h1 className="title-heritage mt-1 text-xl">Theo dõi đơn</h1>
       </header>

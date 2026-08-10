@@ -294,7 +294,7 @@ export default function ProductCatalog({
       {/* header — bộ sưu tập là trang chính của luồng khách lẻ */}
       <header className="bg-navy px-4 pb-3 pt-3.5 text-center">
         <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
-          Trăng Rằm
+          Doran King
         </a>
         <div className="mt-0.5 text-[10px] italic tracking-wide text-cream/55">Bánh Trung Thu thủ công cao cấp</div>
         <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-[#E8C877]/85">

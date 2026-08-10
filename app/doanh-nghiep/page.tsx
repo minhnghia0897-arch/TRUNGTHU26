@@ -2,7 +2,7 @@ import { getBoxes, getFlavors } from "@/lib/catalog";
 import { formatMoney } from "@/lib/money";
 import type { Box, Region } from "@/lib/types";
 
-export const metadata = { title: "Trăng Rằm — Doanh nghiệp" };
+export const metadata = { title: "Doran King — Doanh nghiệp" };
 
 const GOLD = "bg-gradient-to-b from-[#F7EBC0] via-[#E8C877] to-[#C6A24C] bg-clip-text text-transparent";
 const tier = (p: number, k: number) => Math.round((p * k) / 1000) * 1000;
@@ -126,7 +126,7 @@ export default async function DoanhNghiepPage({ searchParams }: { searchParams: 
       <header className="border-b border-[#C6A24C]/25 bg-[#0a1526]">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 md:px-8">
           <div>
-            <div className={`text-[20px] font-extrabold uppercase tracking-[0.2em] md:text-[24px] ${GOLD}`}>Trăng Rằm</div>
+            <div className={`text-[20px] font-extrabold uppercase tracking-[0.2em] md:text-[24px] ${GOLD}`}>Doran King</div>
             <div className="text-[10px] italic tracking-wide text-cream/55 md:text-[11px]">Dịch vụ quà biếu doanh nghiệp</div>
           </div>
           <nav className="hidden gap-7 text-[12px] uppercase tracking-widest text-[#E8C877]/85 md:flex">

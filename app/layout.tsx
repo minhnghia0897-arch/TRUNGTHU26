@@ -11,7 +11,7 @@ const beVietnam = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "Trăng Rằm — Bánh Trung Thu thủ công",
+  title: "Doran King — Bánh Trung Thu thủ công",
   description: "Bánh Trung Thu thủ công, hộp quà biếu tinh tế. Giao VN & Hàn Quốc.",
 };
 
