@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Badge, Box, Combo, Flavor, Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine } from "@/lib/pricing";
@@ -19,6 +19,7 @@ type Tab = "box" | "combo" | "la";
 
 // Giỏ hàng dùng chung với trang Đặt hàng (OrderFlow đọc lại đúng key này khi mở /dat-hang).
 const CART_KEY = "tr_cart";
+const MAX_IMAGES = 4; // khớp giới hạn ảnh ở Dashboard
 type CartBlob = { cart?: CartLine[]; buyerRegion?: Region; [k: string]: unknown };
 
 function readCart(): CartBlob {
@@ -69,12 +70,158 @@ function Price({ v, region }: { v: number; region: Region }) {
   );
 }
 
-function ImageArea({ badge, w }: { badge?: Badge; w: number }) {
+/** Khung ảnh 4:5 — lướt qua tối đa 4 ảnh, bấm vào mở popup xem lớn. */
+function ImageArea({
+  badge,
+  w,
+  images = [],
+  alt = "",
+  onOpen,
+}: {
+  badge?: Badge;
+  w: number;
+  images?: string[];
+  alt?: string;
+  onOpen?: (i: number) => void;
+}) {
+  const [i, setI] = useState(0);
+  const n = images.length;
+  const go = (e: React.MouseEvent, d: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setI((v) => (v + d + n) % n);
+  };
   return (
-    <div className="relative flex aspect-[4/5] items-center justify-center bg-cream-soft">
-      <IconLotus width={54} height={54} className="text-gold/45" />
+    <div className="relative flex aspect-[4/5] items-center justify-center overflow-hidden bg-cream-soft">
+      {n > 0 ? (
+        <button type="button" onClick={() => onOpen?.(i)} aria-label={`Xem ảnh ${alt}`} className="absolute inset-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={images[i]} alt={alt} className="h-full w-full object-cover" />
+        </button>
+      ) : (
+        <IconLotus width={54} height={54} className="text-gold/45" />
+      )}
       <BadgeChip badge={badge} />
       <WeightChip w={w} />
+      {n > 1 && (
+        <>
+          <button
+            onClick={(e) => go(e, -1)}
+            aria-label="Ảnh trước"
+            className="absolute left-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-[15px] font-bold leading-none text-navy shadow"
+          >
+            ‹
+          </button>
+          <button
+            onClick={(e) => go(e, 1)}
+            aria-label="Ảnh sau"
+            className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-white/85 text-[15px] font-bold leading-none text-navy shadow"
+          >
+            ›
+          </button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex justify-center gap-1">
+            {images.map((_, k) => (
+              <span
+                key={k}
+                className={`h-1.5 rounded-full transition-all ${k === i ? "w-3 bg-navy" : "w-1.5 bg-navy/35"}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Popup xem ảnh lớn ngay trong trang — lướt trái/phải, vuốt trên điện thoại. */
+function Lightbox({
+  images,
+  index,
+  title,
+  onClose,
+}: {
+  images: string[];
+  index: number;
+  title: string;
+  onClose: () => void;
+}) {
+  const [i, setI] = useState(index);
+  const n = images.length;
+  const x0 = useRef<number | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") setI((v) => (v - 1 + n) % n);
+      if (e.key === "ArrowRight") setI((v) => (v + 1) % n);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [n, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/90" onClick={onClose}>
+      <div className="flex items-center justify-between px-4 py-3 text-cream" onClick={(e) => e.stopPropagation()}>
+        <span className="text-[12.5px] font-medium">{title}</span>
+        <span className="text-[12px] opacity-70">{i + 1}/{n}</span>
+        <button onClick={onClose} aria-label="Đóng" className="text-[22px] leading-none text-cream">
+          ✕
+        </button>
+      </div>
+
+      <div
+        className="relative flex flex-1 items-center justify-center px-3"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => (x0.current = e.touches[0].clientX)}
+        onTouchEnd={(e) => {
+          if (x0.current === null) return;
+          const d = e.changedTouches[0].clientX - x0.current;
+          if (Math.abs(d) > 40) setI((v) => (v + (d < 0 ? 1 : -1) + n) % n);
+          x0.current = null;
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={images[i]} alt={title} className="max-h-full max-w-full rounded-lg object-contain" />
+        {n > 1 && (
+          <>
+            <button
+              onClick={() => setI((v) => (v - 1 + n) % n)}
+              aria-label="Ảnh trước"
+              className="absolute left-2 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-[22px] leading-none text-cream backdrop-blur"
+            >
+              ‹
+            </button>
+            <button
+              onClick={() => setI((v) => (v + 1) % n)}
+              aria-label="Ảnh sau"
+              className="absolute right-2 grid h-10 w-10 place-items-center rounded-full bg-white/15 text-[22px] leading-none text-cream backdrop-blur"
+            >
+              ›
+            </button>
+          </>
+        )}
+      </div>
+
+      {n > 1 && (
+        <div className="flex justify-center gap-2 px-4 py-4" onClick={(e) => e.stopPropagation()}>
+          {images.map((src, k) => (
+            <button
+              key={k}
+              onClick={() => setI(k)}
+              aria-label={`Ảnh ${k + 1}`}
+              className={`h-12 w-12 overflow-hidden rounded border-2 transition ${k === i ? "border-gold" : "border-transparent opacity-60"}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -94,7 +241,28 @@ export default function ProductCatalog({
   const [cartCount, setCartCount] = useState(0);
   const [added, setAdded] = useState<string>(""); // uid món vừa thêm → đổi nhãn nút
 
-  useEffect(() => setCartCount(countCart(readCart().cart)), []);
+  // ảnh sản phẩm từ Dashboard (tr_product_edits) — key box:/combo:/flavor:, tối đa 4 ảnh
+  const [imgs, setImgs] = useState<Record<string, string[]>>({});
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
+  const imagesOf = (key: string) => imgs[key] ?? [];
+
+  useEffect(() => {
+    setCartCount(countCart(readCart().cart));
+    try {
+      const ov = JSON.parse(localStorage.getItem("tr_product_edits") || "{}") as Record<
+        string,
+        { images?: string[]; image?: string }
+      >;
+      const m: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(ov)) {
+        const list = (v?.images?.length ? v.images : v?.image ? [v.image] : []).slice(0, MAX_IMAGES);
+        if (list.length) m[k] = list;
+      }
+      setImgs(m);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   /** Thêm vào giỏ ngay tại trang: trùng món thì cộng dồn số lượng, không chuyển trang. */
   function addToCart(key: string, line: Omit<CartLine, "uid" | "qty" | "recipientUids">) {
@@ -179,7 +347,13 @@ export default function ProductCatalog({
           <div className="grid grid-cols-2 gap-3">
             {boxes.map((b) => (
               <article key={b.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                <ImageArea badge={b.badge} w={b.weight} />
+                <ImageArea
+                  badge={b.badge}
+                  w={b.weight}
+                  images={imagesOf(`box:${b.id}`)}
+                  alt={b.name}
+                  onOpen={(i) => setLightbox({ images: imagesOf(`box:${b.id}`), index: i, title: b.name })}
+                />
                 <div className="flex flex-1 flex-col p-3 text-center">
                   <h3 className="text-[13px] font-semibold leading-tight text-navy">{b.name}</h3>
                   {b.description && <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{b.description}</p>}
@@ -214,7 +388,13 @@ export default function ProductCatalog({
                 .join(" · ");
               return (
                 <article key={c.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                  <ImageArea badge="best_seller" w={b.weight} />
+                  <ImageArea
+                    badge="best_seller"
+                    w={b.weight}
+                    images={imagesOf(`combo:${c.id}`)}
+                    alt={c.name}
+                    onOpen={(i) => setLightbox({ images: imagesOf(`combo:${c.id}`), index: i, title: c.name })}
+                  />
                   <div className="flex flex-1 flex-col p-3 text-center">
                     <h3 className="text-[13px] font-semibold leading-tight text-navy">{c.name}</h3>
                     {flavorLine && <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{flavorLine}</p>}
@@ -259,11 +439,13 @@ export default function ProductCatalog({
           <div className="grid grid-cols-2 gap-3">
             {flavors.map((f) => (
               <article key={f.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                <div className="relative flex aspect-[4/5] items-center justify-center bg-cream-soft">
-                  <IconLotus width={40} height={40} className="text-gold/45" />
-                  <BadgeChip badge={f.badge} />
-                  <WeightChip w={f.weight} />
-                </div>
+                <ImageArea
+                  badge={f.badge}
+                  w={f.weight}
+                  images={imagesOf(`flavor:${f.id}`)}
+                  alt={f.name}
+                  onOpen={(i) => setLightbox({ images: imagesOf(`flavor:${f.id}`), index: i, title: f.name })}
+                />
                 <div className="flex flex-1 flex-col p-3 text-center">
                   <h3 className="text-[13px] font-semibold leading-tight text-navy">{f.name}</h3>
                   <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{f.description}</p>
@@ -318,6 +500,16 @@ export default function ProductCatalog({
           )}
         </a>
       </div>
+
+      {/* popup xem ảnh lớn — ngay trong trang, không rời trang */}
+      {lightbox && (
+        <Lightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          title={lightbox.title}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </main>
   );
 }
