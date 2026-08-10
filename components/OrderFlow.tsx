@@ -207,6 +207,27 @@ export default function OrderFlow({
   // preselect từ URL (?box / ?combo / ?la) — hoặc khôi phục giỏ đã lưu (F5 không mất)
   useEffect(() => {
     const fromUrl = !!(initial?.box || initial?.combo || initial?.la);
+    // LUÔN khôi phục giỏ đã lưu trước — khách có thể đã thêm món ở trang bộ sưu tập
+    try {
+      const raw = localStorage.getItem(CART_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (Array.isArray(s.cart)) setCart(s.cart);
+        if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
+        if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
+        if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
+        if (Array.isArray(s.recipients)) setRecipients(s.recipients);
+        if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
+        const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
+          (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
+          0,
+        );
+        _id = Math.max(_id, maxU); // tránh trùng uid khi thêm món mới
+      }
+    } catch {
+      /* ignore */
+    }
+    // rồi mới áp deep-link lên trên giỏ đã có (không ghi đè giỏ cũ)
     if (fromUrl) {
       if (initial!.combo) addCombo(initial!.combo);
       if (initial!.la) addFlavor(initial!.la);
@@ -217,26 +238,6 @@ export default function OrderFlow({
         setStep(1.5);
       } else if (initial!.express) {
         setStep(2); // combo/lẻ + express → vào thẳng checkout 1 trang
-      }
-    } else {
-      try {
-        const raw = localStorage.getItem(CART_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
-          if (Array.isArray(s.cart)) setCart(s.cart);
-          if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
-          if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
-          if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
-          if (Array.isArray(s.recipients)) setRecipients(s.recipients);
-          if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
-          const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
-            (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
-            0,
-          );
-          _id = Math.max(_id, maxU); // tránh trùng uid khi thêm món mới
-        }
-      } catch {
-        /* ignore */
       }
     }
     // nhớ thông tin người mua từ lần trước (sống qua cả khi đặt xong)
@@ -687,8 +688,14 @@ export default function OrderFlow({
             <div className="eyebrow">Bước 1</div>
             <h2 className="title-heritage mb-4 text-lg">Giỏ hàng</h2>
             {cart.length === 0 ? (
-              <div className="rounded border border-line bg-white p-4 text-center opacity-60">
-                Giỏ trống — thêm hộp tự chọn bên dưới.
+              <div className="rounded border border-line bg-white p-5 text-center">
+                <p className="text-[13px] opacity-60">Giỏ đang trống.</p>
+                <a
+                  href="/san-pham"
+                  className="mt-3 inline-block rounded-full bg-gold px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-maroon-deep"
+                >
+                  Xem bộ sưu tập
+                </a>
               </div>
             ) : (
               cart.map((it) => (
@@ -740,67 +747,15 @@ export default function OrderFlow({
               ))
             )}
 
-            {/* Thêm sản phẩm */}
-            <div className="mt-4 rounded border border-line bg-white p-3.5">
-              <div className="eyebrow mb-2">Thêm sản phẩm</div>
-
-              {/* hộp tự chọn */}
-              <div className="mb-3">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Hộp tự chọn</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {boxes.map((b) => (
-                    <button
-                      key={b.id}
-                      onClick={() => { setSelectedBoxId(b.id); setPicks([]); setOpenSlot(0); setStep(1.5); }}
-                      className="rounded border border-dashed border-line bg-cream px-3 py-2 text-[11px] text-maroon"
-                    >
-                      + {b.name} · {fmt(buyerRegion === "vn" ? b.price_vn : b.price_kr)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* combo */}
-              {combos.length > 0 && (
-                <div className="mb-3">
-                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Combo / Set</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {combos.map((c) => {
-                      const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => addCombo(c.id)}
-                          className="rounded border border-gold bg-cream px-3 py-2 text-[11px] text-maroon"
-                        >
-                          + {c.name} · {fmt(boxPrice(b, c.flavor_ids, flavors, buyerRegion))}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* mua lẻ */}
-              <div>
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Mua lẻ từng vị</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {flavors.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => addFlavor(f.id)}
-                      className={`rounded-full border px-2.5 py-1.5 text-[11px] ${f.premium ? "border-gold text-maroon" : "border-line"} bg-white`}
-                    >
-                      + {f.name} · {fmt(flavorRetailPrice(f, buyerRegion))}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <a href="/san-pham" className="mt-3 block text-center text-[11px] text-gold underline">
-                Xem chi tiết sản phẩm →
+            {/* thêm món khác — bộ sưu tập là nơi chọn hàng, giỏ chỉ để xem lại */}
+            {cart.length > 0 && (
+              <a
+                href="/san-pham"
+                className="mt-4 block rounded border border-dashed border-line bg-white py-3 text-center font-serif text-xs uppercase tracking-wide text-maroon"
+              >
+                + Thêm sản phẩm khác
               </a>
-            </div>
+            )}
           </section>
         )}
 
