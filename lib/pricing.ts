@@ -79,8 +79,20 @@ export interface CartLine {
   qty: number;
   unitPrice: number; // đã theo vùng người đặt
   name: string;
-  recipientUids: string[]; // gán cho nhiều người nhận → mỗi người 1 phần (qty)
+  recipientUids: string[]; // gán cho nhiều người nhận
+  /** Số lượng riêng cho từng người nhận (uid → qty). Thiếu thì lấy `qty` của dòng. */
+  qtyByRecipient?: Record<string, number>;
 }
+
+/** Số lượng của 1 món dành cho 1 người nhận (fallback về qty chung của dòng). */
+export const qtyForRecipient = (l: CartLine, recipientUid: string): number =>
+  Math.max(1, l.qtyByRecipient?.[recipientUid] ?? l.qty);
+
+/** Tổng số phần của 1 dòng = Σ số lượng theo từng người nhận (chưa gán ai → qty chung). */
+export const lineTotalQty = (l: CartLine): number =>
+  l.recipientUids.length
+    ? l.recipientUids.reduce((n, ruid) => n + qtyForRecipient(l, ruid), 0)
+    : l.qty;
 export interface CartRecipient {
   uid: string;
   region: Region;
@@ -99,8 +111,8 @@ export function computeBill(
   warehouses: Warehouse[],
   fxKrwVnd: number,
 ): Bill {
-  // mỗi người nhận được gán = 1 phần (qty) → tiền nhân theo số người nhận
-  const subtotal = cart.reduce((a, l) => a + l.unitPrice * l.qty * Math.max(1, l.recipientUids.length), 0);
+  // tiền = đơn giá × tổng số phần (mỗi người nhận có số lượng riêng)
+  const subtotal = cart.reduce((a, l) => a + l.unitPrice * lineTotalQty(l), 0);
   let shipping = 0;
   let handling = 0;
   for (const r of recipients) {

@@ -9,6 +9,8 @@ import {
   flavorRetailPrice,
   validateBoxFill,
   computeBill,
+  qtyForRecipient,
+  lineTotalQty,
   type CartLine,
 } from "@/lib/pricing";
 import { applyStock } from "@/lib/stockStore";
@@ -281,11 +283,16 @@ export default function OrderFlow({
     const r0 = recipients[0].uid;
     setCart((c) => {
       let changed = false;
-      const next = c.map((it) =>
-        it.recipientUids.length === 1 && it.recipientUids[0] === r0
-          ? it
-          : ((changed = true), { ...it, recipientUids: [r0] }),
-      );
+      const next = c.map((it) => {
+        const ok =
+          it.recipientUids.length === 1 &&
+          it.recipientUids[0] === r0 &&
+          !Object.keys(it.qtyByRecipient ?? {}).length;
+        if (ok) return it;
+        changed = true;
+        // 1 địa chỉ: số lượng lấy từ giỏ (it.qty) → xoá số lượng riêng từng người
+        return { ...it, recipientUids: [r0], qtyByRecipient: {} };
+      });
       return changed ? next : c;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -359,27 +366,49 @@ export default function OrderFlow({
   }
   function removeRecipient(uid: string) {
     setRecipients((rs) => rs.filter((r) => r.uid !== uid));
-    // bỏ gán quà cho người vừa xoá
-    setCart((c) => c.map((it) => ({ ...it, recipientUids: it.recipientUids.filter((x) => x !== uid) })));
+    // bỏ gán quà + xoá số lượng riêng của người vừa xoá
+    setCart((c) =>
+      c.map((it) => {
+        const { [uid]: _drop, ...rest } = it.qtyByRecipient ?? {};
+        return { ...it, recipientUids: it.recipientUids.filter((x) => x !== uid), qtyByRecipient: rest };
+      }),
+    );
   }
   function assign(itemUid: string, rUid: string) {
     setCart((c) =>
-      c.map((it) =>
-        it.uid === itemUid
-          ? { ...it, recipientUids: it.recipientUids.includes(rUid) ? it.recipientUids.filter((x) => x !== rUid) : [...it.recipientUids, rUid] }
-          : it,
-      ),
+      c.map((it) => {
+        if (it.uid !== itemUid) return it;
+        const had = it.recipientUids.includes(rUid);
+        const q = { ...(it.qtyByRecipient ?? {}) };
+        if (had) delete q[rUid];
+        else q[rUid] = 1; // gán mới → mặc định 1 phần, khách tự tăng
+        return {
+          ...it,
+          recipientUids: had ? it.recipientUids.filter((x) => x !== rUid) : [...it.recipientUids, rUid],
+          qtyByRecipient: q,
+        };
+      }),
+    );
+  }
+  /** Tăng/giảm số lượng của 1 món cho riêng 1 người nhận (tối thiểu 1). */
+  function setRecipientQty(itemUid: string, rUid: string, delta: number) {
+    setCart((c) =>
+      c.map((it) => {
+        if (it.uid !== itemUid) return it;
+        const cur = qtyForRecipient(it, rUid);
+        return { ...it, qtyByRecipient: { ...(it.qtyByRecipient ?? {}), [rUid]: Math.max(1, cur + delta) } };
+      }),
     );
   }
 
-  // mỗi món gán N người nhận → tách thành N dòng (mỗi người 1 phần) — tiền & kho tự nhân
+  // mỗi món gán N người nhận → tách thành N dòng (số lượng riêng từng người) — tiền & kho tự tính
   const expandedLines = cart.flatMap((l) =>
     l.recipientUids.map((ruid) => ({
       kind: l.kind,
       boxId: l.boxId,
       comboId: l.comboId,
       flavorIds: l.flavorIds,
-      qty: l.qty,
+      qty: qtyForRecipient(l, ruid),
       recipientUid: ruid,
     })),
   );
@@ -437,7 +466,7 @@ export default function OrderFlow({
           status: "Mới",
           created: `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`,
           assignee: "Web",
-          product: cart.map((l) => `${l.name}${l.qty > 1 ? ` ×${l.qty}` : ""}`).join(", "),
+          product: cart.map((l) => `${l.name}${lineTotalQty(l) > 1 ? ` ×${lineTotalQty(l)}` : ""}`).join(", "),
           expected: r0?.desiredDate || undefined,
           consume: cartConsume(expandedLines),
           stockApplied: true,
@@ -454,7 +483,7 @@ export default function OrderFlow({
         region: buyerRegion,
         currency: buyerRegion === "vn" ? "VND" : "KRW",
         grandTotal: data.order.grandTotal,
-        items: cart.map((l) => `${l.name} ×${l.qty}`),
+        items: cart.map((l) => `${l.name} ×${lineTotalQty(l)}`),
         status: "Chờ thanh toán",
         createdAt: Date.now(),
         ref: ref || undefined,
@@ -502,7 +531,8 @@ export default function OrderFlow({
     const lines = cart
       .map((l) => {
         const fl = l.kind !== "la" && flavorNames(l.flavorIds) ? ` (${flavorNames(l.flavorIds)})` : "";
-        return `• ${l.name}${l.qty > 1 ? ` ×${l.qty}` : ""}${fl} — ${fmt(l.unitPrice * l.qty)}`;
+        const n = lineTotalQty(l);
+        return `• ${l.name}${n > 1 ? ` ×${n}` : ""}${fl} — ${fmt(l.unitPrice * n)}`;
       })
       .join("\n");
     const msg =
@@ -805,18 +835,23 @@ export default function OrderFlow({
               {cart.map((it) => (
                 <div key={it.uid} className="flex items-center justify-between gap-2 border-b border-dashed border-line py-1.5 text-[12.5px] last:border-b-0">
                   <span className="min-w-0">
-                    <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
+                    <span className="font-medium">{it.name}{!multi && it.qty > 1 ? ` ×${it.qty}` : ""}</span>
                     {it.kind !== "la" && flavorNames(it.flavorIds) && (
                       <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
                     )}
                   </span>
                   <div className="flex flex-none items-center gap-2">
-                    <div className="inline-flex items-center overflow-hidden rounded-full border border-line">
-                      <button onClick={() => setQty(it.uid, -1)} aria-label="Giảm" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><span className="block h-[2px] w-2.5 bg-current" /></button>
-                      <span className="w-6 text-center font-serif text-[13px] tabular-nums">{it.qty}</span>
-                      <button onClick={() => setQty(it.uid, 1)} aria-label="Tăng" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><IconPlus width={12} height={12} /></button>
-                    </div>
-                    <span className="font-serif text-[13px] font-semibold text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
+                    {multi ? (
+                      // nhiều người nhận: số lượng chỉnh ở từng người, đây chỉ hiện tổng
+                      <span className="text-[11px] text-ink/55">{lineTotalQty(it)} phần</span>
+                    ) : (
+                      <div className="inline-flex items-center overflow-hidden rounded-full border border-line">
+                        <button onClick={() => setQty(it.uid, -1)} aria-label="Giảm" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><span className="block h-[2px] w-2.5 bg-current" /></button>
+                        <span className="w-6 text-center font-serif text-[13px] tabular-nums">{it.qty}</span>
+                        <button onClick={() => setQty(it.uid, 1)} aria-label="Tăng" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><IconPlus width={12} height={12} /></button>
+                      </div>
+                    )}
+                    <span className="font-serif text-[13px] font-semibold text-maroon-deep">{fmt(it.unitPrice * lineTotalQty(it))}</span>
                   </div>
                 </div>
               ))}
@@ -881,6 +916,10 @@ export default function OrderFlow({
                     removeRecipient={removeRecipient}
                     addRecipient={addRecipient}
                     assign={assign}
+
+                    setRecipientQty={setRecipientQty}
+
+                    fmt={fmt}
                     flavorNames={flavorNames}
                     suggestedDate={suggestedDate}
                     suggestedDDMM={suggestedDDMM}
@@ -894,7 +933,7 @@ export default function OrderFlow({
               <Row
                 k={
                   multi
-                    ? `Tạm tính (${cart.reduce((n, l) => n + l.qty * Math.max(1, l.recipientUids.length), 0)} phần)`
+                    ? `Tạm tính (${cart.reduce((n, l) => n + lineTotalQty(l), 0)} phần)`
                     : `Tạm tính (${cart.reduce((n, l) => n + l.qty, 0)} món)`
                 }
                 v={fmt(bill.subtotal)}
@@ -948,6 +987,10 @@ export default function OrderFlow({
               removeRecipient={removeRecipient}
               addRecipient={addRecipient}
               assign={assign}
+
+              setRecipientQty={setRecipientQty}
+
+              fmt={fmt}
               flavorNames={flavorNames}
               suggestedDate={suggestedDate}
               suggestedDDMM={suggestedDDMM}
@@ -971,7 +1014,7 @@ export default function OrderFlow({
             </div>
 
             <div className="rounded border border-line bg-white p-3.5">
-              <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty * Math.max(1, l.recipientUids.length), 0)} phần)`} v={fmt(bill.subtotal)} />
+              <Row k={`Tạm tính (${cart.reduce((n, l) => n + lineTotalQty(l), 0)} phần)`} v={fmt(bill.subtotal)} />
               <Row k={`Phí ship`} v={fmt(bill.shipping)} />
               {bill.handling > 0 && <Row k="Phí handling chéo vùng" v={fmt(bill.handling)} />}
               <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
@@ -1268,6 +1311,8 @@ function RecipientsEditor({
   removeRecipient,
   addRecipient,
   assign,
+  setRecipientQty,
+  fmt,
   flavorNames,
   suggestedDate,
   suggestedDDMM,
@@ -1278,6 +1323,8 @@ function RecipientsEditor({
   removeRecipient: (uid: string) => void;
   addRecipient: () => void;
   assign: (itemUid: string, rUid: string) => void;
+  setRecipientQty: (itemUid: string, rUid: string, delta: number) => void;
+  fmt: (v: number) => string;
   flavorNames: (ids?: string[]) => string;
   suggestedDate: string;
   suggestedDDMM: string;
@@ -1347,24 +1394,50 @@ function RecipientsEditor({
             </div>
           </div>
           <Label>Gán quà cho người này</Label>
-          <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Cùng một món gán cho nhiều người → mỗi người một phần, tiền tự cộng.</p>
-          <div className="flex flex-wrap gap-1.5">
+          <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Bấm để gán món, rồi chỉnh số lượng riêng cho người này.</p>
+          <div className="space-y-1.5">
             {cart.map((it) => {
               const sel = it.recipientUids.includes(r.uid);
               const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
+              const q = qtyForRecipient(it, r.uid);
               return (
-                <button
+                <div
                   key={it.uid}
-                  onClick={() => assign(it.uid, r.uid)}
-                  className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${sel ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
+                  className={`rounded-lg border ${sel ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
                 >
-                  <span className="block font-medium">
-                    {sel ? "✓ " : ""}{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
-                  </span>
-                  {fl && (
-                    <span className={`mt-0.5 block text-[10px] leading-snug ${sel ? "text-cream/80" : "opacity-60"}`}>{fl}</span>
+                  <button onClick={() => assign(it.uid, r.uid)} className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left">
+                    <span className={`mt-[1px] grid h-4 w-4 flex-none place-items-center rounded-sm border text-[10px] ${sel ? "border-cream bg-cream text-maroon" : "border-line"}`}>
+                      {sel ? "✓" : ""}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[11.5px]">
+                      <span className="block font-medium">{it.name}</span>
+                      {fl && <span className={`mt-0.5 block text-[10px] leading-snug ${sel ? "text-cream/75" : "opacity-60"}`}>{fl}</span>}
+                    </span>
+                  </button>
+                  {sel && (
+                    <div className="flex items-center justify-between gap-2 border-t border-cream/20 px-2.5 py-1.5">
+                      <div className="inline-flex items-center overflow-hidden rounded-full border border-cream/40">
+                        <button
+                          onClick={() => setRecipientQty(it.uid, r.uid, -1)}
+                          aria-label="Giảm số lượng"
+                          disabled={q <= 1}
+                          className="grid h-7 w-7 place-items-center text-cream disabled:opacity-30"
+                        >
+                          <span className="block h-[2px] w-2.5 bg-current" />
+                        </button>
+                        <span className="w-7 text-center font-serif text-[13px] tabular-nums text-cream">{q}</span>
+                        <button
+                          onClick={() => setRecipientQty(it.uid, r.uid, 1)}
+                          aria-label="Tăng số lượng"
+                          className="grid h-7 w-7 place-items-center text-cream"
+                        >
+                          <IconPlus width={12} height={12} />
+                        </button>
+                      </div>
+                      <span className="font-serif text-[13px] font-semibold text-cream">{fmt(it.unitPrice * q)}</span>
+                    </div>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -1410,17 +1483,20 @@ function RecipientBlocks({
               {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
             </div>
             <div className="mt-1.5 space-y-1">
-              {items.map((it) => (
-                <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
-                  <span className="min-w-0">
-                    <span className="font-medium">{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}</span>
-                    {it.kind !== "la" && flavorNames(it.flavorIds) && (
-                      <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
-                    )}
-                  </span>
-                  <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * it.qty)}</span>
-                </div>
-              ))}
+              {items.map((it) => {
+                const q = qtyForRecipient(it, r.uid); // số lượng dành riêng cho người này
+                return (
+                  <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
+                    <span className="min-w-0">
+                      <span className="font-medium">{it.name}{q > 1 ? ` ×${q}` : ""}</span>
+                      {it.kind !== "la" && flavorNames(it.flavorIds) && (
+                        <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                      )}
+                    </span>
+                    <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * q)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
