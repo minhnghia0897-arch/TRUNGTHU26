@@ -1235,7 +1235,7 @@ export default function OrderFlow({
       {shareOpen && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50" onClick={() => setShareOpen(false)}>
           <div
-            className="w-full max-w-app rounded-t-2xl border-t border-line bg-cream p-4 pb-5"
+            className="max-h-[92vh] w-full max-w-app overflow-y-auto rounded-t-2xl border-t border-line bg-cream p-4 pb-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 flex items-center justify-between">
@@ -1252,7 +1252,7 @@ export default function OrderFlow({
               readOnly
               value={buildOrderMessage()}
               onFocus={(e) => e.currentTarget.select()}
-              className="h-44 w-full resize-none rounded border border-line bg-white p-2.5 text-[12px] leading-relaxed text-ink"
+              className="h-[50vh] w-full resize-none rounded border border-line bg-white p-2.5 text-[12px] leading-relaxed text-ink"
             />
 
             <button
