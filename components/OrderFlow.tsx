@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Box, Combo, Flavor, Region, Warehouse } from "@/lib/types";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, convertToBuyerCurrency, currencyOf } from "@/lib/money";
 import {
   boxPrice,
   flavorSurcharge,
@@ -11,6 +11,7 @@ import {
   computeBill,
   qtyForRecipient,
   lineTotalQty,
+  shipFeeForRegion,
   type CartLine,
 } from "@/lib/pricing";
 import { applyStock } from "@/lib/stockStore";
@@ -471,34 +472,52 @@ export default function OrderFlow({
       const st = new Date();
       const p2 = (x: number) => String(x).padStart(2, "0");
       try {
-        addDashboardOrder({
-          source: ref ? "facebook" : "web",
-          vc: "",
-          tags: ref ? ["Messenger"] : ["Web"],
-          note:
-            `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}` +
-            // ghi chú khách tự viết cho từng người nhận
-            recipients
-              .filter((r) => r.note?.trim())
-              .map((r, i) => ` · 📝 ${r.name || `Người nhận ${i + 1}`}: ${r.note.trim()}`)
-              .join(""),
-          customer: buyerName.trim(),
-          recipient: r0?.name || buyerName.trim(),
-          phone: buyerPhone.trim(),
-          carrier: "",
-          address: r0?.address || "",
-          region: buyerRegion,
-          cod: 0,
-          prepaid: data.order.grandTotal,
-          cuoc_vc: 0,
-          phi_vc_thu_khach: 0,
-          status: "Mới",
-          created: `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`,
-          assignee: "Web",
-          product: cart.map((l) => `${l.name}${lineTotalQty(l) > 1 ? ` ×${lineTotalQty(l)}` : ""}`).join(", "),
-          expected: r0?.desiredDate || undefined,
-          consume: cartConsume(expandedLines),
-          stockApplied: true,
+        // MỖI NGƯỜI NHẬN = 1 DÒNG ĐƠN (1 kiện, 1 địa chỉ, 1 kho, 1 vận đơn riêng).
+        // Tiền chia theo từng người → cộng lại đúng bằng tổng đơn, không đếm trùng doanh thu.
+        const parcels = recipients.filter((r) => cart.some((it) => it.recipientUids.includes(r.uid)));
+        const createdAt = `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`;
+        parcels.forEach((r, i) => {
+          const items = cart.filter((it) => it.recipientUids.includes(r.uid));
+          const sub = items.reduce((s, it) => s + it.unitPrice * qtyForRecipient(it, r.uid), 0);
+          const fee = shipFeeForRegion(r.region, buyerRegion, warehouses, fx);
+          // Dashboard hiểu `region` là kho VÀ là tiền tệ của số tiền trên dòng.
+          // Đơn tính theo tiền người đặt, nên kiện giao khác vùng phải quy đổi lại
+          // về tiền tệ của kho đó, không thì Thu chi/Khách hàng đọc sai.
+          const amount = Math.round(
+            convertToBuyerCurrency(sub + fee.shipping + fee.handling, currencyOf(buyerRegion), r.region, fx),
+          );
+          addDashboardOrder({
+            source: ref ? "facebook" : "web",
+            vc: "",
+            tags: ref ? ["Messenger"] : ["Web"],
+            note:
+              `Web ${data.order.code} · CK ${data.order.transferCode}` +
+              (parcels.length > 1 ? ` · Kiện ${i + 1}/${parcels.length}` : "") +
+              (link ? ` · Messenger: ${link.customerName}` : "") +
+              (r.note?.trim() ? ` · 📝 ${r.note.trim()}` : ""),
+            customer: buyerName.trim(),
+            recipient: r.name || buyerName.trim(),
+            phone: buyerPhone.trim(),
+            carrier: "",
+            address: r.address || "",
+            region: r.region, // kho theo người nhận, không phải vùng người đặt
+            cod: 0,
+            prepaid: amount,
+            cuoc_vc: 0,
+            phi_vc_thu_khach: 0,
+            status: "Mới",
+            created: createdAt,
+            assignee: "Web",
+            product: items
+              .map((it) => {
+                const q = qtyForRecipient(it, r.uid);
+                return `${it.name}${q > 1 ? ` ×${q}` : ""}`;
+              })
+              .join(", "),
+            expected: r.desiredDate || undefined,
+            consume: cartConsume(expandedLines.filter((l) => l.recipientUid === r.uid)),
+            stockApplied: true,
+          });
         });
       } catch {
         /* ignore */
