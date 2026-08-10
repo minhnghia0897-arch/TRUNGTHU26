@@ -176,21 +176,25 @@ export default function ProductCatalog({
       <div className="px-4 py-5">
         {/* HỘP TỰ CHỌN */}
         {tab === "box" && (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {boxes.map((b) => (
-              <article key={b.id} className="overflow-hidden rounded-card bg-white shadow-card">
+              <article key={b.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
                 <ImageArea badge={b.badge} w={b.weight} />
-                <div className="p-4 text-center">
-                  <h3 className="font-semibold text-navy">{b.name}</h3>
-                  {b.description && <p className="mx-auto mt-1 max-w-[280px] text-xs text-ink/60">{b.description}</p>}
-                  <div className="mx-auto my-3 h-px w-16 bg-line" />
-                  <Price v={region === "vn" ? b.price_vn : b.price_kr} region={region} />
-                  <a
-                    href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
-                    className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
-                  >
-                    Tự chọn vị <IconArrowRight width={14} height={14} />
-                  </a>
+                <div className="flex flex-1 flex-col p-3 text-center">
+                  <h3 className="text-[13px] font-semibold leading-tight text-navy">{b.name}</h3>
+                  {b.description && <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{b.description}</p>}
+                  <div className="mt-auto pt-2">
+                    <div className="price-lg text-[15px]">
+                      {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)}
+                      <span className="unit"> / hộp</span>
+                    </div>
+                    <a
+                      href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
+                      className="mt-2 flex items-center justify-center gap-1 rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep"
+                    >
+                      Tự chọn vị <IconArrowRight width={12} height={12} />
+                    </a>
+                  </div>
                 </div>
               </article>
             ))}
@@ -199,52 +203,50 @@ export default function ProductCatalog({
 
         {/* COMBO */}
         {tab === "combo" && (
-          <div className="grid gap-4">
+          <div className="grid grid-cols-2 gap-3">
             {combos.map((c) => {
               const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
               const price = boxPrice(b, c.flavor_ids, flavors, region);
+              // card 2 cột hẹp → gộp tên vị thành 1 dòng thay vì chip rời
+              const flavorLine = c.flavor_ids
+                .map((fid) => flavors.find((x) => x.id === fid)?.name)
+                .filter(Boolean)
+                .join(" · ");
               return (
-                <article key={c.id} className="overflow-hidden rounded-card bg-white shadow-card">
+                <article key={c.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
                   <ImageArea badge="best_seller" w={b.weight} />
-                  <div className="p-4 text-center">
-                    <h3 className="font-semibold text-navy">{c.name}</h3>
-                    {c.description && <p className="mx-auto mt-1 max-w-[280px] text-xs text-ink/60">{c.description}</p>}
-                    <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-                      {c.flavor_ids.map((fid) => {
-                        const f = flavors.find((x) => x.id === fid);
-                        if (!f) return null;
-                        return (
-                          <span key={fid} className={`rounded-full border px-2 py-0.5 text-[10px] ${f.premium ? "border-gold text-gold-deep" : "border-line text-ink/60"}`}>
-                            {f.name}
-                          </span>
-                        );
-                      })}
+                  <div className="flex flex-1 flex-col p-3 text-center">
+                    <h3 className="text-[13px] font-semibold leading-tight text-navy">{c.name}</h3>
+                    {flavorLine && <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{flavorLine}</p>}
+                    <div className="mt-auto pt-2">
+                      <div className="price-lg text-[15px]">
+                        {formatMoney(price, region)}
+                        <span className="unit"> / hộp</span>
+                      </div>
+                      <button
+                        onClick={() =>
+                          addToCart(`combo:${c.id}`, {
+                            kind: "combo",
+                            boxId: b.id,
+                            comboId: c.id,
+                            flavorIds: c.flavor_ids,
+                            unitPrice: price,
+                            name: c.name,
+                          })
+                        }
+                        className={`mt-2 flex w-full items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${c.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                      >
+                        {added === `combo:${c.id}` ? (
+                          <>
+                            <IconCheck width={12} height={12} /> Đã thêm
+                          </>
+                        ) : (
+                          <>
+                            <IconCart width={12} height={12} /> Thêm vào giỏ
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <div className="mx-auto my-3 h-px w-16 bg-line" />
-                    <Price v={price} region={region} />
-                    <button
-                      onClick={() =>
-                        addToCart(`combo:${c.id}`, {
-                          kind: "combo",
-                          boxId: b.id,
-                          comboId: c.id,
-                          flavorIds: c.flavor_ids,
-                          unitPrice: price,
-                          name: c.name,
-                        })
-                      }
-                      className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-xs font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${c.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
-                    >
-                      {added === `combo:${c.id}` ? (
-                        <>
-                          <IconCheck width={14} height={14} /> Đã thêm vào giỏ
-                        </>
-                      ) : (
-                        <>
-                          <IconCart width={14} height={14} /> Thêm vào giỏ
-                        </>
-                      )}
-                    </button>
                   </div>
                 </article>
               );
