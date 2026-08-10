@@ -905,7 +905,7 @@ export default function OrderFlow({
                 <Label>Ngày muốn nhận</Label>
                 <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
                 {suggestedDate && (
-                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
+                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
                     <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
                   </button>
                 )}
@@ -1569,37 +1569,33 @@ function RecipientsEditor({
           </div>
           <Label>Địa chỉ</Label>
           <Input value={r.address} onChange={(v) => setR(r.uid, "address", v)} />
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <Label>Vùng giao</Label>
-              <select
-                value={r.region}
-                onChange={(e) => setR(r.uid, "region", e.target.value)}
-                className="w-full rounded border border-line bg-white p-2.5 text-sm"
-              >
-                <option value="kr">🇰🇷 Hàn Quốc</option>
-                <option value="vn">🇻🇳 Việt Nam</option>
-              </select>
-            </div>
-            <div>
-              <Label>Ngày muốn nhận</Label>
-              <input
-                type="date"
-                value={r.desiredDate}
-                onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
-                className="w-full rounded border border-line bg-white p-2.5 text-sm"
-              />
-              {suggestedDate && (
-                <button
-                  type="button"
-                  onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
-                  className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
-                >
-                  <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
-                </button>
-              )}
-            </div>
-          </div>
+          <Label>Vùng giao</Label>
+          <select
+            value={r.region}
+            onChange={(e) => setR(r.uid, "region", e.target.value)}
+            className="w-full rounded border border-line bg-white p-2.5 text-sm"
+          >
+            <option value="kr">🇰🇷 Hàn Quốc</option>
+            <option value="vn">🇻🇳 Việt Nam</option>
+          </select>
+
+          {/* ngày để full width — ô date native rộng tối thiểu, để 1/2 cột là tràn viền */}
+          <Label>Ngày muốn nhận</Label>
+          <input
+            type="date"
+            value={r.desiredDate}
+            onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
+            className="w-full rounded border border-line bg-white p-2.5 text-sm"
+          />
+          {suggestedDate && (
+            <button
+              type="button"
+              onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
+              className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+            >
+              <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+            </button>
+          )}
           <Label>Ghi chú <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span></Label>
           <textarea
             value={r.note}
