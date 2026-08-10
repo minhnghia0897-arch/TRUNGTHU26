@@ -371,7 +371,7 @@ export default function OrderFlow({
     ]);
     setPicks([]);
     setOpenSlot(0);
-    setStep(express ? 2 : 1); // express: thêm hộp xong vào thẳng checkout
+    setStep(1); // thêm hộp xong về giỏ hàng để khách xem lại / thêm món khác
   }
 
   // ---- recipients ----
