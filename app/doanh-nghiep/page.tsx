@@ -240,7 +240,7 @@ export default async function DoanhNghiepPage({ searchParams }: { searchParams: 
             <a href="https://zalo.me/0982576263" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
               💬 Zalo 0982 576 263
             </a>
-            <a href="https://m.me/trangram" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
+            <a href="https://m.me/doranking88" className="rounded-lg border border-[#C6A24C]/60 px-6 py-3 text-[14px] font-semibold text-[#E8C877]">
               Ⓜ️ Messenger
             </a>
           </div>

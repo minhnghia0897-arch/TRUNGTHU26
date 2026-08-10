@@ -57,6 +57,10 @@ function midAutumnMinusWeek(): string {
   return isoLocal(d);
 }
 
+// Kênh chat của brand — khách gửi đơn sang đây nếu không đặt tiếp trên web.
+const FANPAGE_MESSENGER = "https://m.me/doranking88";
+const ZALO_LINK = "https://zalo.me/0982576263";
+
 // Tài khoản nhận tiền (demo — thay bằng TK thật của anh sau).
 const BANKS = {
   vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY TRANG RAM" },
@@ -87,7 +91,9 @@ export default function OrderFlow({
   const [express, setExpress] = useState<boolean>(!!initial?.express); // đặt nhanh 1 trang (như TikTok)
   const [multi, setMulti] = useState(false); // trong Đặt nhanh: gửi nhiều người / nhiều địa chỉ
   const [sameAsBuyer, setSameAsBuyer] = useState(false); // người đặt cũng là người nhận 1
-  const [zaloHint, setZaloHint] = useState(false);
+  const [shareHint, setShareHint] = useState<"" | "zalo">(""); // toast sau khi copy để gửi Zalo
+  const [shareOpen, setShareOpen] = useState(false); // ô xem trước nội dung gửi Messenger
+  const [copied, setCopied] = useState(false);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
   const [buyerName, setBuyerName] = useState("");
@@ -542,27 +548,69 @@ export default function OrderFlow({
     setStep(5);
   }
 
+  // Toàn bộ đơn dưới dạng 1 tin nhắn dễ đọc — dùng cho cả Messenger & Zalo.
+  function buildOrderMessage(): string {
+    const dmy = (iso: string) =>
+      iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "";
+    const blocks = recipients
+      .map((r, i) => {
+        const items = cart.filter((it) => it.recipientUids.includes(r.uid));
+        if (!items.length) return "";
+        const lines = items
+          .map((it) => {
+            const q = qtyForRecipient(it, r.uid);
+            const fl = it.kind !== "la" && flavorNames(it.flavorIds) ? ` (${flavorNames(it.flavorIds)})` : "";
+            return `   • ${it.name}${q > 1 ? ` ×${q}` : ""}${fl} — ${fmt(it.unitPrice * q)}`;
+          })
+          .join("\n");
+        return (
+          `📦 Người nhận ${i + 1}: ${r.name || "—"} · ${r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}\n` +
+          `📞 ${r.phone || "—"} · 📍 ${r.address || "—"}\n` +
+          (r.desiredDate ? `📅 Ngày nhận: ${dmy(r.desiredDate)}\n` : "") +
+          lines
+        );
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    const parts = cart.reduce((n, l) => n + lineTotalQty(l), 0);
+    return (
+      `🌕 ĐƠN ĐẶT BÁNH — TRĂNG RẰM\n` +
+      `👤 Người đặt: ${buyerName || "—"} · 📞 ${buyerPhone || "—"}\n` +
+      `💳 Thanh toán: ${buyerRegion === "vn" ? "đ VND" : "₩ KRW"}\n\n` +
+      `${blocks}\n\n` +
+      `────────────\n` +
+      `Tạm tính (${parts} phần): ${fmt(bill.subtotal)}\n` +
+      `Phí ship: ${fmt(bill.shipping)}\n` +
+      (bill.handling > 0 ? `Handling: ${fmt(bill.handling)}\n` : "") +
+      `TỔNG: ${fmt(bill.grand)}`
+    );
+  }
+
+  // copy nội dung đơn (dùng chung); trả về true nếu copy được
+  async function copyOrderMessage(): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(buildOrderMessage());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 4000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Gửi đơn sang fanpage Messenger: copy sẵn rồi mở ô xem trước (m.me không điền sẵn tin được)
+  function shareToMessenger() {
+    copyOrderMessage();
+    setShareOpen(true);
+  }
+
   // đặt qua Zalo 1 chạm: soạn sẵn nội dung, copy rồi mở Zalo
   function orderViaZalo() {
-    const lines = cart
-      .map((l) => {
-        const fl = l.kind !== "la" && flavorNames(l.flavorIds) ? ` (${flavorNames(l.flavorIds)})` : "";
-        const n = lineTotalQty(l);
-        return `• ${l.name}${n > 1 ? ` ×${n}` : ""}${fl} — ${fmt(l.unitPrice * n)}`;
-      })
-      .join("\n");
-    const msg =
-      `ĐẶT BÁNH — TRĂNG RẰM\n${lines}\n` +
-      `Tạm tính: ${fmt(bill.subtotal)}\n` +
-      (buyerName ? `Tên: ${buyerName}\n` : "") +
-      (buyerPhone ? `SĐT: ${buyerPhone}\n` : "") +
-      (exAddress ? `Địa chỉ: ${exAddress}\n` : "");
-    try {
-      navigator.clipboard.writeText(msg);
-      setZaloHint(true);
-      setTimeout(() => setZaloHint(false), 4000);
-    } catch { /* ignore */ }
-    try { window.open("https://zalo.me/0982576263", "_blank"); } catch { /* ignore */ }
+    copyOrderMessage();
+    setShareHint("zalo");
+    setTimeout(() => setShareHint(""), 4000);
+    try { window.open(ZALO_LINK, "_blank"); } catch { /* ignore */ }
   }
 
   // ---- nav guards ----
@@ -1055,6 +1103,8 @@ export default function OrderFlow({
             <p className="mt-2 text-[11px] opacity-65">
               Một bill · một tiền tệ theo người đặt · tách kho theo người nhận. Tỉ giá chốt 1₩ = {fx}đ.
             </p>
+
+            <MessengerShareBox onShare={shareToMessenger} />
           </section>
         )}
 
@@ -1102,6 +1152,8 @@ export default function OrderFlow({
             <p className="mt-2.5 text-center text-[11.5px] opacity-65">
               Kiểm tra kỹ thông tin trên. Bấm “Xác nhận đặt đơn” để tạo đơn — chuyển khoản ở bước sau.
             </p>
+
+            <MessengerShareBox onShare={shareToMessenger} />
           </section>
         )}
 
@@ -1199,11 +1251,54 @@ export default function OrderFlow({
         )}
       </div>
 
-      {/* toast copy Zalo */}
-      {zaloHint && (
+      {/* toast sau khi copy để gửi qua Zalo */}
+      {shareHint === "zalo" && (
         <div className="fixed inset-x-0 bottom-[68px] z-30 mx-auto max-w-app px-4">
           <div className="rounded-lg border border-gold bg-[#fff8ec] px-3 py-2 text-center text-[12px] text-[#b8862f] shadow">
             Đã copy nội dung đơn — dán vào khung chat Zalo rồi gửi nhé.
+          </div>
+        </div>
+      )}
+
+      {/* SHEET — xem trước & gửi đơn sang fanpage Messenger */}
+      {shareOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50" onClick={() => setShareOpen(false)}>
+          <div
+            className="w-full max-w-app rounded-t-2xl border-t border-line bg-cream p-4 pb-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="title-heritage text-base">Gửi đơn cho fanpage</h3>
+              <button onClick={() => setShareOpen(false)} aria-label="Đóng" className="text-[18px] leading-none text-maroon/60">
+                ✕
+              </button>
+            </div>
+            <p className="mb-2.5 text-[11.5px] leading-snug opacity-70">
+              Messenger không cho điền sẵn tin nhắn — chỉ cần <b>Dán</b> nội dung dưới đây vào khung chat rồi gửi.
+            </p>
+
+            <textarea
+              readOnly
+              value={buildOrderMessage()}
+              onFocus={(e) => e.currentTarget.select()}
+              className="h-44 w-full resize-none rounded border border-line bg-white p-2.5 text-[12px] leading-relaxed text-ink"
+            />
+
+            <button
+              onClick={copyOrderMessage}
+              className={`mt-2 w-full rounded-lg border py-2.5 text-[12.5px] font-semibold transition ${copied ? "border-emerald-300 bg-emerald-50 text-emerald-600" : "border-gold bg-white text-maroon"}`}
+            >
+              {copied ? "✓ Đã copy nội dung" : "Copy nội dung"}
+            </button>
+            <a
+              href={FANPAGE_MESSENGER}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setShareOpen(false)}
+              className="mt-2 block rounded-lg bg-gold py-3 text-center font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep"
+            >
+              Mở Messenger fanpage
+            </a>
           </div>
         </div>
       )}
@@ -1399,6 +1494,23 @@ function KV({ k, v }: { k: string; v: string }) {
     <div className="flex items-center justify-between gap-2">
       <span className="opacity-60">{k}</span>
       <span className="font-medium">{v}</span>
+    </div>
+  );
+}
+
+// Lối thoát cho khách ngại đặt tiếp trên web: gửi nguyên đơn sang fanpage Messenger.
+function MessengerShareBox({ onShare }: { onShare: () => void }) {
+  return (
+    <div className="mt-4 rounded-lg border border-dashed border-line bg-white p-3.5 text-center">
+      <p className="text-[11.5px] leading-snug opacity-70">
+        Muốn nhắn cho shop trước khi chuyển khoản? Gửi nguyên đơn này sang fanpage để được chốt tay.
+      </p>
+      <button
+        onClick={onShare}
+        className="mt-2.5 w-full rounded-lg border border-[#0866FF] bg-[#0866FF]/[0.06] py-2.5 text-[12.5px] font-semibold text-[#0866FF]"
+      >
+        📩 Gửi đơn qua Messenger
+      </button>
     </div>
   );
 }
