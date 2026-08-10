@@ -512,7 +512,8 @@ export default function OrderFlow({
   }
 
   // express: xác nhận đặt (1 trang)
-  function expressSubmit() {
+  // Đặt nhanh: bấm "Đặt hàng" → kiểm tra thông tin rồi sang màn XEM BILL & XÁC NHẬN
+  function expressReview() {
     if (!cart.length) return alert("Chưa có món nào.");
     if (!buyerName.trim()) return alert(multi ? "Nhập tên người đặt." : "Nhập tên người nhận.");
     if (!buyerPhone.trim()) return alert("SĐT là bắt buộc.");
@@ -523,7 +524,7 @@ export default function OrderFlow({
     } else if (!recipients[0]?.address?.trim()) {
       return alert("Nhập địa chỉ nhận hàng.");
     }
-    submit();
+    setStep(5);
   }
 
   // đặt qua Zalo 1 chạm: soạn sẵn nội dung, copy rồi mở Zalo
@@ -823,7 +824,7 @@ export default function OrderFlow({
         )}
 
         {/* EXPRESS — CHECKOUT 1 TRANG (đặt nhanh như TikTok) */}
-        {express && step >= 2 && step <= 5 && (
+        {express && step >= 2 && step <= 4 && (
           <section className="step-in">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="title-heritage text-lg">Đặt nhanh</h2>
@@ -1028,6 +1029,53 @@ export default function OrderFlow({
           </section>
         )}
 
+        {/* EXPRESS BƯỚC 5 — XEM BILL ĐẦY ĐỦ & XÁC NHẬN (trước khi tạo đơn) */}
+        {express && step === 5 && (
+          <section className="step-in">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="title-heritage text-lg">Xác nhận đơn hàng</h2>
+              <button onClick={() => setStep(2)} className="text-[12px] text-gold underline">← Sửa lại</button>
+            </div>
+
+            {/* bill đầy đủ */}
+            <div className="rounded-lg border border-line bg-white p-4">
+              <div className="border-b border-dashed border-line pb-3 text-center">
+                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="eyebrow mt-0.5">Chi tiết đơn hàng</div>
+              </div>
+
+              <div className="border-b border-dashed border-line py-2.5 text-[12px]">
+                <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
+                <div className="flex justify-between"><span className="opacity-60">Thanh toán</span><span className="font-medium">{buyerRegion === "vn" ? "🇻🇳 đ VND" : "🇰🇷 ₩ KRW"}</span></div>
+              </div>
+
+              {/* quà theo từng người nhận (địa chỉ, ngày, số lượng, tiền) */}
+              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+              <div className="border-b border-dashed border-line" />
+
+              <div className="pt-2.5 text-[12.5px]">
+                <div className="flex justify-between py-0.5">
+                  <span className="opacity-60">Tạm tính ({cart.reduce((n, l) => n + lineTotalQty(l), 0)} phần)</span>
+                  <span>{fmt(bill.subtotal)}</span>
+                </div>
+                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{fmt(bill.shipping)}</span></div>
+                {bill.handling > 0 && (
+                  <div className="flex justify-between py-0.5"><span className="opacity-60">Handling chéo vùng</span><span>{fmt(bill.handling)}</span></div>
+                )}
+                <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
+                  <span>Tổng · {buyerRegion === "vn" ? "VND" : "KRW"}</span>
+                  <span>{fmt(bill.grand)}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-2.5 text-center text-[11.5px] opacity-65">
+              Kiểm tra kỹ thông tin trên. Bấm “Xác nhận đặt đơn” để tạo đơn — chuyển khoản ở bước sau.
+            </p>
+          </section>
+        )}
+
         {/* STEP 6 — ĐẶT XONG → THANH TOÁN (trang riêng) */}
         {step === 6 && done && (
           <section className="step-in py-6">
@@ -1131,8 +1179,8 @@ export default function OrderFlow({
         </div>
       )}
 
-      {/* navbar EXPRESS — thanh mua dính đáy, có giá + đặt nhanh + Zalo */}
-      {express && step >= 2 && step <= 5 && (
+      {/* navbar EXPRESS — điền thông tin (2-4): giá + Zalo + Đặt hàng */}
+      {express && step >= 2 && step <= 4 && (
         <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-line bg-cream px-3 py-2.5">
           <div className="flex-1 leading-tight">
             <span className="text-[10px] uppercase tracking-wide text-maroon/60">Tổng cộng</span>
@@ -1145,11 +1193,34 @@ export default function OrderFlow({
             💬 Zalo
           </button>
           <button
-            onClick={expressSubmit}
-            disabled={submitting}
-            className="rounded-lg bg-gold px-5 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep disabled:opacity-40"
+            onClick={expressReview}
+            className="rounded-lg bg-gold px-5 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep"
           >
-            {submitting ? "Đang tạo…" : "Đặt hàng"}
+            Đặt hàng
+          </button>
+        </div>
+      )}
+
+      {/* navbar EXPRESS — màn xác nhận bill (5): sửa lại + xác nhận đặt đơn */}
+      {express && step === 5 && (
+        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-line bg-cream px-3 py-2.5">
+          <div className="flex-1 leading-tight">
+            <span className="text-[10px] uppercase tracking-wide text-maroon/60">Tổng cộng</span>
+            <b className="block font-serif text-[17px] text-maroon">{fmt(bill.grand)}</b>
+          </div>
+          <button
+            onClick={() => setStep(2)}
+            disabled={submitting}
+            className="rounded-lg border border-line px-3 py-2.5 text-[12px] font-semibold text-maroon disabled:opacity-40"
+          >
+            Sửa lại
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="rounded-lg bg-gold px-4 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep disabled:opacity-40"
+          >
+            {submitting ? "Đang tạo…" : "Xác nhận đặt đơn"}
           </button>
         </div>
       )}
@@ -1177,7 +1248,7 @@ export default function OrderFlow({
               disabled={submitting}
               className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep disabled:opacity-40"
             >
-              {step === 4 ? (submitting ? "Đang tạo…" : "Đặt hàng") : "Tiếp"}
+              {step === 4 ? (submitting ? "Đang tạo…" : "Xác nhận đặt đơn") : "Tiếp"}
             </button>
           )}
         </div>
