@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Badge, Box, Combo, Flavor, Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
-import { boxPrice, flavorRetailPrice, flavorSurcharge } from "@/lib/pricing";
+import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine } from "@/lib/pricing";
 import {
   IconLotus,
   IconCrown,
@@ -16,6 +16,24 @@ import {
 } from "@/components/icons";
 
 type Tab = "box" | "combo" | "la";
+
+// Giỏ hàng dùng chung với trang Đặt hàng (OrderFlow đọc lại đúng key này khi mở /dat-hang).
+const CART_KEY = "tr_cart";
+type CartBlob = { cart?: CartLine[]; buyerRegion?: Region; [k: string]: unknown };
+
+function readCart(): CartBlob {
+  try {
+    return JSON.parse(localStorage.getItem(CART_KEY) || "{}") as CartBlob;
+  } catch {
+    return {};
+  }
+}
+const countCart = (c?: CartLine[]) => (c ?? []).reduce((n, l) => n + l.qty, 0);
+// uid nối tiếp kiểu "u<số>" cho khớp cách OrderFlow sinh uid (tránh trùng)
+function nextUid(cart: CartLine[]): string {
+  const max = cart.reduce((m, l) => Math.max(m, parseInt(String(l.uid).replace(/\D/g, "")) || 0), 0);
+  return "u" + (max + 1);
+}
 
 /* ---------- primitives ---------- */
 function BadgeChip({ badge }: { badge?: Badge }) {
@@ -73,6 +91,30 @@ export default function ProductCatalog({
 }) {
   const [region, setRegion] = useState<Region>("kr");
   const [tab, setTab] = useState<Tab>("box");
+  const [cartCount, setCartCount] = useState(0);
+  const [added, setAdded] = useState<string>(""); // uid món vừa thêm → đổi nhãn nút
+
+  useEffect(() => setCartCount(countCart(readCart().cart)), []);
+
+  /** Thêm vào giỏ ngay tại trang: trùng món thì cộng dồn số lượng, không chuyển trang. */
+  function addToCart(key: string, line: Omit<CartLine, "uid" | "qty" | "recipientUids">) {
+    const blob = readCart();
+    const cart = [...(blob.cart ?? [])];
+    const same = cart.findIndex(
+      (l) => l.kind === line.kind && l.comboId === line.comboId && l.flavorIds?.[0] === line.flavorIds?.[0],
+    );
+    if (same >= 0) cart[same] = { ...cart[same], qty: cart[same].qty + 1 };
+    else cart.push({ ...line, uid: nextUid(cart), qty: 1, recipientUids: [] });
+
+    try {
+      localStorage.setItem(CART_KEY, JSON.stringify({ ...blob, cart, buyerRegion: region }));
+    } catch {
+      /* ignore */
+    }
+    setCartCount(countCart(cart));
+    setAdded(key);
+    setTimeout(() => setAdded((k) => (k === key ? "" : k)), 1400);
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
@@ -169,12 +211,29 @@ export default function ProductCatalog({
                     </div>
                     <div className="mx-auto my-3 h-px w-16 bg-line" />
                     <Price v={price} region={region} />
-                    <a
-                      href={`/dat-hang?combo=${c.id}&region=${region}&express=1`}
-                      className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+                    <button
+                      onClick={() =>
+                        addToCart(`combo:${c.id}`, {
+                          kind: "combo",
+                          boxId: b.id,
+                          comboId: c.id,
+                          flavorIds: c.flavor_ids,
+                          unitPrice: price,
+                          name: c.name,
+                        })
+                      }
+                      className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-xs font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${c.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
                     >
-                      Mua ngay <IconArrowRight width={14} height={14} />
-                    </a>
+                      {added === `combo:${c.id}` ? (
+                        <>
+                          <IconCheck width={14} height={14} /> Đã thêm vào giỏ
+                        </>
+                      ) : (
+                        <>
+                          <IconCart width={14} height={14} /> Thêm vào giỏ
+                        </>
+                      )}
+                    </button>
                   </div>
                 </article>
               );
@@ -200,12 +259,27 @@ export default function ProductCatalog({
                     {f.premium && (
                       <div className="text-[9.5px] text-ink/45">+{formatMoney(flavorSurcharge(f, region), region)} trong hộp</div>
                     )}
-                    <a
-                      href={`/dat-hang?la=${f.id}&region=${region}&express=1`}
-                      className="mt-2 block rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep"
+                    <button
+                      onClick={() =>
+                        addToCart(`la:${f.id}`, {
+                          kind: "la",
+                          flavorIds: [f.id],
+                          unitPrice: flavorRetailPrice(f, region),
+                          name: f.name + " (lẻ)",
+                        })
+                      }
+                      className={`mt-2 flex w-full items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `la:${f.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
                     >
-                      Mua ngay
-                    </a>
+                      {added === `la:${f.id}` ? (
+                        <>
+                          <IconCheck width={12} height={12} /> Đã thêm
+                        </>
+                      ) : (
+                        <>
+                          <IconCart width={12} height={12} /> Thêm vào giỏ
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </article>
@@ -221,9 +295,14 @@ export default function ProductCatalog({
         </a>
         <a
           href="/dat-hang"
-          className="flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+          className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
         >
           <IconCart width={16} height={16} /> Tới giỏ
+          {cartCount > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 grid h-5 min-w-[20px] place-items-center rounded-full bg-navy px-1 text-[10px] font-bold text-cream">
+              {cartCount}
+            </span>
+          )}
         </a>
       </div>
     </main>
