@@ -301,8 +301,8 @@ export default function ProductCatalog({
 
       {/* sticky cta */}
       <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
-        <a href="/" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
-          ← Trang chủ
+        <a href="/tra-cuu" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
+          Tra cứu đơn
         </a>
         <a
           href="/dat-hang"
