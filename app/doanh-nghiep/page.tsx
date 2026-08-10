@@ -70,7 +70,7 @@ function BoxCard({ box, region }: { box: Box; region: Region }) {
   return (
     <article className="overflow-hidden rounded-2xl border border-[#C6A24C]/40 bg-[#0c1a31]/70">
       <div className="p-4">
-        <div className="relative grid aspect-[16/9] place-items-center overflow-hidden rounded-xl border border-[#C6A24C]/50 bg-gradient-to-br from-[#15294a] via-[#0f2038] to-[#081221]">
+        <div className="relative grid aspect-[4/5] place-items-center overflow-hidden rounded-xl border border-[#C6A24C]/50 bg-gradient-to-br from-[#15294a] via-[#0f2038] to-[#081221]">
           <span className="text-[72px] drop-shadow-lg">🥮</span>
           <span className="absolute right-2.5 top-2.5 grid h-9 w-9 place-items-center rounded border border-[#C6A24C]/70 text-[10px] font-bold text-[#E8C877]">
             2026

@@ -71,7 +71,7 @@ function Price({ v, region }: { v: number; region: Region }) {
 
 function ImageArea({ badge, w }: { badge?: Badge; w: number }) {
   return (
-    <div className="relative flex h-40 items-center justify-center bg-cream-soft">
+    <div className="relative flex aspect-[4/5] items-center justify-center bg-cream-soft">
       <IconLotus width={54} height={54} className="text-gold/45" />
       <BadgeChip badge={badge} />
       <WeightChip w={w} />
@@ -257,7 +257,7 @@ export default function ProductCatalog({
           <div className="grid grid-cols-2 gap-3">
             {flavors.map((f) => (
               <article key={f.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                <div className="relative flex h-28 items-center justify-center bg-cream-soft">
+                <div className="relative flex aspect-[4/5] items-center justify-center bg-cream-soft">
                   <IconLotus width={40} height={40} className="text-gold/45" />
                   <BadgeChip badge={f.badge} />
                   <WeightChip w={f.weight} />

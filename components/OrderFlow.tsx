@@ -806,9 +806,9 @@ export default function OrderFlow({
               <div className="mb-3 overflow-hidden rounded border border-line">
                 {boxImg(box.id) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={boxImg(box.id)} alt={box.name} className="h-40 w-full object-cover" />
+                  <img src={boxImg(box.id)} alt={box.name} className="aspect-[4/5] w-full object-cover" />
                 ) : (
-                  <div className="flex h-28 items-center justify-center bg-cream-soft text-gold/40"><IconLotus width={40} height={40} /></div>
+                  <div className="flex aspect-[4/5] items-center justify-center bg-cream-soft text-gold/40"><IconLotus width={40} height={40} /></div>
                 )}
               </div>
               <div className="flex items-center justify-between gap-2">
