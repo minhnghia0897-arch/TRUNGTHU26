@@ -77,7 +77,7 @@ export default function ProductCatalog({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
       <header className="bg-navy px-4 py-3.5 text-center">
-        <a href="/" className="title-heritage text-base tracking-[0.18em] text-cream">
+        <a href="/le" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
           Trăng Rằm
         </a>
       </header>
@@ -133,7 +133,7 @@ export default function ProductCatalog({
                   <div className="mx-auto my-3 h-px w-16 bg-line" />
                   <Price v={region === "vn" ? b.price_vn : b.price_kr} region={region} />
                   <a
-                    href={`/dat-hang?box=${b.id}&region=${region}`}
+                    href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
                     className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
                   >
                     Tự chọn vị <IconArrowRight width={14} height={14} />
@@ -170,10 +170,10 @@ export default function ProductCatalog({
                     <div className="mx-auto my-3 h-px w-16 bg-line" />
                     <Price v={price} region={region} />
                     <a
-                      href={`/dat-hang?combo=${c.id}&region=${region}`}
+                      href={`/dat-hang?combo=${c.id}&region=${region}&express=1`}
                       className="mt-3 flex items-center justify-center gap-1.5 rounded-full bg-gold py-2.5 text-xs font-semibold uppercase tracking-wide text-navy-deep"
                     >
-                      Thêm vào giỏ <IconArrowRight width={14} height={14} />
+                      Mua ngay <IconArrowRight width={14} height={14} />
                     </a>
                   </div>
                 </article>
@@ -201,10 +201,10 @@ export default function ProductCatalog({
                       <div className="text-[9.5px] text-ink/45">+{formatMoney(flavorSurcharge(f, region), region)} trong hộp</div>
                     )}
                     <a
-                      href={`/dat-hang?la=${f.id}&region=${region}`}
+                      href={`/dat-hang?la=${f.id}&region=${region}&express=1`}
                       className="mt-2 block rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep"
                     >
-                      Thêm
+                      Mua ngay
                     </a>
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export default function ProductCatalog({
 
       {/* sticky cta */}
       <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
-        <a href="/" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
+        <a href="/le" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
           ← Trang chủ
         </a>
         <a
