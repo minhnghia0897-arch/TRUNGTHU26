@@ -102,6 +102,25 @@ select::-ms-expand {
   display: none;
 }
 
+/* Ô ngày: native date trên iOS/Android có bề rộng tối thiểu riêng nên hay tràn khỏi khung.
+   Ép về đúng bề rộng ô cha và thu gọn icon lịch. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  margin: 0;
+  padding: 0;
+  opacity: 0.5;
+}
+
 /* Chống iOS Safari tự phóng to (zoom) khi focus input < 16px — trên màn nhỏ/cảm ứng */
 @media (max-width: 767px), (pointer: coarse) {
   input,

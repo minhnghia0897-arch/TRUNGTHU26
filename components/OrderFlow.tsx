@@ -19,7 +19,7 @@ import { saveWebOrder } from "@/lib/webOrders";
 import { addDashboardOrder } from "@/lib/dashboardOrders";
 import { findLink, markUsed } from "@/lib/attribution";
 import { normalizePhone } from "@/lib/phone";
-import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc } from "@/components/icons";
+import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc, IconCart } from "@/components/icons";
 
 const CART_KEY = "tr_cart";
 
@@ -30,6 +30,7 @@ type Recipient = {
   address: string;
   region: Region;
   desiredDate: string;
+  note: string; // khách tự ghi: lời nhắn, dặn giao, ghi chú hoá đơn…
 };
 
 export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string; ref?: string; express?: boolean };
@@ -206,6 +207,27 @@ export default function OrderFlow({
   // preselect từ URL (?box / ?combo / ?la) — hoặc khôi phục giỏ đã lưu (F5 không mất)
   useEffect(() => {
     const fromUrl = !!(initial?.box || initial?.combo || initial?.la);
+    // LUÔN khôi phục giỏ đã lưu trước — khách có thể đã thêm món ở trang bộ sưu tập
+    try {
+      const raw = localStorage.getItem(CART_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (Array.isArray(s.cart)) setCart(s.cart);
+        if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
+        if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
+        if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
+        if (Array.isArray(s.recipients)) setRecipients(s.recipients);
+        if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
+        const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
+          (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
+          0,
+        );
+        _id = Math.max(_id, maxU); // tránh trùng uid khi thêm món mới
+      }
+    } catch {
+      /* ignore */
+    }
+    // rồi mới áp deep-link lên trên giỏ đã có (không ghi đè giỏ cũ)
     if (fromUrl) {
       if (initial!.combo) addCombo(initial!.combo);
       if (initial!.la) addFlavor(initial!.la);
@@ -216,26 +238,6 @@ export default function OrderFlow({
         setStep(1.5);
       } else if (initial!.express) {
         setStep(2); // combo/lẻ + express → vào thẳng checkout 1 trang
-      }
-    } else {
-      try {
-        const raw = localStorage.getItem(CART_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
-          if (Array.isArray(s.cart)) setCart(s.cart);
-          if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
-          if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
-          if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
-          if (Array.isArray(s.recipients)) setRecipients(s.recipients);
-          if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
-          const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
-            (m: number, x: { uid?: string }) => Math.max(m, parseInt(String(x.uid ?? "").replace(/\D/g, "")) || 0),
-            0,
-          );
-          _id = Math.max(_id, maxU); // tránh trùng uid khi thêm món mới
-        }
-      } catch {
-        /* ignore */
       }
     }
     // nhớ thông tin người mua từ lần trước (sống qua cả khi đặt xong)
@@ -281,7 +283,7 @@ export default function OrderFlow({
           phone: r.phone ?? "",
           address: r.address ?? "",
           region: (r.region as Region) ?? buyerRegion,
-          desiredDate: "",
+          desiredDate: "", note: "",
         },
       ]);
       prefilled.current = true;
@@ -370,14 +372,14 @@ export default function OrderFlow({
     ]);
     setPicks([]);
     setOpenSlot(0);
-    setStep(express ? 2 : 1); // express: thêm hộp xong vào thẳng checkout
+    setStep(1); // thêm hộp xong về giỏ hàng để khách xem lại / thêm món khác
   }
 
   // ---- recipients ----
   function addRecipient() {
     setRecipients((r) => [
       ...r,
-      { uid: nid(), name: "", phone: "", address: "", region: "kr", desiredDate: "" },
+      { uid: nid(), name: "", phone: "", address: "", region: "kr", desiredDate: "", note: "" },
     ]);
   }
   function setR(uid: string, k: keyof Recipient, val: string) {
@@ -473,7 +475,13 @@ export default function OrderFlow({
           source: ref ? "facebook" : "web",
           vc: "",
           tags: ref ? ["Messenger"] : ["Web"],
-          note: `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}`,
+          note:
+            `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}` +
+            // ghi chú khách tự viết cho từng người nhận
+            recipients
+              .filter((r) => r.note?.trim())
+              .map((r, i) => ` · 📝 ${r.name || `Người nhận ${i + 1}`}: ${r.note.trim()}`)
+              .join(""),
           customer: buyerName.trim(),
           recipient: r0?.name || buyerName.trim(),
           phone: buyerPhone.trim(),
@@ -567,6 +575,7 @@ export default function OrderFlow({
           `📦 Người nhận ${i + 1}: ${r.name || "—"} · ${r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}\n` +
           `📞 ${r.phone || "—"} · 📍 ${r.address || "—"}\n` +
           (r.desiredDate ? `📅 Ngày nhận: ${dmy(r.desiredDate)}\n` : "") +
+          (r.note?.trim() ? `📝 Ghi chú: ${r.note.trim()}\n` : "") +
           lines
         );
       })
@@ -620,7 +629,7 @@ export default function OrderFlow({
       // vào màn gộp: có sẵn 1 người nhận & gán hết quà cho họ (khách sửa/thêm sau)
       if (!recipients.length) {
         const uid = nid();
-        setRecipients([{ uid, name: "", phone: "", address: "", region: buyerRegion, desiredDate: "" }]);
+        setRecipients([{ uid, name: "", phone: "", address: "", region: buyerRegion, desiredDate: "", note: "" }]);
         setCart((c) => c.map((it) => (it.recipientUids.length ? it : { ...it, recipientUids: [uid] })));
       }
       return setStep(2);
@@ -644,10 +653,10 @@ export default function OrderFlow({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
       <header className="relative flex items-center bg-maroon-deep px-4 py-3.5">
-        <a href="/le" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
+        <a href="/san-pham" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/le" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
       </header>
 
       {/* stepper */}
@@ -679,8 +688,14 @@ export default function OrderFlow({
             <div className="eyebrow">Bước 1</div>
             <h2 className="title-heritage mb-4 text-lg">Giỏ hàng</h2>
             {cart.length === 0 ? (
-              <div className="rounded border border-line bg-white p-4 text-center opacity-60">
-                Giỏ trống — thêm hộp tự chọn bên dưới.
+              <div className="rounded border border-line bg-white p-5 text-center">
+                <p className="text-[13px] opacity-60">Giỏ đang trống.</p>
+                <a
+                  href="/san-pham"
+                  className="mt-3 inline-block rounded-full bg-gold px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-maroon-deep"
+                >
+                  Xem bộ sưu tập
+                </a>
               </div>
             ) : (
               cart.map((it) => (
@@ -732,67 +747,15 @@ export default function OrderFlow({
               ))
             )}
 
-            {/* Thêm sản phẩm */}
-            <div className="mt-4 rounded border border-line bg-white p-3.5">
-              <div className="eyebrow mb-2">Thêm sản phẩm</div>
-
-              {/* hộp tự chọn */}
-              <div className="mb-3">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Hộp tự chọn</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {boxes.map((b) => (
-                    <button
-                      key={b.id}
-                      onClick={() => { setSelectedBoxId(b.id); setPicks([]); setOpenSlot(0); setStep(1.5); }}
-                      className="rounded border border-dashed border-line bg-cream px-3 py-2 text-[11px] text-maroon"
-                    >
-                      + {b.name} · {fmt(buyerRegion === "vn" ? b.price_vn : b.price_kr)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* combo */}
-              {combos.length > 0 && (
-                <div className="mb-3">
-                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Combo / Set</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {combos.map((c) => {
-                      const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => addCombo(c.id)}
-                          className="rounded border border-gold bg-cream px-3 py-2 text-[11px] text-maroon"
-                        >
-                          + {c.name} · {fmt(boxPrice(b, c.flavor_ids, flavors, buyerRegion))}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* mua lẻ */}
-              <div>
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-maroon">Mua lẻ từng vị</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {flavors.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => addFlavor(f.id)}
-                      className={`rounded-full border px-2.5 py-1.5 text-[11px] ${f.premium ? "border-gold text-maroon" : "border-line"} bg-white`}
-                    >
-                      + {f.name} · {fmt(flavorRetailPrice(f, buyerRegion))}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <a href="/san-pham" className="mt-3 block text-center text-[11px] text-gold underline">
-                Xem chi tiết sản phẩm →
+            {/* thêm món khác — bộ sưu tập là nơi chọn hàng, giỏ chỉ để xem lại */}
+            {cart.length > 0 && (
+              <a
+                href="/san-pham"
+                className="mt-4 block rounded border border-dashed border-line bg-white py-3 text-center font-serif text-xs uppercase tracking-wide text-maroon"
+              >
+                + Thêm sản phẩm khác
               </a>
-            </div>
+            )}
           </section>
         )}
 
@@ -806,9 +769,9 @@ export default function OrderFlow({
               <div className="mb-3 overflow-hidden rounded border border-line">
                 {boxImg(box.id) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={boxImg(box.id)} alt={box.name} className="h-40 w-full object-cover" />
+                  <img src={boxImg(box.id)} alt={box.name} className="aspect-[4/5] w-full object-cover" />
                 ) : (
-                  <div className="flex h-28 items-center justify-center bg-cream-soft text-gold/40"><IconLotus width={40} height={40} /></div>
+                  <div className="flex aspect-[4/5] items-center justify-center bg-cream-soft text-gold/40"><IconLotus width={40} height={40} /></div>
                 )}
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -895,7 +858,7 @@ export default function OrderFlow({
           <section className="step-in">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="title-heritage text-lg">Đặt nhanh</h2>
-              <button onClick={() => setStep(1)} className="text-[12px] text-gold underline">← Sửa giỏ</button>
+              <button onClick={() => setStep(1)} className="text-[12px] text-gold underline">← Giỏ hàng</button>
             </div>
 
             {/* tóm tắt giỏ gọn */}
@@ -942,10 +905,18 @@ export default function OrderFlow({
                 <Label>Ngày muốn nhận</Label>
                 <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
                 {suggestedDate && (
-                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
+                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
                     <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
                   </button>
                 )}
+                <Label>Ghi chú <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span></Label>
+                <textarea
+                  value={r0?.note ?? ""}
+                  onChange={(e) => r0 && setR(r0.uid, "note", e.target.value)}
+                  rows={2}
+                  placeholder="Lời nhắn trên thiệp, dặn giao giờ nào, gọi trước khi giao…"
+                  className="w-full resize-none rounded border border-line bg-white p-2.5 text-sm"
+                />
                 <button onClick={() => setMulti(true)} className="mt-3 block w-full text-center text-[12px] text-gold underline">
                   Gửi tặng nhiều người / nhiều địa chỉ? →
                 </button>
@@ -1246,7 +1217,7 @@ export default function OrderFlow({
                 Theo dõi đơn
               </a>
             </div>
-            <a href="/le" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
+            <a href="/san-pham" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
           </section>
         )}
       </div>
@@ -1264,7 +1235,7 @@ export default function OrderFlow({
       {shareOpen && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50" onClick={() => setShareOpen(false)}>
           <div
-            className="w-full max-w-app rounded-t-2xl border-t border-line bg-cream p-4 pb-5"
+            className="max-h-[92vh] w-full max-w-app overflow-y-auto rounded-t-2xl border-t border-line bg-cream p-4 pb-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-1 flex items-center justify-between">
@@ -1281,7 +1252,7 @@ export default function OrderFlow({
               readOnly
               value={buildOrderMessage()}
               onFocus={(e) => e.currentTarget.select()}
-              className="h-44 w-full resize-none rounded border border-line bg-white p-2.5 text-[12px] leading-relaxed text-ink"
+              className="h-[50vh] w-full resize-none rounded border border-line bg-white p-2.5 text-[12px] leading-relaxed text-ink"
             />
 
             <button
@@ -1303,9 +1274,17 @@ export default function OrderFlow({
         </div>
       )}
 
-      {/* navbar EXPRESS — điền thông tin (2-4): giá + Zalo + Đặt hàng */}
+      {/* navbar EXPRESS — điền thông tin (2-4): về giỏ + giá + Zalo + Đặt hàng */}
       {express && step >= 2 && step <= 4 && (
         <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-line bg-cream px-3 py-2.5">
+          <button
+            onClick={() => setStep(1)}
+            aria-label="Quay lại giỏ hàng"
+            title="Quay lại giỏ hàng"
+            className="grid h-11 w-11 flex-none place-items-center rounded-lg border border-line text-maroon transition active:scale-95 hover:bg-white"
+          >
+            <IconCart width={17} height={17} />
+          </button>
           <div className="flex-1 leading-tight">
             <span className="text-[10px] uppercase tracking-wide text-maroon/60">Tổng cộng</span>
             <b className="block font-serif text-[17px] text-maroon">{fmt(bill.grand)}</b>
@@ -1590,37 +1569,42 @@ function RecipientsEditor({
           </div>
           <Label>Địa chỉ</Label>
           <Input value={r.address} onChange={(v) => setR(r.uid, "address", v)} />
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <Label>Vùng giao</Label>
-              <select
-                value={r.region}
-                onChange={(e) => setR(r.uid, "region", e.target.value)}
-                className="w-full rounded border border-line bg-white p-2.5 text-sm"
-              >
-                <option value="kr">🇰🇷 Hàn Quốc</option>
-                <option value="vn">🇻🇳 Việt Nam</option>
-              </select>
-            </div>
-            <div>
-              <Label>Ngày muốn nhận</Label>
-              <input
-                type="date"
-                value={r.desiredDate}
-                onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
-                className="w-full rounded border border-line bg-white p-2.5 text-sm"
-              />
-              {suggestedDate && (
-                <button
-                  type="button"
-                  onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
-                  className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
-                >
-                  <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
-                </button>
-              )}
-            </div>
-          </div>
+          <Label>Vùng giao</Label>
+          <select
+            value={r.region}
+            onChange={(e) => setR(r.uid, "region", e.target.value)}
+            className="w-full rounded border border-line bg-white p-2.5 text-sm"
+          >
+            <option value="kr">🇰🇷 Hàn Quốc</option>
+            <option value="vn">🇻🇳 Việt Nam</option>
+          </select>
+
+          {/* ngày để full width — ô date native rộng tối thiểu, để 1/2 cột là tràn viền */}
+          <Label>Ngày muốn nhận</Label>
+          <input
+            type="date"
+            value={r.desiredDate}
+            onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
+            className="w-full rounded border border-line bg-white p-2.5 text-sm"
+          />
+          {suggestedDate && (
+            <button
+              type="button"
+              onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
+              className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+            >
+              <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+            </button>
+          )}
+          <Label>Ghi chú <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span></Label>
+          <textarea
+            value={r.note}
+            onChange={(e) => setR(r.uid, "note", e.target.value)}
+            rows={2}
+            placeholder="Lời nhắn trên thiệp, dặn giao giờ nào, gọi trước khi giao…"
+            className="w-full resize-none rounded border border-line bg-white p-2.5 text-sm"
+          />
+
           <Label>Gán quà cho người này</Label>
           <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Bấm để gán món, rồi chỉnh số lượng riêng cho người này.</p>
           <div className="space-y-1.5">
@@ -1688,7 +1672,7 @@ function RecipientBlocks({
   flavorNames,
   fmt,
 }: {
-  recipients: { uid: string; name: string; phone: string; address: string; region: Region; desiredDate: string }[];
+  recipients: Recipient[];
   cart: CartLine[];
   flavorNames: (ids?: string[]) => string;
   fmt: (v: number) => string;
@@ -1710,6 +1694,11 @@ function RecipientBlocks({
               SĐT {r.phone || "—"} · {r.address || "—"}
               {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
             </div>
+            {r.note?.trim() && (
+              <div className="mt-1 rounded border border-dashed border-gold/50 bg-[#fff8ec] px-2 py-1 text-[11px] text-[#8a6a24]">
+                📝 {r.note.trim()}
+              </div>
+            )}
             <div className="mt-1.5 space-y-1">
               {items.map((it) => {
                 const q = qtyForRecipient(it, r.uid); // số lượng dành riêng cho người này

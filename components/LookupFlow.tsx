@@ -16,12 +16,12 @@ export default function LookupFlow() {
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream px-4 py-6 shadow-2xl">
       <div className="mb-2">
-        <a href="/le" aria-label="Về trang chủ" className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-maroon/70 transition hover:text-gold">
+        <a href="/san-pham" aria-label="Về trang chủ" className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-maroon/70 transition hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
       </div>
       <header className="mb-5 text-center">
-        <a href="/le" className="title-heritage text-base tracking-[0.18em]">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em]">Trăng Rằm</a>
         <div className="eyebrow mt-2">Tra cứu</div>
         <h1 className="title-heritage mt-1 text-xl">Theo dõi đơn</h1>
       </header>

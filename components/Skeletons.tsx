@@ -3,7 +3,7 @@
 export function CardSkeleton() {
   return (
     <div className="overflow-hidden rounded-card bg-white shadow-card">
-      <div className="skeleton h-40 rounded-none" />
+      <div className="skeleton aspect-[4/5] rounded-none" />
       <div className="space-y-2 p-4">
         <div className="skeleton mx-auto h-4 w-2/3" />
         <div className="skeleton mx-auto h-3 w-4/5" />
