@@ -4,7 +4,7 @@ const GOLD = "bg-gradient-to-b from-[#F7EBC0] via-[#E8C877] to-[#C6A24C] bg-clip
 export default function Gateway() {
   const cards = [
     {
-      href: "/le",
+      href: "/san-pham",
       emoji: "🥮",
       title: "Khách lẻ",
       sub: "Mua lẻ · hộp quà biếu",

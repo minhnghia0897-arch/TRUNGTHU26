@@ -118,10 +118,21 @@ export default function ProductCatalog({
 
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
-      <header className="bg-navy px-4 py-3.5 text-center">
-        <a href="/le" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
+      {/* hotline */}
+      <div className="bg-[#081221] px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
+        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">0982 576 263</b>
+      </div>
+
+      {/* header — bộ sưu tập là trang chính của luồng khách lẻ */}
+      <header className="bg-navy px-4 pb-3 pt-3.5 text-center">
+        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
           Trăng Rằm
         </a>
+        <div className="mt-0.5 text-[10px] italic tracking-wide text-cream/55">Bánh Trung Thu thủ công cao cấp</div>
+        <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-[#E8C877]/85">
+          <a href="/dat-hang">Đặt hàng</a>
+          <a href="/tra-cuu">Tra cứu đơn</a>
+        </nav>
       </header>
 
       <div className="px-4 pt-5 text-center">
@@ -290,7 +301,7 @@ export default function ProductCatalog({
 
       {/* sticky cta */}
       <div className="fixed inset-x-0 bottom-0 mx-auto flex max-w-app items-center gap-2.5 border-t border-line bg-cream px-4 py-3">
-        <a href="/le" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
+        <a href="/" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
           ← Trang chủ
         </a>
         <a

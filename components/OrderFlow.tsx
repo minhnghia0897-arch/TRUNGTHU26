@@ -644,10 +644,10 @@ export default function OrderFlow({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
       <header className="relative flex items-center bg-maroon-deep px-4 py-3.5">
-        <a href="/le" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
+        <a href="/san-pham" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/le" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
       </header>
 
       {/* stepper */}
@@ -1246,7 +1246,7 @@ export default function OrderFlow({
                 Theo dõi đơn
               </a>
             </div>
-            <a href="/le" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
+            <a href="/san-pham" className="mt-2.5 block text-center text-[12px] text-gold underline">← Về trang chủ</a>
           </section>
         )}
       </div>
