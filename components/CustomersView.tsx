@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ORDERS, STATUS_COLOR, type OrderRow, type Status } from "@/lib/ordersMock";
+import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
+import { applyStock } from "@/lib/stockStore";
+
+// dùng chung localStorage với bảng Đơn hàng để sửa ở đâu cũng khớp
+const HISTORY_KEY = "tr_order_history";
+const EDITS_KEY = "tr_order_edits";
 
 const FX = 18.5;
 const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
@@ -25,17 +31,55 @@ export default function CustomersView() {
   const [rows, setRows] = useState<OrderRow[]>(ORDERS);
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [history, setHistory] = useState<Record<number, HistoryEntry[]>>({});
 
   // đọc cùng nguồn với bảng Đơn hàng: đơn mẫu + đơn web/tạo tay + bản đã sửa
   useEffect(() => {
     try {
       const created: OrderRow[] = JSON.parse(localStorage.getItem("tr_order_new") || "[]");
-      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem("tr_order_edits") || "{}");
+      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
       setRows([...created, ...ORDERS].map((r) => edits[r.id] ?? r));
+      setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}"));
     } catch {
       /* ignore */
     }
   }, []);
+
+  // sửa đơn ngay tại đây — ghi vào cùng key với bảng Đơn hàng (kể cả trừ/hoàn kho)
+  const saveOrder = (input: OrderRow, changes: string[]) => {
+    let updated = input;
+    if (input.consume) {
+      const should = !RELEASED.has(input.status);
+      if (should !== !!input.stockApplied) {
+        applyStock(input.consume, should ? -1 : 1);
+        updated = { ...input, stockApplied: should };
+      }
+    }
+    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
+    try {
+      const edits = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
+      localStorage.setItem(EDITS_KEY, JSON.stringify({ ...edits, [updated.id]: updated }));
+    } catch {
+      /* ignore */
+    }
+    setHistory((h) => {
+      const n = new Date();
+      const p = (x: number) => String(x).padStart(2, "0");
+      const entry: HistoryEntry = {
+        at: `${p(n.getDate())}/${p(n.getMonth() + 1)}/${n.getFullYear()} ${p(n.getHours())}:${p(n.getMinutes())}`,
+        by: "Bạn",
+        changes,
+      };
+      const next = { ...h, [updated.id]: [entry, ...(h[updated.id] ?? [])] };
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const customers = useMemo(() => {
     const m = new Map<string, Group>();
@@ -121,8 +165,26 @@ export default function CustomersView() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                               {c.rows.map((r) => (
-                                <tr key={r.id} className={RELEASED.has(r.status) ? "opacity-50" : ""}>
-                                  <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-700">{codeOf(r)}</td>
+                                <tr
+                                  key={r.id}
+                                  onClick={() => setDetailId(r.id)}
+                                  title="Bấm để xem chi tiết đơn"
+                                  className={`cursor-pointer hover:bg-blue-50/60 ${RELEASED.has(r.status) ? "opacity-50" : ""}`}
+                                >
+                                  <td className="whitespace-nowrap px-3 py-2">
+                                    <span className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2">
+                                      {codeOf(r)}
+                                    </span>
+                                    {/* đơn web có mã TR- riêng → kèm số dòng; đơn cũ chỉ có số dòng */}
+                                    {codeOf(r) !== `#${r.id}` && (
+                                      <span className="ml-1.5 text-[10.5px] text-slate-400">#{r.id}</span>
+                                    )}
+                                    {r.note?.match(/Kiện \d+\/\d+/) && (
+                                      <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                                        {r.note.match(/Kiện \d+\/\d+/)![0]}
+                                      </span>
+                                    )}
+                                  </td>
                                   <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.created ?? "—"}</td>
                                   <td className="px-3 py-2 text-slate-700">{r.recipient || "—"}</td>
                                   <td className="max-w-[220px] truncate px-3 py-2 text-slate-500" title={r.address}>
@@ -165,10 +227,23 @@ export default function CustomersView() {
           </table>
         </div>
         <p className="mt-3 text-[12px] text-slate-400">
-          Khách gom theo SĐT (Pancake dedupe theo SĐT). Bấm vào khách để xem toàn bộ đơn đã đặt — đối chiếu số đơn,
-          số kiện và tổng tiền. Đơn huỷ/trả/hoàn không tính vào tổng chi tiêu. Quy đổi ₩ theo fx {FX}.
+          Khách gom theo SĐT (Pancake dedupe theo SĐT). Bấm vào khách để xem toàn bộ đơn đã đặt, bấm tiếp vào một đơn
+          để mở chi tiết. Đơn huỷ/trả/hoàn không tính vào tổng chi tiêu. Quy đổi ₩ theo fx {FX}.
         </p>
       </div>
+
+      {/* chi tiết đơn — dùng chung modal với bảng Đơn hàng, sửa ở đây cũng lưu như bên đó */}
+      {(() => {
+        const order = rows.find((r) => r.id === detailId);
+        return order ? (
+          <OrderDetailModal
+            order={order}
+            history={history[order.id] ?? []}
+            onSave={saveOrder}
+            onClose={() => setDetailId(null)}
+          />
+        ) : null;
+      })()}
     </main>
   );
 }
