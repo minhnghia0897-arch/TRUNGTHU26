@@ -86,6 +86,7 @@ export default function OrderFlow({
   const [step, setStep] = useState<number>(1);
   const [express, setExpress] = useState<boolean>(!!initial?.express); // đặt nhanh 1 trang (như TikTok)
   const [multi, setMulti] = useState(false); // trong Đặt nhanh: gửi nhiều người / nhiều địa chỉ
+  const [sameAsBuyer, setSameAsBuyer] = useState(false); // người đặt cũng là người nhận 1
   const [zaloHint, setZaloHint] = useState(false);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
@@ -298,6 +299,18 @@ export default function OrderFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [express, multi, cart, recipients]);
 
+  // "Người đặt cũng là người nhận": chép tên/SĐT người đặt sang người nhận 1
+  // (ghi thẳng vào state để không tự bỏ tick như khi khách gõ tay)
+  useEffect(() => {
+    if (!sameAsBuyer) return;
+    setRecipients((rs) => {
+      if (!rs.length) return rs;
+      const r0 = rs[0];
+      if (r0.name === buyerName && r0.phone === buyerPhone) return rs;
+      return [{ ...r0, name: buyerName, phone: buyerPhone }, ...rs.slice(1)];
+    });
+  }, [sameAsBuyer, buyerName, buyerPhone]);
+
   // express: form giao hàng ghi đồng thời vào người đặt + người nhận[0] (1 địa chỉ, ít gõ)
   const r0 = recipients[0];
   const exName = r0?.name ?? buyerName;
@@ -362,6 +375,8 @@ export default function OrderFlow({
     ]);
   }
   function setR(uid: string, k: keyof Recipient, val: string) {
+    // khách tự sửa tên/SĐT người nhận 1 → bỏ tick "người đặt cũng là người nhận"
+    if (sameAsBuyer && (k === "name" || k === "phone") && recipients[0]?.uid === uid) setSameAsBuyer(false);
     setRecipients((rs) => rs.map((r) => (r.uid === uid ? { ...r, [k]: val } : r)));
   }
   function removeRecipient(uid: string) {
@@ -928,6 +943,10 @@ export default function OrderFlow({
                     flavorNames={flavorNames}
                     suggestedDate={suggestedDate}
                     suggestedDDMM={suggestedDDMM}
+
+                    sameAsBuyer={sameAsBuyer}
+
+                    onToggleSameAsBuyer={setSameAsBuyer}
                   />
                 </div>
               </>
@@ -1000,6 +1019,10 @@ export default function OrderFlow({
                 flavorNames={flavorNames}
                 suggestedDate={suggestedDate}
                 suggestedDDMM={suggestedDDMM}
+
+                sameAsBuyer={sameAsBuyer}
+
+                onToggleSameAsBuyer={setSameAsBuyer}
               />
             </div>
           </section>
@@ -1393,6 +1416,8 @@ function RecipientsEditor({
   flavorNames,
   suggestedDate,
   suggestedDDMM,
+  sameAsBuyer,
+  onToggleSameAsBuyer,
 }: {
   recipients: Recipient[];
   cart: CartLine[];
@@ -1405,6 +1430,8 @@ function RecipientsEditor({
   flavorNames: (ids?: string[]) => string;
   suggestedDate: string;
   suggestedDDMM: string;
+  sameAsBuyer: boolean;
+  onToggleSameAsBuyer: (v: boolean) => void;
 }) {
   return (
     <>
@@ -1427,6 +1454,18 @@ function RecipientsEditor({
               )}
             </div>
           </div>
+          {/* tiện: người đặt cũng là người nhận đầu tiên → tự điền tên & SĐT */}
+          {i === 0 && (
+            <label className="mt-1 flex cursor-pointer items-center gap-2 text-[12px] text-maroon">
+              <input
+                type="checkbox"
+                checked={sameAsBuyer}
+                onChange={(e) => onToggleSameAsBuyer(e.target.checked)}
+                className="h-4 w-4 accent-[#C6A24C]"
+              />
+              Người đặt cũng là người nhận
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-2.5">
             <div>
               <Label>Tên</Label>
