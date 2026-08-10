@@ -30,6 +30,7 @@ type Recipient = {
   address: string;
   region: Region;
   desiredDate: string;
+  note: string; // khách tự ghi: lời nhắn, dặn giao, ghi chú hoá đơn…
 };
 
 export type InitialSelection = { box?: string; combo?: string; la?: string; region?: string; ref?: string; express?: boolean };
@@ -281,7 +282,7 @@ export default function OrderFlow({
           phone: r.phone ?? "",
           address: r.address ?? "",
           region: (r.region as Region) ?? buyerRegion,
-          desiredDate: "",
+          desiredDate: "", note: "",
         },
       ]);
       prefilled.current = true;
@@ -377,7 +378,7 @@ export default function OrderFlow({
   function addRecipient() {
     setRecipients((r) => [
       ...r,
-      { uid: nid(), name: "", phone: "", address: "", region: "kr", desiredDate: "" },
+      { uid: nid(), name: "", phone: "", address: "", region: "kr", desiredDate: "", note: "" },
     ]);
   }
   function setR(uid: string, k: keyof Recipient, val: string) {
@@ -473,7 +474,13 @@ export default function OrderFlow({
           source: ref ? "facebook" : "web",
           vc: "",
           tags: ref ? ["Messenger"] : ["Web"],
-          note: `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}`,
+          note:
+            `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}` +
+            // ghi chú khách tự viết cho từng người nhận
+            recipients
+              .filter((r) => r.note?.trim())
+              .map((r, i) => ` · 📝 ${r.name || `Người nhận ${i + 1}`}: ${r.note.trim()}`)
+              .join(""),
           customer: buyerName.trim(),
           recipient: r0?.name || buyerName.trim(),
           phone: buyerPhone.trim(),
@@ -567,6 +574,7 @@ export default function OrderFlow({
           `📦 Người nhận ${i + 1}: ${r.name || "—"} · ${r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}\n` +
           `📞 ${r.phone || "—"} · 📍 ${r.address || "—"}\n` +
           (r.desiredDate ? `📅 Ngày nhận: ${dmy(r.desiredDate)}\n` : "") +
+          (r.note?.trim() ? `📝 Ghi chú: ${r.note.trim()}\n` : "") +
           lines
         );
       })
@@ -620,7 +628,7 @@ export default function OrderFlow({
       // vào màn gộp: có sẵn 1 người nhận & gán hết quà cho họ (khách sửa/thêm sau)
       if (!recipients.length) {
         const uid = nid();
-        setRecipients([{ uid, name: "", phone: "", address: "", region: buyerRegion, desiredDate: "" }]);
+        setRecipients([{ uid, name: "", phone: "", address: "", region: buyerRegion, desiredDate: "", note: "" }]);
         setCart((c) => c.map((it) => (it.recipientUids.length ? it : { ...it, recipientUids: [uid] })));
       }
       return setStep(2);
@@ -946,6 +954,14 @@ export default function OrderFlow({
                     <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
                   </button>
                 )}
+                <Label>Ghi chú <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span></Label>
+                <textarea
+                  value={r0?.note ?? ""}
+                  onChange={(e) => r0 && setR(r0.uid, "note", e.target.value)}
+                  rows={2}
+                  placeholder="Lời nhắn trên thiệp, dặn giao giờ nào, gọi trước khi giao…"
+                  className="w-full resize-none rounded border border-line bg-white p-2.5 text-sm"
+                />
                 <button onClick={() => setMulti(true)} className="mt-3 block w-full text-center text-[12px] text-gold underline">
                   Gửi tặng nhiều người / nhiều địa chỉ? →
                 </button>
@@ -1629,6 +1645,15 @@ function RecipientsEditor({
               )}
             </div>
           </div>
+          <Label>Ghi chú <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span></Label>
+          <textarea
+            value={r.note}
+            onChange={(e) => setR(r.uid, "note", e.target.value)}
+            rows={2}
+            placeholder="Lời nhắn trên thiệp, dặn giao giờ nào, gọi trước khi giao…"
+            className="w-full resize-none rounded border border-line bg-white p-2.5 text-sm"
+          />
+
           <Label>Gán quà cho người này</Label>
           <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Bấm để gán món, rồi chỉnh số lượng riêng cho người này.</p>
           <div className="space-y-1.5">
@@ -1696,7 +1721,7 @@ function RecipientBlocks({
   flavorNames,
   fmt,
 }: {
-  recipients: { uid: string; name: string; phone: string; address: string; region: Region; desiredDate: string }[];
+  recipients: Recipient[];
   cart: CartLine[];
   flavorNames: (ids?: string[]) => string;
   fmt: (v: number) => string;
@@ -1718,6 +1743,11 @@ function RecipientBlocks({
               SĐT {r.phone || "—"} · {r.address || "—"}
               {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
             </div>
+            {r.note?.trim() && (
+              <div className="mt-1 rounded border border-dashed border-gold/50 bg-[#fff8ec] px-2 py-1 text-[11px] text-[#8a6a24]">
+                📝 {r.note.trim()}
+              </div>
+            )}
             <div className="mt-1.5 space-y-1">
               {items.map((it) => {
                 const q = qtyForRecipient(it, r.uid); // số lượng dành riêng cho người này
