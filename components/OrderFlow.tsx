@@ -554,25 +554,29 @@ export default function OrderFlow({
   function next() {
     if (step === 1) {
       if (!cart.length) return alert("Giỏ đang trống.");
+      // vào màn gộp: có sẵn 1 người nhận & gán hết quà cho họ (khách sửa/thêm sau)
+      if (!recipients.length) {
+        const uid = nid();
+        setRecipients([{ uid, name: "", phone: "", address: "", region: buyerRegion, desiredDate: "" }]);
+        setCart((c) => c.map((it) => (it.recipientUids.length ? it : { ...it, recipientUids: [uid] })));
+      }
       return setStep(2);
     }
     if (step === 2) {
       if (!buyerName.trim()) return alert("Nhập tên người đặt.");
       if (!buyerPhone.trim()) return alert("SĐT người đặt là bắt buộc.");
-      if (!recipients.length) addRecipient();
-      return setStep(3);
-    }
-    if (step === 3) {
       if (cart.some((it) => it.recipientUids.length === 0))
         return alert("Còn món chưa gán người nhận.");
       if (recipients.some((r) => !r.name.trim() || !r.address.trim()))
         return alert("Người nhận thiếu tên hoặc địa chỉ.");
-      return setStep(4);
+      return setStep(3);
     }
-    if (step === 4) return submit(); // đặt xong → trang thanh toán riêng
+    if (step === 3) return submit(); // xác nhận → trang thanh toán riêng
   }
 
-  const STEPS = ["Giỏ", "Người đặt", "Người nhận", "Xem lại"];
+  const STEPS = ["Giỏ", "Người đặt & nhận", "Xem lại"];
+  // màn xác nhận của Đặt nhanh (step 5) tính là bước cuối trên thanh tiến trình
+  const activeStep = express && step === 5 ? STEPS.length : Math.floor(step);
 
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-28 shadow-2xl">
@@ -587,8 +591,8 @@ export default function OrderFlow({
       <div className="flex bg-maroon text-cream">
         {STEPS.map((s, i) => {
           const n = i + 1;
-          const active = Math.floor(step) === n;
-          const doneStep = n < Math.floor(step);
+          const active = activeStep === n;
+          const doneStep = n < activeStep;
           return (
             <div
               key={s}
@@ -950,12 +954,15 @@ export default function OrderFlow({
           </section>
         )}
 
-        {/* STEP 2 — NGƯỜI ĐẶT */}
+        {/* STEP 2 — NGƯỜI ĐẶT & NGƯỜI NHẬN (gộp 1 màn) */}
         {!express && step === 2 && (
           <section className="step-in">
             <div className="eyebrow">Bước 2</div>
-            <h2 className="title-heritage mb-4 text-lg">Người đặt</h2>
+            <h2 className="title-heritage mb-4 text-lg">Người đặt &amp; người nhận</h2>
+
+            {/* người đặt — quyết tiền tệ & dùng để tra cứu đơn */}
             <div className="rounded border border-line bg-white p-3.5">
+              <div className="eyebrow">Người đặt · thanh toán</div>
               <Label>Vùng đặt hàng · quyết tiền tệ</Label>
               <select
                 value={buyerRegion}
@@ -965,44 +972,43 @@ export default function OrderFlow({
                 <option value="kr">🇰🇷 Ở Hàn Quốc → thanh toán ₩ KRW</option>
                 <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
               </select>
-              <Label>Họ tên</Label>
-              <Input value={buyerName} onChange={setBuyerName} placeholder="Nguyễn Văn A" />
-              <Label>Số điện thoại · bắt buộc</Label>
-              <Input value={buyerPhone} onChange={setBuyerPhone} placeholder="010-xxxx-xxxx" />
-              <p className="mt-1.5 text-[11px] opacity-65">
-                SĐT dùng để đối soát khách với Pancake &amp; tra cứu đơn về sau.
-              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <Label>Họ tên</Label>
+                  <Input value={buyerName} onChange={setBuyerName} placeholder="Nguyễn Văn A" />
+                </div>
+                <div>
+                  <Label>SĐT · bắt buộc</Label>
+                  <Input value={buyerPhone} onChange={setBuyerPhone} placeholder="010-xxxx-xxxx" />
+                </div>
+              </div>
+              <p className="mt-1.5 text-[11px] opacity-65">SĐT dùng để tra cứu đơn về sau.</p>
+            </div>
+
+            {/* người nhận & chia quà — ngay dưới, cùng một màn */}
+            <div className="mt-4">
+              <div className="eyebrow mb-2">Người nhận &amp; chia quà</div>
+              <RecipientsEditor
+                recipients={recipients}
+                cart={cart}
+                setR={setR}
+                removeRecipient={removeRecipient}
+                addRecipient={addRecipient}
+                assign={assign}
+                setRecipientQty={setRecipientQty}
+                fmt={fmt}
+                flavorNames={flavorNames}
+                suggestedDate={suggestedDate}
+                suggestedDDMM={suggestedDDMM}
+              />
             </div>
           </section>
         )}
 
-        {/* STEP 3 — NGƯỜI NHẬN */}
+        {/* STEP 3 — XEM LẠI */}
         {!express && step === 3 && (
           <section className="step-in">
             <div className="eyebrow">Bước 3</div>
-            <h2 className="title-heritage mb-4 text-lg">Người nhận &amp; chia quà</h2>
-            <RecipientsEditor
-              recipients={recipients}
-              cart={cart}
-              setR={setR}
-              removeRecipient={removeRecipient}
-              addRecipient={addRecipient}
-              assign={assign}
-
-              setRecipientQty={setRecipientQty}
-
-              fmt={fmt}
-              flavorNames={flavorNames}
-              suggestedDate={suggestedDate}
-              suggestedDDMM={suggestedDDMM}
-            />
-          </section>
-        )}
-
-        {/* STEP 4 — XEM LẠI */}
-        {!express && step === 4 && (
-          <section className="step-in">
-            <div className="eyebrow">Bước 4</div>
             <h2 className="title-heritage mb-4 text-lg">Xem lại</h2>
 
             {/* chi tiết hàng + địa chỉ để khách kiểm tra */}
@@ -1248,7 +1254,7 @@ export default function OrderFlow({
               disabled={submitting}
               className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep disabled:opacity-40"
             >
-              {step === 4 ? (submitting ? "Đang tạo…" : "Xác nhận đặt đơn") : "Tiếp"}
+              {step === 3 ? (submitting ? "Đang tạo…" : "Xác nhận đặt đơn") : "Tiếp"}
             </button>
           )}
         </div>
