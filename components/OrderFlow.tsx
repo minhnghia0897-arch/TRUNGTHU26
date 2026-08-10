@@ -83,6 +83,7 @@ export default function OrderFlow({
 }) {
   const [step, setStep] = useState<number>(1);
   const [express, setExpress] = useState<boolean>(!!initial?.express); // đặt nhanh 1 trang (như TikTok)
+  const [multi, setMulti] = useState(false); // trong Đặt nhanh: gửi nhiều người / nhiều địa chỉ
   const [zaloHint, setZaloHint] = useState(false);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
@@ -258,9 +259,10 @@ export default function OrderFlow({
     }
   }, [cart, buyerRegion, buyerName, buyerPhone, recipients, ref]);
 
-  // EXPRESS: luôn có đúng 1 người nhận & gán mọi món cho người đó (checkout 1 trang)
+  // EXPRESS (1 địa chỉ): luôn có đúng 1 người nhận & gán mọi món cho người đó.
+  // Khi bật "nhiều người nhận" (multi) thì không tự gán nữa — khách tự chia quà.
   useEffect(() => {
-    if (!express) return;
+    if (!express || multi) return;
     if (recipients.length === 0) {
       const r = remember.current;
       setRecipients([
@@ -287,7 +289,7 @@ export default function OrderFlow({
       return changed ? next : c;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [express, cart, recipients]);
+  }, [express, multi, cart, recipients]);
 
   // express: form giao hàng ghi đồng thời vào người đặt + người nhận[0] (1 địa chỉ, ít gõ)
   const r0 = recipients[0];
@@ -483,9 +485,15 @@ export default function OrderFlow({
   // express: xác nhận đặt (1 trang)
   function expressSubmit() {
     if (!cart.length) return alert("Chưa có món nào.");
-    if (!buyerName.trim()) return alert("Nhập tên người nhận.");
+    if (!buyerName.trim()) return alert(multi ? "Nhập tên người đặt." : "Nhập tên người nhận.");
     if (!buyerPhone.trim()) return alert("SĐT là bắt buộc.");
-    if (!recipients[0]?.address?.trim()) return alert("Nhập địa chỉ nhận hàng.");
+    if (multi) {
+      if (cart.some((it) => it.recipientUids.length === 0)) return alert("Còn món chưa gán người nhận.");
+      if (recipients.some((r) => !r.name.trim() || !r.address.trim()))
+        return alert("Người nhận thiếu tên hoặc địa chỉ.");
+    } else if (!recipients[0]?.address?.trim()) {
+      return alert("Nhập địa chỉ nhận hàng.");
+    }
     submit();
   }
 
@@ -815,33 +823,82 @@ export default function OrderFlow({
             </div>
 
             {/* thông tin nhận hàng — 1 form, ghi cả người đặt + người nhận */}
-            <div className="mt-3 rounded border border-line bg-white p-3.5">
-              <Label>Vùng giao · tiền tệ</Label>
-              <select value={buyerRegion} onChange={(e) => setExRegion(e.target.value as Region)} className="w-full rounded border border-line bg-white p-2.5 text-sm">
-                <option value="kr">🇰🇷 Ở Hàn → thanh toán ₩ KRW</option>
-                <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
-              </select>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div><Label>Họ tên</Label><Input value={exName} onChange={setExName} placeholder="Nguyễn Văn A" /></div>
-                <div><Label>SĐT · bắt buộc</Label><Input value={exPhone} onChange={setExPhone} placeholder="010-xxxx-xxxx" /></div>
-              </div>
-              <Label>Địa chỉ nhận</Label>
-              <Input value={exAddress} onChange={(v) => r0 && setR(r0.uid, "address", v)} placeholder="Số nhà, đường, quận, thành phố" />
-              <Label>Ngày muốn nhận</Label>
-              <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
-              {suggestedDate && (
-                <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
-                  <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+            {!multi ? (
+              <div className="mt-3 rounded border border-line bg-white p-3.5">
+                <Label>Vùng giao · tiền tệ</Label>
+                <select value={buyerRegion} onChange={(e) => setExRegion(e.target.value as Region)} className="w-full rounded border border-line bg-white p-2.5 text-sm">
+                  <option value="kr">🇰🇷 Ở Hàn → thanh toán ₩ KRW</option>
+                  <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
+                </select>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div><Label>Họ tên</Label><Input value={exName} onChange={setExName} placeholder="Nguyễn Văn A" /></div>
+                  <div><Label>SĐT · bắt buộc</Label><Input value={exPhone} onChange={setExPhone} placeholder="010-xxxx-xxxx" /></div>
+                </div>
+                <Label>Địa chỉ nhận</Label>
+                <Input value={exAddress} onChange={(v) => r0 && setR(r0.uid, "address", v)} placeholder="Số nhà, đường, quận, thành phố" />
+                <Label>Ngày muốn nhận</Label>
+                <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
+                {suggestedDate && (
+                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
+                    <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+                  </button>
+                )}
+                <button onClick={() => setMulti(true)} className="mt-3 block w-full text-center text-[12px] text-gold underline">
+                  Gửi tặng nhiều người / nhiều địa chỉ? →
                 </button>
-              )}
-              <button onClick={() => { setExpress(false); if (recipients.length === 0) addRecipient(); setStep(3); }} className="mt-3 block w-full text-center text-[12px] text-gold underline">
-                Gửi tặng nhiều người / nhiều địa chỉ? →
-              </button>
-            </div>
+              </div>
+            ) : (
+              <>
+                {/* người đặt */}
+                <div className="mt-3 rounded border border-line bg-white p-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="eyebrow">Người đặt · thanh toán</span>
+                    <button
+                      onClick={() => { setMulti(false); setRecipients((rs) => rs.slice(0, 1)); }}
+                      className="text-[11.5px] text-gold underline"
+                    >
+                      ← Chỉ 1 địa chỉ
+                    </button>
+                  </div>
+                  <Label>Vùng đặt · tiền tệ</Label>
+                  <select value={buyerRegion} onChange={(e) => setBuyerRegion(e.target.value as Region)} className="w-full rounded border border-line bg-white p-2.5 text-sm">
+                    <option value="kr">🇰🇷 Ở Hàn → thanh toán ₩ KRW</option>
+                    <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
+                  </select>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div><Label>Họ tên</Label><Input value={buyerName} onChange={setBuyerName} placeholder="Nguyễn Văn A" /></div>
+                    <div><Label>SĐT · bắt buộc</Label><Input value={buyerPhone} onChange={setBuyerPhone} placeholder="010-xxxx-xxxx" /></div>
+                  </div>
+                </div>
+
+                {/* người nhận & chia quà */}
+                <div className="mt-3">
+                  <div className="eyebrow mb-2">Người nhận &amp; chia quà</div>
+                  <RecipientsEditor
+                    recipients={recipients}
+                    cart={cart}
+                    setR={setR}
+                    removeRecipient={removeRecipient}
+                    addRecipient={addRecipient}
+                    assign={assign}
+                    flavorNames={flavorNames}
+                    suggestedDate={suggestedDate}
+                    suggestedDDMM={suggestedDDMM}
+                  />
+                </div>
+              </>
+            )}
 
             {/* tổng */}
             <div className="mt-3 rounded border border-line bg-white p-3.5">
-              <Row k={`Tạm tính (${cart.reduce((n, l) => n + l.qty, 0)} món)`} v={fmt(bill.subtotal)} />
+              <Row
+                k={
+                  multi
+                    ? `Tạm tính (${cart.reduce((n, l) => n + l.qty * Math.max(1, l.recipientUids.length), 0)} phần)`
+                    : `Tạm tính (${cart.reduce((n, l) => n + l.qty, 0)} món)`
+                }
+                v={fmt(bill.subtotal)}
+              />
               <Row k="Phí ship" v={fmt(bill.shipping)} />
               {bill.handling > 0 && <Row k="Handling chéo vùng" v={fmt(bill.handling)} />}
               <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
@@ -884,100 +941,17 @@ export default function OrderFlow({
           <section className="step-in">
             <div className="eyebrow">Bước 3</div>
             <h2 className="title-heritage mb-4 text-lg">Người nhận &amp; chia quà</h2>
-            {recipients.map((r, i) => (
-              <div key={r.uid} className="mb-3 rounded border border-line border-l-[3px] border-l-gold bg-white p-3.5">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">
-                    Người nhận {i + 1}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-sm border border-line bg-cream px-2 py-0.5 text-[10px] uppercase">
-                      {r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}
-                    </span>
-                    <button
-                      onClick={() => removeRecipient(r.uid)}
-                      aria-label={`Xoá người nhận ${i + 1}`}
-                      className="grid h-6 w-6 place-items-center rounded-full border border-line text-maroon/60 hover:border-maroon hover:bg-maroon hover:text-cream"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <Label>Tên</Label>
-                    <Input value={r.name} onChange={(v) => setR(r.uid, "name", v)} />
-                  </div>
-                  <div>
-                    <Label>SĐT</Label>
-                    <Input value={r.phone} onChange={(v) => setR(r.uid, "phone", v)} />
-                  </div>
-                </div>
-                <Label>Địa chỉ</Label>
-                <Input value={r.address} onChange={(v) => setR(r.uid, "address", v)} />
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <Label>Vùng giao</Label>
-                    <select
-                      value={r.region}
-                      onChange={(e) => setR(r.uid, "region", e.target.value)}
-                      className="w-full rounded border border-line bg-white p-2.5 text-sm"
-                    >
-                      <option value="kr">🇰🇷 Hàn Quốc</option>
-                      <option value="vn">🇻🇳 Việt Nam</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label>Ngày muốn nhận</Label>
-                    <input
-                      type="date"
-                      value={r.desiredDate}
-                      onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
-                      className="w-full rounded border border-line bg-white p-2.5 text-sm"
-                    />
-                    {suggestedDate && (
-                      <button
-                        type="button"
-                        onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
-                        className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
-                      >
-                        <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <Label>Gán quà cho người này</Label>
-                <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Cùng một món gán cho nhiều người → mỗi người một phần, tiền tự cộng.</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {cart.map((it) => {
-                    const sel = it.recipientUids.includes(r.uid);
-                    const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
-                    return (
-                      <button
-                        key={it.uid}
-                        onClick={() => assign(it.uid, r.uid)}
-                        className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${sel ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
-                      >
-                        <span className="block font-medium">
-                          {sel ? "✓ " : ""}{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
-                        </span>
-                        {fl && (
-                          <span className={`mt-0.5 block text-[10px] leading-snug ${sel ? "text-cream/80" : "opacity-60"}`}>
-                            {fl}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            <button
-              onClick={addRecipient}
-              className="w-full rounded border border-dashed border-line bg-cream py-3 font-serif text-xs uppercase tracking-wide text-maroon"
-            >
-              + Thêm người nhận
-            </button>
+            <RecipientsEditor
+              recipients={recipients}
+              cart={cart}
+              setR={setR}
+              removeRecipient={removeRecipient}
+              addRecipient={addRecipient}
+              assign={assign}
+              flavorNames={flavorNames}
+              suggestedDate={suggestedDate}
+              suggestedDDMM={suggestedDDMM}
+            />
           </section>
         )}
 
@@ -1283,6 +1257,126 @@ function KV({ k, v }: { k: string; v: string }) {
       <span className="opacity-60">{k}</span>
       <span className="font-medium">{v}</span>
     </div>
+  );
+}
+
+// Khối "Người nhận & chia quà" — dùng chung cho Đặt nhanh (nhiều địa chỉ) & wizard bước 3.
+function RecipientsEditor({
+  recipients,
+  cart,
+  setR,
+  removeRecipient,
+  addRecipient,
+  assign,
+  flavorNames,
+  suggestedDate,
+  suggestedDDMM,
+}: {
+  recipients: Recipient[];
+  cart: CartLine[];
+  setR: (uid: string, k: keyof Recipient, v: string) => void;
+  removeRecipient: (uid: string) => void;
+  addRecipient: () => void;
+  assign: (itemUid: string, rUid: string) => void;
+  flavorNames: (ids?: string[]) => string;
+  suggestedDate: string;
+  suggestedDDMM: string;
+}) {
+  return (
+    <>
+      {recipients.map((r, i) => (
+        <div key={r.uid} className="mb-3 rounded border border-line border-l-[3px] border-l-gold bg-white p-3.5">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">Người nhận {i + 1}</div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-sm border border-line bg-cream px-2 py-0.5 text-[10px] uppercase">
+                {r.region === "kr" ? "🇰🇷 Kho Hàn" : "🇻🇳 Kho VN"}
+              </span>
+              {recipients.length > 1 && (
+                <button
+                  onClick={() => removeRecipient(r.uid)}
+                  aria-label={`Xoá người nhận ${i + 1}`}
+                  className="grid h-6 w-6 place-items-center rounded-full border border-line text-maroon/60 hover:border-maroon hover:bg-maroon hover:text-cream"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label>Tên</Label>
+              <Input value={r.name} onChange={(v) => setR(r.uid, "name", v)} />
+            </div>
+            <div>
+              <Label>SĐT</Label>
+              <Input value={r.phone} onChange={(v) => setR(r.uid, "phone", v)} />
+            </div>
+          </div>
+          <Label>Địa chỉ</Label>
+          <Input value={r.address} onChange={(v) => setR(r.uid, "address", v)} />
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <Label>Vùng giao</Label>
+              <select
+                value={r.region}
+                onChange={(e) => setR(r.uid, "region", e.target.value)}
+                className="w-full rounded border border-line bg-white p-2.5 text-sm"
+              >
+                <option value="kr">🇰🇷 Hàn Quốc</option>
+                <option value="vn">🇻🇳 Việt Nam</option>
+              </select>
+            </div>
+            <div>
+              <Label>Ngày muốn nhận</Label>
+              <input
+                type="date"
+                value={r.desiredDate}
+                onChange={(e) => setR(r.uid, "desiredDate", e.target.value)}
+                className="w-full rounded border border-line bg-white p-2.5 text-sm"
+              />
+              {suggestedDate && (
+                <button
+                  type="button"
+                  onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
+                  className={`mt-1.5 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+                >
+                  <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
+                </button>
+              )}
+            </div>
+          </div>
+          <Label>Gán quà cho người này</Label>
+          <p className="-mt-1 mb-1.5 text-[11px] opacity-60">Cùng một món gán cho nhiều người → mỗi người một phần, tiền tự cộng.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {cart.map((it) => {
+              const sel = it.recipientUids.includes(r.uid);
+              const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
+              return (
+                <button
+                  key={it.uid}
+                  onClick={() => assign(it.uid, r.uid)}
+                  className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${sel ? "border-maroon bg-maroon text-cream" : "border-line bg-white"}`}
+                >
+                  <span className="block font-medium">
+                    {sel ? "✓ " : ""}{it.name}{it.qty > 1 ? ` ×${it.qty}` : ""}
+                  </span>
+                  {fl && (
+                    <span className={`mt-0.5 block text-[10px] leading-snug ${sel ? "text-cream/80" : "opacity-60"}`}>{fl}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={addRecipient}
+        className="w-full rounded border border-dashed border-line bg-cream py-3 font-serif text-xs uppercase tracking-wide text-maroon"
+      >
+        + Thêm người nhận
+      </button>
+    </>
   );
 }
 
