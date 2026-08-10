@@ -19,7 +19,7 @@ import { saveWebOrder } from "@/lib/webOrders";
 import { addDashboardOrder } from "@/lib/dashboardOrders";
 import { findLink, markUsed } from "@/lib/attribution";
 import { normalizePhone } from "@/lib/phone";
-import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc } from "@/components/icons";
+import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc, IconCart } from "@/components/icons";
 
 const CART_KEY = "tr_cart";
 
@@ -895,7 +895,7 @@ export default function OrderFlow({
           <section className="step-in">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="title-heritage text-lg">Đặt nhanh</h2>
-              <button onClick={() => setStep(1)} className="text-[12px] text-gold underline">← Sửa giỏ</button>
+              <button onClick={() => setStep(1)} className="text-[12px] text-gold underline">← Giỏ hàng</button>
             </div>
 
             {/* tóm tắt giỏ gọn */}
@@ -1303,9 +1303,17 @@ export default function OrderFlow({
         </div>
       )}
 
-      {/* navbar EXPRESS — điền thông tin (2-4): giá + Zalo + Đặt hàng */}
+      {/* navbar EXPRESS — điền thông tin (2-4): về giỏ + giá + Zalo + Đặt hàng */}
       {express && step >= 2 && step <= 4 && (
         <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-app items-center gap-2 border-t border-line bg-cream px-3 py-2.5">
+          <button
+            onClick={() => setStep(1)}
+            aria-label="Quay lại giỏ hàng"
+            title="Quay lại giỏ hàng"
+            className="grid h-11 w-11 flex-none place-items-center rounded-lg border border-line text-maroon transition active:scale-95 hover:bg-white"
+          >
+            <IconCart width={17} height={17} />
+          </button>
           <div className="flex-1 leading-tight">
             <span className="text-[10px] uppercase tracking-wide text-maroon/60">Tổng cộng</span>
             <b className="block font-serif text-[17px] text-maroon">{fmt(bill.grand)}</b>
