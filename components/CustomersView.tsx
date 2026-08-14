@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ORDERS, STATUS_COLOR, type OrderRow, type Status } from "@/lib/ordersMock";
-import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
+import { useMemo, useState } from "react";
+import { STATUS_COLOR, type OrderRow, type Status } from "@/lib/ordersMock";
+import OrderDetailModal from "@/components/OrderDetailModal";
+import OrdersStateBanner from "@/components/OrdersStateBanner";
+import { useOrders } from "@/components/useOrders";
 import { applyStock } from "@/lib/stockStore";
+import { rowKrw, type SheetOrder } from "@/lib/orders/orderSchema";
 
-// dùng chung localStorage với bảng Đơn hàng để sửa ở đâu cũng khớp
-const HISTORY_KEY = "tr_order_history";
-const EDITS_KEY = "tr_order_edits";
-
-const FX = 18.5;
-const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn huỷ/trả/hoàn không tính vào tổng chi tiêu
 const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 const digits = (s: string) => s.replace(/\D/g, "");
-/** Mã đơn gốc — nhiều kiện của cùng một đơn dùng chung mã (ghi trong note). */
-const codeOf = (r: OrderRow) => r.note?.match(/TR-\d+/)?.[0] ?? `#${r.id}`;
+/**
+ * Mã đơn gốc — nhiều kiện của cùng một đơn dùng chung mã.
+ * Trước đây phải moi bằng regex từ ghi chú; giờ mã đơn là một cột riêng trên
+ * Sheet nên đọc thẳng, gom đơn theo khách mới chính xác.
+ */
+const codeOf = (r: OrderRow) =>
+  (r as SheetOrder).orderCode || r.note?.match(/TR-[\dA-Z-]+/)?.[0] || `#${r.id}`;
 
 type Group = {
   key: string;
@@ -28,25 +30,16 @@ type Group = {
 };
 
 export default function CustomersView() {
-  const [rows, setRows] = useState<OrderRow[]>(ORDERS);
+  // Cùng nguồn với trang Đơn hàng. Trước đây trang này chỉ ghi vào bản "đã sửa"
+  // mà không ghi lại kho đơn, nên sửa ở đây xong hai trang hiển thị lệch nhau.
+  const store = useOrders();
+  const rows = store.rows;
+  const history = store.history;
+
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [detailId, setDetailId] = useState<number | null>(null);
-  const [history, setHistory] = useState<Record<number, HistoryEntry[]>>({});
 
-  // đọc cùng nguồn với bảng Đơn hàng: đơn mẫu + đơn web/tạo tay + bản đã sửa
-  useEffect(() => {
-    try {
-      const created: OrderRow[] = JSON.parse(localStorage.getItem("tr_order_new") || "[]");
-      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
-      setRows([...created, ...ORDERS].map((r) => edits[r.id] ?? r));
-      setHistory(JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}"));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // sửa đơn ngay tại đây — ghi vào cùng key với bảng Đơn hàng (kể cả trừ/hoàn kho)
   const saveOrder = (input: OrderRow, changes: string[]) => {
     let updated = input;
     if (input.consume) {
@@ -56,29 +49,7 @@ export default function CustomersView() {
         updated = { ...input, stockApplied: should };
       }
     }
-    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
-    try {
-      const edits = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
-      localStorage.setItem(EDITS_KEY, JSON.stringify({ ...edits, [updated.id]: updated }));
-    } catch {
-      /* ignore */
-    }
-    setHistory((h) => {
-      const n = new Date();
-      const p = (x: number) => String(x).padStart(2, "0");
-      const entry: HistoryEntry = {
-        at: `${p(n.getDate())}/${p(n.getMonth() + 1)}/${n.getFullYear()} ${p(n.getHours())}:${p(n.getMinutes())}`,
-        by: "Bạn",
-        changes,
-      };
-      const next = { ...h, [updated.id]: [entry, ...(h[updated.id] ?? [])] };
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    void store.saveOrder(updated, changes);
   };
 
   const customers = useMemo(() => {
@@ -91,7 +62,7 @@ export default function CustomersView() {
       g.rows.push(r);
       const code = codeOf(r);
       if (!g.orders.includes(code)) g.orders.push(code);
-      if (!RELEASED.has(r.status)) g.spentKrw += toKrw(r.prepaid + r.cod, r.region);
+      if (!RELEASED.has(r.status)) g.spentKrw += rowKrw(r.prepaid + r.cod, r);
       m.set(key, g);
     }
     const list = [...m.values()];
@@ -114,6 +85,8 @@ export default function CustomersView() {
           className="ml-auto w-56 rounded-lg border border-slate-200 px-3 py-1.5 text-[13px]"
         />
       </header>
+
+      <OrdersStateBanner store={store} />
 
       <div className="p-5">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -200,7 +173,7 @@ export default function CustomersView() {
                                     </span>
                                   </td>
                                   <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-slate-800">
-                                    {krw(toKrw(r.prepaid + r.cod, r.region))}
+                                    {krw(rowKrw(r.prepaid + r.cod, r))}
                                   </td>
                                 </tr>
                               ))}
@@ -227,8 +200,9 @@ export default function CustomersView() {
           </table>
         </div>
         <p className="mt-3 text-[12px] text-slate-400">
-          Khách gom theo SĐT (Pancake dedupe theo SĐT). Bấm vào khách để xem toàn bộ đơn đã đặt, bấm tiếp vào một đơn
-          để mở chi tiết. Đơn huỷ/trả/hoàn không tính vào tổng chi tiêu. Quy đổi ₩ theo fx {FX}.
+          Khách gom theo SĐT. Bấm vào khách để xem toàn bộ đơn đã đặt, bấm tiếp vào một đơn để mở
+          chi tiết. Đơn huỷ/trả/hoàn không tính vào tổng chi tiêu. Quy đổi ₩ theo tỉ giá đã chốt
+          lúc tạo từng đơn.
         </p>
       </div>
 

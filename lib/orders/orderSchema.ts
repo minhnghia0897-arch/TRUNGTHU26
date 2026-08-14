@@ -106,6 +106,22 @@ export function idFromKey(key: string): number {
   return (h >>> 0) % 1_000_000_000;
 }
 
+/**
+ * Tiền tệ của các cột tiền trên một dòng.
+ *
+ * QUAN TRỌNG: đừng suy tiền tệ từ `region` nữa — `region` là KHO GIAO. Người đặt
+ * ở Hàn tặng quà về Việt Nam thì kho là VN nhưng tiền vẫn là ₩. Đơn mẫu cũ chưa
+ * có cột này nên mới phải suy tạm từ kho.
+ */
+export const currencyOfRow = (r: OrderRow): Currency =>
+  (r as SheetOrder).currency ?? (r.region === "vn" ? "vnd" : "krw");
+
+export const fxOfRow = (r: OrderRow): number => (r as SheetOrder).fx || 18.5;
+
+/** Quy một số tiền trên dòng về KRW để cộng gộp nhiều vùng. */
+export const rowKrw = (v: number, r: OrderRow): number =>
+  currencyOfRow(r) === "krw" ? v : v / fxOfRow(r);
+
 /** Khoá dòng: bền, không tái sử dụng, không mang nghĩa nghiệp vụ. */
 export function newRowKey(orderCode: string, parcelIndex: number): string {
   return `${orderCode}-${parcelIndex}`;

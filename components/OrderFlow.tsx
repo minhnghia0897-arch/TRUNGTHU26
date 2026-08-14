@@ -453,6 +453,7 @@ export default function OrderFlow({
             address: r.address,
             region: r.region,
             desiredDate: r.desiredDate,
+            note: r.note,
           })),
           lines: expandedLines,
         }),
