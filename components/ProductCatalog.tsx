@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Badge, Box, Combo, Flavor, Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine } from "@/lib/pricing";
@@ -241,27 +241,27 @@ export default function ProductCatalog({
   const [cartCount, setCartCount] = useState(0);
   const [added, setAdded] = useState<string>(""); // uid món vừa thêm → đổi nhãn nút
 
-  // ảnh sản phẩm từ Dashboard (tr_product_edits) — key box:/combo:/flavor:, tối đa 4 ảnh
-  const [imgs, setImgs] = useState<Record<string, string[]>>({});
+  // key `box:<id>` / `combo:<id>` / `flavor:<id>` → danh sách URL ảnh
+  const imgsByKey = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    const put = (key: string, images?: string[]) => {
+      const list = (images ?? []).filter(Boolean).slice(0, MAX_IMAGES);
+      if (list.length) m[key] = list;
+    };
+    boxes.forEach((b) => put(`box:${b.id}`, b.images));
+    combos.forEach((c) => put(`combo:${c.id}`, c.images));
+    flavors.forEach((f) => put(`flavor:${f.id}`, f.images));
+    return m;
+  }, [boxes, combos, flavors]);
+
+  // Ảnh sản phẩm lấy thẳng từ danh mục do máy chủ truyền xuống.
+  // Trước đây đọc localStorage "tr_product_edits" nên ảnh chỉ hiện trên máy đã
+  // upload — khách vào web thấy khung trắng. Giờ ảnh nằm trên Supabase Storage.
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
-  const imagesOf = (key: string) => imgs[key] ?? [];
+  const imagesOf = (key: string) => imgsByKey[key] ?? [];
 
   useEffect(() => {
     setCartCount(countCart(readCart().cart));
-    try {
-      const ov = JSON.parse(localStorage.getItem("tr_product_edits") || "{}") as Record<
-        string,
-        { images?: string[]; image?: string }
-      >;
-      const m: Record<string, string[]> = {};
-      for (const [k, v] of Object.entries(ov)) {
-        const list = (v?.images?.length ? v.images : v?.image ? [v.image] : []).slice(0, MAX_IMAGES);
-        if (list.length) m[k] = list;
-      }
-      setImgs(m);
-    } catch {
-      /* ignore */
-    }
   }, []);
 
   /** Thêm vào giỏ ngay tại trang: trùng món thì cộng dồn số lượng, không chuyển trang. */

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Box, Flavor, Combo } from "@/lib/types";
 import { boxPrice } from "@/lib/pricing";
 import { ALL_STOCK } from "@/lib/inventory";
 import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
-const EDITS_KEY = "tr_product_edits";
-const NEW_KEY = "tr_product_new";
+const API_PRODUCTS = "/api/dashboard/products";
+const API_UPLOAD = "/api/dashboard/upload";
 
 // mặt hàng kho — liên kết theo KEY (mã SKU), tên hiển thị lấy live từ kho
 type InvItem = { key: string; name: string; qty: number; threshold: number; status: "ok" | "low" | "out" };
@@ -63,6 +64,14 @@ interface Product {
   flavorIds?: string[];
 }
 
+/** Override (kiểu của màn hình) → thân yêu cầu API. Bỏ 2 trường cũ image/stock. */
+function toPatch(o: Override) {
+  const { image: _image, stock: _stock, ...rest } = o;
+  void _image;
+  void _stock;
+  return rest;
+}
+
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 const vnd = (v: number) => Math.round(v).toLocaleString("vi-VN") + "đ";
 
@@ -70,13 +79,20 @@ export default function ProductsAdmin({
   boxes,
   flavors,
   combos,
+  connected = false,
 }: {
   boxes: Box[];
   flavors: Flavor[];
   combos: Combo[];
+  /** Đã nối cơ sở dữ liệu chưa. Chưa nối thì mọi thay đổi không lưu được. */
+  connected?: boolean;
 }) {
+  const router = useRouter();
+  // Lớp phủ tạm để màn hình phản hồi ngay khi bấm lưu; nguồn thật là database,
+  // lưu xong gọi router.refresh() để đọc lại.
   const [ov, setOv] = useState<Record<string, Override>>({});
-  const [custom, setCustom] = useState<Product[]>([]);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [editKey, setEditKey] = useState<string | null>(null);
   const [chooser, setChooser] = useState(false);
   const [draft, setDraft] = useState<Product | null>(null);
@@ -90,18 +106,6 @@ export default function ProductsAdmin({
   const [items, setItems] = useState<CustomItem[]>([]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(EDITS_KEY);
-      if (raw) setOv(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    try {
-      const rawNew = localStorage.getItem(NEW_KEY);
-      if (rawNew) setCustom(JSON.parse(rawNew));
-    } catch {
-      /* ignore */
-    }
     setStockState(getStock());
     setNames(getNames());
     setItems(getItems());
@@ -182,50 +186,63 @@ export default function ProductsAdmin({
   const removedKeys = new Set(Object.entries(ov).filter(([, o]) => o.removed).map(([k]) => k));
   const visibleBase = mergedBase.filter((p) => !removedKeys.has(p.key));
   const trashBase = mergedBase.filter((p) => removedKeys.has(p.key));
-  // sản phẩm tự thêm hiển thị trên cùng
-  const merged: Product[] = showTrash ? trashBase : [...custom, ...visibleBase];
+  const merged: Product[] = showTrash ? trashBase : visibleBase;
 
+  /** Lưu một sản phẩm: hiện ngay trên màn, rồi ghi xuống database. */
   const save = (key: string, patch: Override) => {
-    setOv((cur) => {
-      const next = { ...cur, [key]: { ...(cur[key] ?? {}), ...patch } };
+    setOv((cur) => ({ ...cur, [key]: { ...(cur[key] ?? {}), ...patch } }));
+    if (!connected) {
+      setSaveError(
+        "Chưa nối cơ sở dữ liệu nên thay đổi này KHÔNG được lưu — tải lại trang là mất. Xem docs/supabase.md.",
+      );
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    void (async () => {
       try {
-        localStorage.setItem(EDITS_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
+        const res = await fetch(API_PRODUCTS, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key, patch: toPatch(patch) }),
+        });
+        const data = (await res.json()) as { ok: boolean; error?: string };
+        if (!data.ok) throw new Error(data.error ?? "Không lưu được sản phẩm.");
+        router.refresh();
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "Không lưu được sản phẩm.");
+      } finally {
+        setSaving(false);
       }
-      return next;
-    });
+    })();
   };
 
-  const persistCustom = (next: Product[]) => {
-    setCustom(next);
+  /** Tạo sản phẩm mới trong database rồi tải lại danh sách. */
+  const createNew = async (type: Product["type"], patch: Override) => {
+    if (!connected) {
+      setSaveError("Chưa nối cơ sở dữ liệu nên chưa tạo được sản phẩm. Xem docs/supabase.md.");
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
     try {
-      localStorage.setItem(NEW_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
+      const kind = type === "Hộp" ? "box" : type === "Combo" ? "combo" : "flavor";
+      const res = await fetch(API_PRODUCTS, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind, patch: toPatch(patch) }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Không tạo được sản phẩm.");
+      router.refresh();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Không tạo được sản phẩm.");
+    } finally {
+      setSaving(false);
     }
   };
 
   // gộp Override vào một Product đầy đủ (dùng cho sản phẩm tự thêm)
-  const applyOverride = (p: Product, o: Override): Product => ({
-    ...p,
-    name: o.name ?? p.name,
-    code: o.code ?? p.code,
-    category: o.category ?? p.category,
-    images: o.images ?? (o.image ? [o.image] : p.images),
-    cost: o.cost ?? p.cost,
-    priceVn: o.priceVn ?? p.priceVn,
-    priceKr: o.priceKr ?? p.priceKr,
-    discount: o.discount ?? p.discount,
-    stockKey: o.stockKey,
-    allowNegative: o.allowNegative,
-    note: o.note,
-    supplyLink: o.supplyLink,
-    variants: o.variants,
-    active: o.active ?? p.active,
-    flavorIds: o.flavorIds ?? p.flavorIds,
-  });
-
   const newProduct = (type: Product["type"]): Product => ({
     key: `custom:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     type,
@@ -238,26 +255,19 @@ export default function ProductsAdmin({
 
   const handleSave = (patch: Override) => {
     if (draft) {
-      persistCustom([applyOverride(draft, patch), ...custom]);
+      void createNew(draft.type, patch);
       setDraft(null);
-    } else if (editKey?.startsWith("custom:")) {
-      persistCustom(custom.map((c) => (c.key === editKey ? applyOverride(c, patch) : c)));
-      setEditKey(null);
     } else if (editKey) {
       save(editKey, patch);
       setEditKey(null);
     }
   };
 
-  const deleteCustom = (key: string) => {
-    persistCustom(custom.filter((c) => c.key !== key));
-    setEditKey(null);
-  };
-
-  // xoá/khôi phục sản phẩm bất kỳ (custom → xoá hẳn; gốc → cho vào thùng rác)
+  // Xoá = cho vào thùng rác, còn khôi phục được. Không xoá hẳn khỏi database vì
+  // sản phẩm có thể đang được tham chiếu trong các đơn cũ.
   const removeAny = (key: string) => {
-    if (key.startsWith("custom:")) deleteCustom(key);
-    else { save(key, { removed: true }); setEditKey(null); }
+    save(key, { removed: true });
+    setEditKey(null);
   };
   const restore = (key: string) => save(key, { removed: false });
 
@@ -290,6 +300,23 @@ export default function ProductsAdmin({
         )}
         <a href="/san-pham" className="text-[13px] font-medium text-blue-600 hover:underline">Xem trang bán →</a>
       </header>
+
+      {!connected && (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-[12px] text-amber-800">
+          Chế độ xem thử — chưa nối cơ sở dữ liệu, mọi thay đổi ở đây <b>không được lưu</b> và
+          khách cũng không thấy. Xem <code>docs/supabase.md</code> để cắm biến môi trường.
+        </div>
+      )}
+      {saveError && (
+        <div className="border-b border-rose-200 bg-rose-50 px-5 py-2 text-[12px] text-rose-700">
+          {saveError}
+        </div>
+      )}
+      {saving && (
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-2 text-[12px] text-slate-500">
+          Đang lưu…
+        </div>
+      )}
 
       <div className="p-5">
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -332,7 +359,6 @@ export default function ProductsAdmin({
                     <td className="px-4 py-2 font-mono text-[12px] text-slate-500">{p.code || "—"}</td>
                     <td className="px-4 py-2 font-medium text-slate-800">
                       {p.name}
-                      {p.key.startsWith("custom:") && <span className="ml-1.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Tự thêm</span>}
                     </td>
                     <td className="px-4 py-2 text-slate-500">{p.type}{p.premium ? " · Premium" : ""}</td>
                     <td className="px-4 py-2 text-slate-500">{p.category || "—"}</td>
@@ -483,13 +509,34 @@ function EditModal({
   const hasSet = product.type === "Hộp" || product.type === "Combo";
   const MAX = 4;
 
-  const pickFiles = (files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).slice(0, MAX).forEach((f) => {
-      const rd = new FileReader();
-      rd.onload = () => setImages((cur) => (cur.length >= MAX ? cur : [...cur, String(rd.result)]));
-      rd.readAsDataURL(f);
-    });
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  /**
+   * Đẩy ảnh lên Supabase Storage rồi lưu URL.
+   * Bản cũ nhúng ảnh dạng base64 vào localStorage: khách không thấy ảnh, và vài
+   * sản phẩm là đầy bộ nhớ trình duyệt rồi mất sạch.
+   */
+  const pickFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = MAX - images.length;
+    if (room <= 0) return;
+
+    const form = new FormData();
+    Array.from(files).slice(0, room).forEach((f) => form.append("file", f));
+
+    setUploading(true);
+    setUploadError("");
+    try {
+      const res = await fetch(API_UPLOAD, { method: "POST", body: form });
+      const data = (await res.json()) as { ok: boolean; urls?: string[]; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Không tải được ảnh lên.");
+      setImages((cur) => [...cur, ...(data.urls ?? [])].slice(0, MAX));
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Không tải được ảnh lên.");
+    } finally {
+      setUploading(false);
+    }
   };
   const addUrl = () => {
     const u = url.trim();
@@ -567,13 +614,19 @@ function EditModal({
               {images.length < MAX && (
                 <button
                   onClick={() => fileRef.current?.click()}
-                  className="grid h-16 w-16 place-items-center rounded-lg border-2 border-dashed border-slate-300 text-[11px] text-slate-400 hover:border-blue-400 hover:text-blue-500"
+                  disabled={uploading}
+                  className="grid h-16 w-16 place-items-center rounded-lg border-2 border-dashed border-slate-300 text-[11px] text-slate-400 hover:border-blue-400 hover:text-blue-500 disabled:opacity-50"
                 >
-                  + Ảnh
+                  {uploading ? "Đang tải…" : "+ Ảnh"}
                 </button>
               )}
             </div>
-            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => pickFiles(e.target.files)} />
+            {uploadError && (
+              <p className="mt-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-700">
+                {uploadError}
+              </p>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void pickFiles(e.target.files); e.target.value = ""; }} />
             {images.length < MAX && (
               <div className="mt-2 flex gap-2">
                 <input value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addUrl()} placeholder="hoặc dán URL ảnh rồi Enter" className={inp} />

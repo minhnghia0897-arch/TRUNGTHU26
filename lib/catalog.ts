@@ -1,7 +1,9 @@
 import { getPublicClient } from "./supabase/server";
 import type { Box, Flavor, Combo, Warehouse } from "./types";
 
-// Fallback seed (khớp 0002_seed.sql) khi Supabase chưa cấu hình — để dev chạy được ngay.
+// Seed dự phòng (khớp 0002_seed.sql) CHỈ dùng khi Supabase chưa cấu hình, để chạy
+// thử ở máy nhà. Đã nối database mà lỗi thì phải ném lỗi, tuyệt đối không lặng lẽ
+// trả hàng mẫu — không thì anh xoá hết sản phẩm mà web vẫn hiện 2 hộp cũ như thật.
 const FALLBACK_BOXES: Box[] = [
   { id: "seed-box6", name: "Hộp gấm 6 vị", description: "Vỏ hộp gấm đỏ dập nổi hoa văn gold, 6 ô — anh tự chọn từng vị. Quà biếu sang trọng.", weight: 150, slots: 6, price_vn: 480000, price_kr: 48000, allowed_flavor_weight: 150, specs: { material: "gấm gold", pieces: "6 bánh 150g" }, badge: "best_seller", active: true },
   { id: "seed-set", name: "Hộp Đoàn Viên 4 ô", description: "Hộp 4 ô gọn nhẹ, tự chọn vị, hợp ăn nhà hoặc biếu thân mật.", weight: 150, slots: 4, price_vn: 390000, price_kr: 39000, allowed_flavor_weight: 150, specs: { material: "giấy mỹ thuật", pieces: "4 bánh 150g" }, badge: "must_try", active: true },
@@ -23,25 +25,30 @@ const FALLBACK_COMBOS: Combo[] = [
 export async function getBoxes(): Promise<Box[]> {
   const sb = getPublicClient();
   if (!sb) return FALLBACK_BOXES;
-  const { data, error } = await sb.from("box").select("*").eq("active", true);
-  if (error || !data?.length) return FALLBACK_BOXES;
-  return data as Box[];
+  const { data, error } = await sb.from("box").select("*").eq("active", true).eq("removed", false);
+  if (error) throw new Error(`Không đọc được danh mục hộp: ${error.message}`);
+  return (data ?? []) as Box[];
 }
 
 export async function getFlavors(): Promise<Flavor[]> {
   const sb = getPublicClient();
   if (!sb) return FALLBACK_FLAVORS;
-  const { data, error } = await sb.from("flavor").select("*").eq("active", true).order("sort");
-  if (error || !data?.length) return FALLBACK_FLAVORS;
-  return data as Flavor[];
+  const { data, error } = await sb
+    .from("flavor")
+    .select("*")
+    .eq("active", true)
+    .eq("removed", false)
+    .order("sort");
+  if (error) throw new Error(`Không đọc được danh mục vị: ${error.message}`);
+  return (data ?? []) as Flavor[];
 }
 
 export async function getCombos(): Promise<Combo[]> {
   const sb = getPublicClient();
   if (!sb) return FALLBACK_COMBOS;
-  const { data, error } = await sb.from("combo").select("*").eq("active", true);
-  if (error || !data?.length) return FALLBACK_COMBOS;
-  return data as Combo[];
+  const { data, error } = await sb.from("combo").select("*").eq("active", true).eq("removed", false);
+  if (error) throw new Error(`Không đọc được danh mục combo: ${error.message}`);
+  return (data ?? []) as Combo[];
 }
 
 const FALLBACK_WAREHOUSES: Warehouse[] = [

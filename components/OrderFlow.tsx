@@ -116,25 +116,10 @@ export default function OrderFlow({
   const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0];
   const fmt = (v: number) => formatMoney(v, buyerRegion);
 
-  // ảnh sản phẩm lấy từ Dashboard (localStorage tr_product_edits) — key box:<id> / flavor:<id>
-  const [imgs, setImgs] = useState<Record<string, string>>({});
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tr_product_edits");
-      if (!raw) return;
-      const ov = JSON.parse(raw) as Record<string, { images?: string[]; image?: string }>;
-      const m: Record<string, string> = {};
-      for (const [k, v] of Object.entries(ov)) {
-        const first = v?.images?.[0] ?? v?.image;
-        if (first) m[k] = first;
-      }
-      setImgs(m);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const boxImg = (id: string) => imgs[`box:${id}`];
-  const flavorImg = (id: string) => imgs[`flavor:${id}`];
+  // Ảnh bìa lấy thẳng từ danh mục máy chủ truyền xuống. Bản cũ đọc localStorage
+  // "tr_product_edits" nên ảnh chỉ hiện trên máy đã upload — khách thấy trống.
+  const boxImg = (id: string) => boxes.find((b) => b.id === id)?.images?.[0];
+  const flavorImg = (id: string) => flavors.find((f) => f.id === id)?.images?.[0];
 
   // ngày gợi ý "trước Trung Thu 1 tuần" — tính ở client để không lệch SSR
   const [suggestedDate, setSuggestedDate] = useState("");
