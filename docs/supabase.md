@@ -78,6 +78,11 @@ Theo `CLAUDE.md` §4.3:
    **vùng người đặt**, không theo kho giao.
 5. Đổi trạng thái một kiện → tải lại trang → trạng thái còn nguyên. Trang *Khách
    hàng* và *Thu chi* hiện cùng số liệu.
+6. Vào `/dashboard/san-pham`, mở một hộp, **tải lên 4 ảnh** và sửa giá → mở
+   `/san-pham` bằng **cửa sổ ẩn danh** → phải thấy đủ ảnh và giá mới. Trước đây
+   ảnh chỉ nằm trên máy đã upload nên khách thấy khung trắng.
+7. Vào `/tra-cuu` nhập SĐT vừa đặt, **ở máy khác** → phải ra đúng đơn kèm tiến độ
+   từng kiện.
 
 ---
 
