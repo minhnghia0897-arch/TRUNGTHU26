@@ -25,7 +25,9 @@ import {
 } from "@/components/icons";
 import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
 import CreateOrderModal from "@/components/CreateOrderModal";
+import ExportButton from "@/components/ExportButton";
 import { applyStock } from "@/lib/stockStore";
+import { ordersToSheets, exportFileName } from "@/lib/ordersExport";
 
 const HISTORY_KEY = "tr_order_history";
 const EDITS_KEY = "tr_order_edits";
@@ -38,6 +40,12 @@ type Cur = "krw" | "vnd";
 type SourceFilter = "all" | OrderSource;
 
 const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
+
+const SOURCE_LABEL: Record<OrderSource, string> = {
+  web: "Online",
+  facebook: "Facebook",
+  pos: "Tại quầy",
+};
 
 function SourceIcon({ s }: { s: OrderSource }) {
   if (s === "facebook") return <IconFacebook className="text-[#1877F2]" width={15} height={15} />;
@@ -162,6 +170,20 @@ export default function OrdersTable() {
   }, [baseRows]);
 
   const list = status === "all" ? baseRows : baseRows.filter((r) => r.status === status);
+
+  // Xuất Excel: đang tick dòng nào thì xuất đúng những dòng đó, không thì xuất
+  // trọn kết quả đang lọc (không chỉ trang hiện tại).
+  const exportRows = selected.size ? rows.filter((r) => selected.has(r.id)) : list;
+  const exportNote =
+    [
+      selected.size ? `Đang chọn ${selected.size} đơn` : null,
+      source === "all" ? null : `Nguồn: ${SOURCE_LABEL[source]}`,
+      warehouse === "all" ? null : `Kho: ${warehouse === "vn" ? "VN" : "Hàn"}`,
+      status === "all" ? null : `Trạng thái: ${status}`,
+      q.trim() ? `Tìm: "${q.trim()}"` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Tất cả đơn";
 
   // phân trang
   const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
@@ -295,6 +317,13 @@ export default function OrdersTable() {
           <option value="krw">₩ KRW</option>
           <option value="vnd">đ VND</option>
         </select>
+        <ExportButton
+          count={exportRows.length}
+          build={() => ({
+            sheets: ordersToSheets(exportRows, { cur, fx: FX, filterNote: exportNote }),
+            fileName: exportFileName(),
+          })}
+        />
       </div>
 
       {/* source tabs */}

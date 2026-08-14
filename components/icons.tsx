@@ -200,6 +200,30 @@ export const IconPlus = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const IconDownload = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <path d="M12 3v12" />
+    <path d="m7 11 5 5 5-5" />
+    <path d="M4 20h16" />
+  </svg>
+);
+
+export const IconSheet = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}>
+    <rect x="4" y="3" width="16" height="18" rx="2" />
+    <path d="M4 9h16M4 15h16M10 9v12" />
+  </svg>
+);
+
+/** Logo Google Drive (đa màu — không dùng currentColor). */
+export const IconDrive = (p: SVGProps<SVGSVGElement>) => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" {...p}>
+    <path d="M8.6 2.5h6.8l6.8 11.8h-6.8L8.6 2.5Z" fill="#FFCF63" />
+    <path d="M1.8 14.3 8.6 2.5l3.4 5.9-6.8 11.8-3.4-5.9Z" fill="#11A861" />
+    <path d="M5.2 20.2h13.6l3.4-5.9H8.6l-3.4 5.9Z" fill="#3777E3" />
+  </svg>
+);
+
 export const IconPanelLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}>
     <rect x="3" y="4" width="18" height="16" rx="2" />
