@@ -61,8 +61,8 @@ const MENU: { label: Status | "Tạo trùng lặp"; Icon: typeof IconTruck; dang
 ];
 
 export default function OrdersTable() {
-  // Nguồn đơn dùng chung với trang Khách hàng / Thu chi. Đã nối Google Sheet thì
-  // mọi thao tác đi thẳng lên Sheet; chưa nối thì chạy đơn mẫu để xem thử.
+  // Nguồn đơn dùng chung với trang Khách hàng / Thu chi. Đã nối cơ sở dữ liệu thì
+  // mọi thao tác đi thẳng vào database; chưa nối thì chạy đơn mẫu để xem thử.
   const store = useOrders();
   const rows = store.rows;
   const history = store.history;
@@ -81,7 +81,7 @@ export default function OrdersTable() {
 
   // Trừ/hoàn kho theo trạng thái đơn. Đơn "sống" (chưa huỷ/hoàn/trả) → trừ kho;
   // chuyển sang huỷ/hoàn/trả → hoàn kho lại. Idempotent qua cờ stockApplied.
-  // Tồn kho vẫn nằm trên máy này — xem ghi chú ở docs/google-sheet.md.
+  // Tồn kho vẫn nằm trên máy này — xem ghi chú ở docs/supabase.md.
   const reconcileStock = (order: OrderRow): OrderRow => {
     if (!order.consume) return order;
     const should = !RELEASED.has(order.status);

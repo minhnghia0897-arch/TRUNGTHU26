@@ -1,39 +1,22 @@
-import {
-  a1,
-  appendValues,
-  batchGetValues,
-  batchUpdateValues,
-  colName,
-  ensureTab,
-  getValues,
-  isSheetsConfigured,
-  type Cell,
-} from "@/lib/google/sheets";
-import {
-  COLUMNS,
-  HISTORY_COLUMNS,
-  TAB_HISTORY,
-  TAB_ORDERS,
-  buildHeaderMap,
-  displayTime,
-  newRowKey,
-  orderToCells,
-  rowToOrder,
-  type HeaderMap,
-  type SheetOrder,
-} from "./orderSchema";
+import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { ORDERS } from "@/lib/ordersMock";
+import {
+  SHIPMENT_SELECT,
+  rowToOrder,
+  type ShipmentRow,
+  type StoredOrder,
+} from "./orderSchema";
 
 // ============================================================================
-// Kho đơn đặt trên Google Sheet — module DUY NHẤT mà app nói chuyện cùng.
-// CHỈ CHẠY Ở SERVER.
+// Kho đơn trên Supabase — module DUY NHẤT mà app nói chuyện cùng.
+// CHỈ CHẠY Ở SERVER (dùng service role, bỏ qua RLS theo §4.3).
 //
 // Nguyên tắc quan trọng: chỉ lùi về dữ liệu mẫu khi CHƯA CẤU HÌNH.
-// Nếu đã cấu hình mà Sheet lỗi thì phải BÁO LỖI — tuyệt đối không hiện 18 đơn
-// mẫu trông như thật, vì anh sẽ tưởng không có đơn nào và bỏ sót khách.
+// Nếu đã cấu hình mà DB lỗi thì phải BÁO LỖI — tuyệt đối không hiện 18 đơn mẫu
+// trông như thật, vì anh sẽ tưởng không có khách nào đặt và bỏ sót đơn.
 // ============================================================================
 
-export const isOrderStoreConfigured = () => isSheetsConfigured();
+export const isOrderStoreConfigured = () => isServiceRoleConfigured;
 
 export interface HistoryRow {
   at: string;
@@ -44,218 +27,329 @@ export interface HistoryRow {
 }
 
 export interface OrderStoreData {
-  rows: SheetOrder[];
+  rows: StoredOrder[];
   history: HistoryRow[];
-  source: "sheet" | "seed";
+  source: "db" | "seed";
 }
 
-// ---------------------------------------------------------------- ensureTabs
-// Chạy một lần cho mỗi instance server. Giữ promise để nhiều request đồng thời
-// không cùng tạo tab.
-let tabsReady: Promise<void> | null = null;
-
-function ensureTabs(): Promise<void> {
-  if (!tabsReady) {
-    tabsReady = (async () => {
-      await ensureTab(TAB_ORDERS, [...COLUMNS]);
-      await ensureTab(TAB_HISTORY, [...HISTORY_COLUMNS]);
-    })().catch((e) => {
-      tabsReady = null; // lỗi thì lần sau thử lại
-      throw e;
-    });
-  }
-  return tabsReady;
-}
-
-const ORDERS_RANGE = a1(TAB_ORDERS, `A:${colName(COLUMNS.length + 10)}`);
-const HISTORY_RANGE = a1(TAB_HISTORY, "A:E");
-
-/** Đọc tiêu đề + toàn bộ dòng. Trả về map cột để dùng lại khi ghi. */
-async function readAll(): Promise<{ map: HeaderMap; width: number; rows: SheetOrder[] }> {
-  const [values] = await batchGetValues([ORDERS_RANGE]);
-  if (!values.length) return { map: buildHeaderMap([...COLUMNS]), width: COLUMNS.length, rows: [] };
-
-  const header = values[0] ?? [];
-  const map = buildHeaderMap(header);
-  const width = Math.max(header.length, COLUMNS.length);
-
-  const rows = values
-    .slice(1)
-    .map((cells) => rowToOrder(map, cells))
-    .filter((o): o is SheetOrder => o !== null);
-
-  return { map, width, rows };
-}
+const fail = (e: { message?: string } | null, what: string): never => {
+  throw new Error(`${what}: ${e?.message ?? "lỗi không rõ"}`);
+};
 
 // ------------------------------------------------------------------ listOrders
 export async function listOrders(): Promise<OrderStoreData> {
   if (!isOrderStoreConfigured()) {
-    // Chưa nối Sheet → dữ liệu mẫu để xem giao diện. KHÔNG phải trạng thái lỗi.
-    return { rows: ORDERS as SheetOrder[], history: [], source: "seed" };
+    // Chưa nối DB → dữ liệu mẫu để xem giao diện. KHÔNG phải trạng thái lỗi.
+    return { rows: ORDERS as StoredOrder[], history: [], source: "seed" };
   }
 
-  await ensureTabs();
-  const [orderValues, historyValues] = await batchGetValues([ORDERS_RANGE, HISTORY_RANGE]);
+  const sb = getServiceClient();
 
-  const header = orderValues[0] ?? [];
-  const map = buildHeaderMap(header.length ? header : [...COLUMNS]);
-  const rows = orderValues
-    .slice(1)
-    .map((cells) => rowToOrder(map, cells))
-    .filter((o): o is SheetOrder => o !== null)
-    .filter((o) => !o.voided)
-    .reverse(); // đơn mới nhất lên đầu, giống bảng đang hiển thị
+  const { data, error } = await sb
+    .from("shipment")
+    .select(SHIPMENT_SELECT)
+    .eq("voided", false)
+    .limit(2000);
+  if (error) fail(error, "Không đọc được đơn hàng");
 
-  const history: HistoryRow[] = historyValues.slice(1).flatMap((c) => {
-    const at = String(c[0] ?? "").trim();
-    const rowKey = String(c[1] ?? "").trim();
-    if (!rowKey) return [];
-    return [
-      {
-        at,
-        rowKey,
-        orderCode: String(c[2] ?? "").trim(),
-        by: String(c[3] ?? "").trim() || "Hệ thống",
-        changes: String(c[4] ?? "")
-          .split(" · ")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      },
-    ];
+  const rows = ((data ?? []) as unknown as ShipmentRow[])
+    .map(rowToOrder)
+    // đơn mới nhất lên đầu; cùng một đơn thì kiện 1 trước kiện 2
+    .sort((a, b) =>
+      a.createdAtIso === b.createdAtIso
+        ? a.parcelIndex - b.parcelIndex
+        : b.createdAtIso.localeCompare(a.createdAtIso),
+    );
+
+  const history = await listHistory(rows);
+  return { rows, history, source: "db" };
+}
+
+/** Nhật ký thao tác của các kiện đang hiển thị. */
+async function listHistory(rows: StoredOrder[]): Promise<HistoryRow[]> {
+  if (!rows.length) return [];
+  const sb = getServiceClient();
+  const codeOf = new Map(rows.map((r) => [r.rowKey, r.orderCode]));
+
+  const { data, error } = await sb
+    .from("order_history")
+    .select("shipment_id, at, actor, changes")
+    .in("shipment_id", rows.map((r) => r.rowKey))
+    .order("at", { ascending: false })
+    .limit(4000);
+  // Lịch sử hỏng không được làm sập cả bảng đơn — mất nhật ký còn hơn mất đơn.
+  if (error) {
+    console.error("ORDER_HISTORY_READ_FAILED", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((h) => {
+    const row = h as { shipment_id: string; at: string; actor: string; changes: unknown };
+    return {
+      at: row.at,
+      rowKey: row.shipment_id,
+      orderCode: codeOf.get(row.shipment_id) ?? "",
+      by: row.actor || "Hệ thống",
+      changes: Array.isArray(row.changes) ? row.changes.map(String) : [],
+    };
   });
-
-  return { rows, history, source: "sheet" };
 }
 
 // ---------------------------------------------------------------- appendOrders
-/** Dữ liệu tối thiểu để dựng một dòng kiện. */
+/** Dữ liệu tối thiểu để dựng một kiện (đơn tạo tay ở bảng điều hành). */
 export type NewParcel = Omit<
-  SheetOrder,
+  StoredOrder,
   "id" | "rowKey" | "created" | "createdAtIso" | "updatedAtIso" | "voided"
 >;
 
 /**
- * Ghi tất cả kiện của MỘT đơn trong MỘT request append.
- * Append là thao tác atomic phía Google: hai khách đặt cùng lúc không đè nhau,
- * và các kiện của cùng một đơn luôn nằm liền nhau.
+ * Tạo đơn THỦ CÔNG từ bảng điều hành (nút "Tạo đơn").
+ *
+ * Đơn đặt từ website KHÔNG đi qua đây — `createOrder()` đã dựng đủ chuỗi
+ * customer → web_order → recipient → order_line → shipment với giá chốt
+ * server-side. Ở đây chỉ dựng chuỗi tối thiểu cho đơn nhập tay.
  */
 export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: string[] }> {
   if (!parcels.length) return { rowKeys: [] };
-  if (!isOrderStoreConfigured()) {
-    return { rowKeys: parcels.map((p) => newRowKey(p.orderCode, p.parcelIndex)) };
+  if (!isOrderStoreConfigured()) return { rowKeys: [] };
+
+  const sb = getServiceClient();
+  const first = parcels[0];
+
+  // kho theo vùng của kiện đầu — đơn tạo tay chỉ có một kiện
+  const { data: wh, error: whErr } = await sb
+    .from("warehouse")
+    .select("id, shipping_mode")
+    .eq("region", first.region)
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+  if (whErr) fail(whErr, "Không đọc được kho");
+  if (!wh) throw new Error(`Vùng "${first.region}" chưa có kho đang hoạt động.`);
+
+  // Khách: gộp theo SĐT. Không có SĐT thì dựng khoá tạm để không đụng
+  // ràng buộc unique của cột phone.
+  const phone = first.phone?.trim() || `tay-${first.orderCode}`;
+  const { data: cust, error: cErr } = await sb
+    .from("customer")
+    .upsert(
+      { name: first.customer || "Khách lẻ", phone, region: first.region },
+      { onConflict: "phone" },
+    )
+    .select("id")
+    .single();
+  if (cErr || !cust) fail(cErr, "Không tạo được khách");
+
+  const total = parcels.reduce((s, p) => s + p.prepaid + p.cod, 0);
+  const { data: order, error: oErr } = await sb
+    .from("web_order")
+    .insert({
+      code: first.orderCode,
+      customer_id: cust!.id,
+      buyer_region: first.region,
+      currency: first.currency,
+      fx_rate_snapshot: first.fx || 18.5,
+      subtotal: total,
+      grand_total: total,
+      payment_status: "pending",
+      fulfillment_status: "draft",
+      transfer_code: first.transferCode || first.orderCode,
+    })
+    .select("id")
+    .single();
+  if (oErr || !order) fail(oErr, "Không tạo được đơn");
+
+  const rowKeys: string[] = [];
+  for (const p of parcels) {
+    const { data: rec, error: rErr } = await sb
+      .from("recipient")
+      .insert({
+        web_order_id: order!.id,
+        name: p.recipient || p.customer || "Khách lẻ",
+        phone: p.recipientPhone || p.phone || "",
+        address: p.address || "",
+        region: p.region,
+        desired_date: p.expected || null,
+      })
+      .select("id")
+      .single();
+    if (rErr || !rec) fail(rErr, "Không tạo được người nhận");
+
+    const { data: ship, error: sErr } = await sb
+      .from("shipment")
+      .insert({
+        web_order_id: order!.id,
+        recipient_id: rec!.id,
+        fulfillment_region: p.region,
+        warehouse_id: wh!.id,
+        shipping_mode: wh!.shipping_mode,
+        idempotency_key: `${p.orderCode}-ship-${p.parcelIndex}`,
+        parcel_index: p.parcelIndex,
+        parcel_count: p.parcelCount,
+        status: p.status,
+        source: p.source,
+        carrier: p.carrier || null,
+        vc_code: p.vc || null,
+        product_summary: p.product ?? null,
+        prepaid: p.prepaid,
+        cod: p.cod,
+        cuoc_vc: p.cuoc_vc,
+        phi_vc_thu_khach: p.phi_vc_thu_khach,
+        tags: p.tags ?? [],
+        note: p.note ?? "",
+        assignee: p.assignee ?? null,
+        consume: p.consume ?? null,
+        stock_applied: p.stockApplied ?? false,
+      })
+      .select("id")
+      .single();
+    if (sErr || !ship) fail(sErr, "Không tạo được kiện");
+
+    rowKeys.push(ship!.id);
   }
 
-  await ensureTabs();
-  const header = await getValues(a1(TAB_ORDERS, "1:1"));
-  const map = buildHeaderMap(header[0] ?? [...COLUMNS]);
-  const width = Math.max((header[0] ?? []).length, COLUMNS.length);
-
-  const now = new Date().toISOString();
-  const full: SheetOrder[] = parcels.map((p) => ({
-    ...p,
-    id: 0,
-    rowKey: newRowKey(p.orderCode, p.parcelIndex),
-    created: displayTime(now),
-    createdAtIso: now,
-    updatedAtIso: now,
-    voided: false,
-  }));
-
-  await appendValues(ORDERS_RANGE, full.map((o) => orderToCells(map, o, width)));
   await appendHistory(
-    full.map((o) => ({
-      rowKey: o.rowKey,
-      orderCode: o.orderCode,
-      by: "Khách đặt web",
-      changes: ["Tạo đơn từ website"],
+    rowKeys.map((k) => ({
+      rowKey: k,
+      orderCode: first.orderCode,
+      by: "Bạn",
+      changes: ["Tạo đơn mới"],
     })),
   );
 
-  return { rowKeys: full.map((o) => o.rowKey) };
+  return { rowKeys };
 }
 
-/** Đơn đã có trên Sheet chưa? Dùng để chống ghi trùng khi client bấm 2 lần. */
+/** Đơn đã có trong DB chưa? Dùng để chống ghi trùng khi client bấm 2 lần. */
 export async function orderCodeExists(orderCode: string): Promise<boolean> {
   if (!isOrderStoreConfigured() || !orderCode) return false;
-  const { rows } = await readAll();
-  return rows.some((r) => r.orderCode === orderCode);
+  const sb = getServiceClient();
+  const { data } = await sb.from("web_order").select("id").eq("code", orderCode).maybeSingle();
+  return Boolean(data);
 }
 
 // ---------------------------------------------------------------- updateOrder
-/** Tìm số dòng thật của một Khoá. Đọc lại ngay trước khi ghi để chịu được
- *  việc anh tự sắp xếp / chèn / xoá dòng trong Sheet. */
-async function findRowNumber(rowKey: string, map: HeaderMap): Promise<number> {
-  const keyCol = map["Khoá"] ?? 0;
-  const letter = colName(keyCol + 1);
-  const col = await getValues(a1(TAB_ORDERS, `${letter}:${letter}`));
-  for (let i = 1; i < col.length; i += 1) {
-    if (String(col[i]?.[0] ?? "").trim() === rowKey) return i + 1; // 1-indexed
-  }
-  return -1;
-}
-
 export interface UpdateResult {
   ok: boolean;
   error?: string;
-  order?: SheetOrder;
+  order?: StoredOrder;
 }
 
+/**
+ * Sửa một kiện. Trường nào thuộc bảng nào thì ghi đúng bảng đó:
+ *   shipment  — trạng thái, ĐVVC, mã VC, tiền, nhãn, ghi chú, NV, tiêu hao
+ *   recipient — tên người nhận, địa chỉ, ngày muốn nhận
+ *   customer  — tên và SĐT người đặt (dùng chung cho mọi đơn của khách đó)
+ */
 export async function updateOrder(
   rowKey: string,
-  patch: Partial<SheetOrder>,
+  patch: Partial<StoredOrder>,
   actor = "Bạn",
   changes: string[] = [],
 ): Promise<UpdateResult> {
   if (!isOrderStoreConfigured()) return { ok: true }; // chế độ xem thử
 
-  await ensureTabs();
-  const { map, width, rows } = await readAll();
-  const current = rows.find((r) => r.rowKey === rowKey);
-  if (!current) return { ok: false, error: `Không tìm thấy đơn ${rowKey} trên Sheet.` };
+  const sb = getServiceClient();
 
-  const rowNumber = await findRowNumber(rowKey, map);
-  if (rowNumber < 0) return { ok: false, error: `Không tìm thấy dòng của đơn ${rowKey}.` };
+  const { data: existing, error: findErr } = await sb
+    .from("shipment")
+    .select("id, recipient_id, web_order_id, web_order ( customer_id )")
+    .eq("id", rowKey)
+    .maybeSingle();
+  if (findErr) fail(findErr, "Không đọc được đơn");
+  if (!existing) return { ok: false, error: "Không tìm thấy đơn này. Tải lại trang giúp em." };
 
-  const merged: SheetOrder = {
-    ...current,
-    ...patch,
-    rowKey: current.rowKey, // khoá không bao giờ đổi
-    updatedAtIso: new Date().toISOString(),
+  const link = existing as unknown as {
+    id: string;
+    recipient_id: string;
+    web_order: { customer_id: string } | null;
   };
 
-  await batchUpdateValues([
-    {
-      range: a1(TAB_ORDERS, `A${rowNumber}:${colName(width)}${rowNumber}`),
-      values: [orderToCells(map, merged, width)],
-    },
-  ]);
+  // ---- shipment ----
+  const ship: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const put = (k: string, v: unknown) => {
+    if (v !== undefined) ship[k] = v;
+  };
+  put("status", patch.status);
+  put("carrier", patch.carrier);
+  put("vc_code", patch.vc);
+  put("product_summary", patch.product);
+  put("prepaid", patch.prepaid);
+  put("cod", patch.cod);
+  put("cuoc_vc", patch.cuoc_vc);
+  put("phi_vc_thu_khach", patch.phi_vc_thu_khach);
+  put("tags", patch.tags);
+  put("note", patch.note);
+  put("assignee", patch.assignee);
+  put("consume", patch.consume);
+  put("stock_applied", patch.stockApplied);
+  put("voided", patch.voided);
 
-  // Ghi xong đọc lại đúng ô khoá — nếu lệch nghĩa là có người chèn/xoá dòng
-  // xen giữa lúc mình đọc và lúc mình ghi.
-  const check = await getValues(
-    a1(TAB_ORDERS, `${colName((map["Khoá"] ?? 0) + 1)}${rowNumber}`),
-  );
-  if (String(check[0]?.[0] ?? "").trim() !== rowKey) {
-    return {
-      ok: false,
-      error: "Sheet vừa bị thay đổi trong lúc lưu. Tải lại trang rồi sửa lại giúp em.",
-    };
+  const { error: sErr } = await sb.from("shipment").update(ship).eq("id", rowKey);
+  if (sErr) fail(sErr, "Không lưu được đơn");
+
+  // ---- recipient ----
+  const rec: Record<string, unknown> = {};
+  if (patch.recipient !== undefined) rec.name = patch.recipient;
+  if (patch.address !== undefined) rec.address = patch.address;
+  if (patch.recipientPhone !== undefined) rec.phone = patch.recipientPhone;
+  if (patch.expected !== undefined) rec.desired_date = patch.expected || null;
+  if (Object.keys(rec).length) {
+    const { error } = await sb.from("recipient").update(rec).eq("id", link.recipient_id);
+    if (error) fail(error, "Không lưu được người nhận");
   }
 
-  if (changes.length) await appendHistory([{ rowKey, orderCode: merged.orderCode, by: actor, changes }]);
-  return { ok: true, order: merged };
+  // ---- customer ----
+  // Sửa ở đây đổi cho TẤT CẢ đơn của khách này — đúng ý vì là cùng một người.
+  const custId = link.web_order?.customer_id;
+  if (custId) {
+    const cust: Record<string, unknown> = {};
+    if (patch.customer !== undefined) cust.name = patch.customer;
+    if (patch.phone !== undefined && patch.phone.trim()) cust.phone = patch.phone.trim();
+    if (Object.keys(cust).length) {
+      const { error } = await sb.from("customer").update(cust).eq("id", custId);
+      // 23505 = trùng SĐT với khách khác. Báo rõ thay vì nuốt lỗi.
+      if (error)
+        return {
+          ok: (error as { code?: string }).code !== "23505",
+          error:
+            (error as { code?: string }).code === "23505"
+              ? "SĐT này đã thuộc về một khách khác. Đổi số khác hoặc gộp khách thủ công."
+              : undefined,
+        };
+    }
+  }
+
+  if (changes.length)
+    await appendHistory([{ rowKey, orderCode: patch.orderCode ?? "", by: actor, changes }]);
+
+  const { data: fresh } = await sb
+    .from("shipment")
+    .select(SHIPMENT_SELECT)
+    .eq("id", rowKey)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    order: fresh ? rowToOrder(fresh as unknown as ShipmentRow) : undefined,
+  };
 }
 
 // ----------------------------------------------------------------- voidOrders
-/** Xoá mềm: đánh dấu Huỷ = TRUE, giữ dòng lại để đối soát. */
+/** Xoá mềm: đánh dấu đã xoá, giữ bản ghi lại để đối soát. */
 export async function voidOrders(rowKeys: string[], actor = "Bạn"): Promise<UpdateResult> {
-  if (!isOrderStoreConfigured()) return { ok: true };
-  for (const key of rowKeys) {
-    const r = await updateOrder(key, { status: "Huỷ đơn", voided: true }, actor, [
-      "Xoá đơn khỏi bảng",
-    ]);
-    if (!r.ok) return r;
-  }
+  if (!isOrderStoreConfigured() || !rowKeys.length) return { ok: true };
+
+  const sb = getServiceClient();
+  const { error } = await sb
+    .from("shipment")
+    .update({ voided: true, status: "Huỷ đơn", updated_at: new Date().toISOString() })
+    .in("id", rowKeys);
+  if (error) fail(error, "Không xoá được đơn");
+
+  await appendHistory(
+    rowKeys.map((k) => ({ rowKey: k, orderCode: "", by: actor, changes: ["Xoá đơn khỏi bảng"] })),
+  );
   return { ok: true };
 }
 
@@ -265,17 +359,16 @@ export async function appendHistory(
   entries: { rowKey: string; orderCode: string; by: string; changes: string[] }[],
 ) {
   if (!isOrderStoreConfigured() || !entries.length) return;
-  const at = new Date().toISOString();
-  const values: Cell[][] = entries.map((e) => [
-    at,
-    e.rowKey,
-    e.orderCode,
-    e.by,
-    e.changes.join(" · "),
-  ]);
   try {
-    await appendValues(HISTORY_RANGE, values);
+    const sb = getServiceClient();
+    await sb.from("order_history").insert(
+      entries.map((e) => ({
+        shipment_id: e.rowKey,
+        actor: e.by,
+        changes: e.changes,
+      })),
+    );
   } catch (e) {
-    console.error("SHEET_HISTORY_FAILED", e instanceof Error ? e.message : e);
+    console.error("ORDER_HISTORY_WRITE_FAILED", e instanceof Error ? e.message : e);
   }
 }

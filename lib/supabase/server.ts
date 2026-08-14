@@ -12,6 +12,13 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
+/**
+ * Đã đủ điều kiện thao tác bảng đơn chưa (cần service role).
+ * Tách khỏi `isSupabaseConfigured` vì đọc danh mục chỉ cần anon key, còn
+ * đọc/ghi đơn bắt buộc service role (§4.3 — bảng đơn không mở cho client).
+ */
+export const isServiceRoleConfigured = Boolean(url && serviceKey);
+
 /** Client đọc danh mục (anon). Trả null nếu chưa cấu hình → caller fallback seed. */
 export function getPublicClient(): SupabaseClient | null {
   if (!url || !anonKey) return null;

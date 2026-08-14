@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ORDERS, type OrderRow } from "@/lib/ordersMock";
-import { idFromKey, type SheetOrder } from "@/lib/orders/orderSchema";
+import { displayTime, idFromKey, type StoredOrder } from "@/lib/orders/orderSchema";
 import type { HistoryEntry } from "@/components/OrderDetailModal";
 
 // ============================================================================
@@ -13,9 +13,9 @@ import type { HistoryEntry } from "@/components/OrderDetailModal";
 // qua phần đã sửa nên doanh thu hiển thị sai. Gom về một chỗ là hết.
 //
 // Hai chế độ:
-//   "sheet" — đã nối Google Sheet, mọi thao tác đi qua API.
+//   "db"   — đã nối cơ sở dữ liệu, mọi thao tác đi qua API.
 //   "seed"  — chưa nối, chạy bằng đơn mẫu + localStorage như cũ để xem thử.
-// Lỗi đọc Sheet KHÔNG rơi về đơn mẫu — phải báo lỗi, không thì anh tưởng
+// Lỗi đọc dữ liệu KHÔNG rơi về đơn mẫu — phải báo lỗi, không thì anh tưởng
 // không có khách nào đặt.
 // ============================================================================
 
@@ -24,7 +24,7 @@ const EDITS_KEY = "tr_order_edits";
 const NEW_KEY = "tr_order_new";
 const API = "/api/dashboard/orders";
 
-export type OrderSourceMode = "sheet" | "seed";
+export type OrderSourceMode = "db" | "seed";
 
 export interface UseOrders {
   rows: OrderRow[];
@@ -91,20 +91,27 @@ export function useOrders(): UseOrders {
         ok: boolean;
         error?: string;
         source?: OrderSourceMode;
-        rows?: SheetOrder[];
+        rows?: StoredOrder[];
         history?: { at: string; rowKey: string; by: string; changes: string[] }[];
       };
 
       if (!data.ok) {
-        // Đã nối Sheet mà lỗi → báo thẳng, tuyệt đối không hiện đơn mẫu.
+        // Đã nối cơ sở dữ liệu mà lỗi → báo thẳng, tuyệt đối không hiện đơn mẫu.
         setError(data.error ?? "Không đọc được đơn hàng.");
         setRows([]);
         return;
       }
 
-      if (data.source === "sheet") {
-        setSource("sheet");
-        setRows(data.rows ?? []);
+      if (data.source === "db") {
+        setSource("db");
+        // Giờ tạo đơn phải định dạng Ở ĐÂY, không phải ở máy chủ: máy chủ Vercel
+        // chạy giờ UTC nên đơn đặt 22h tối giờ Việt Nam sẽ hiện thành 15h.
+        // Client định dạng theo đúng múi giờ của máy anh đang mở.
+        setRows(
+          (data.rows ?? []).map((r) =>
+            r.createdAtIso ? { ...r, created: displayTime(r.createdAtIso) } : r,
+          ),
+        );
         const h: Record<number, HistoryEntry[]> = {};
         for (const e of data.history ?? []) {
           const id = idFromKey(e.rowKey);
@@ -129,7 +136,7 @@ export function useOrders(): UseOrders {
 
   // Quay lại tab thì tải lại — nhiều máy cùng dùng nên số liệu phải mới.
   useEffect(() => {
-    if (source !== "sheet") return;
+    if (source !== "db") return;
     const onFocus = () => {
       if (document.visibilityState === "visible") void load();
     };
@@ -138,7 +145,7 @@ export function useOrders(): UseOrders {
   }, [source, load]);
 
   const rowKeyOf = useCallback(
-    (id: number) => (rows.find((r) => r.id === id) as SheetOrder | undefined)?.rowKey,
+    (id: number) => (rows.find((r) => r.id === id) as StoredOrder | undefined)?.rowKey,
     [rows],
   );
 
@@ -170,7 +177,7 @@ export function useOrders(): UseOrders {
         return true;
       }
 
-      const rowKey = (order as SheetOrder).rowKey ?? rowKeyOf(order.id);
+      const rowKey = (order as StoredOrder).rowKey ?? rowKeyOf(order.id);
       if (!rowKey) {
         setError("Không xác định được đơn cần sửa. Tải lại trang giúp em.");
         return false;
@@ -183,7 +190,7 @@ export function useOrders(): UseOrders {
         });
         const data = (await res.json()) as { ok: boolean; error?: string };
         if (!data.ok) {
-          setError(data.error ?? "Không lưu được lên Google Sheet.");
+          setError(data.error ?? "Không lưu được lên cơ sở dữ liệu.");
           void load();
           return false;
         }
@@ -232,7 +239,7 @@ export function useOrders(): UseOrders {
         });
         const data = (await res.json()) as { ok: boolean; error?: string; rowKeys?: string[] };
         if (!data.ok) {
-          setError(data.error ?? "Không tạo được đơn trên Google Sheet.");
+          setError(data.error ?? "Không tạo được đơn.");
           return null;
         }
         await load();
@@ -272,7 +279,7 @@ export function useOrders(): UseOrders {
         });
         const data = (await res.json()) as { ok: boolean; error?: string };
         if (!data.ok) {
-          setError(data.error ?? "Không xoá được trên Google Sheet.");
+          setError(data.error ?? "Không xoá được đơn.");
           void load();
           return false;
         }

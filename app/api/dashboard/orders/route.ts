@@ -7,7 +7,7 @@ import {
   voidOrders,
   type NewParcel,
 } from "@/lib/orders/orderStore";
-import type { SheetOrder } from "@/lib/orders/orderSchema";
+import type { StoredOrder } from "@/lib/orders/orderSchema";
 import { isAuthEnabled } from "@/lib/auth";
 
 // Đọc/ghi đơn cho bảng điều hành. Middleware đã chặn ai chưa đăng nhập.
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Chốt an toàn: đã nối Sheet thật mà chưa đặt mật khẩu thì KHÔNG phục vụ dữ liệu.
+ * Chốt an toàn: đã nối cơ sở dữ liệu thật mà chưa đặt mật khẩu thì KHÔNG phục vụ dữ liệu.
  * Không có chốt này, quên đặt DASHBOARD_PASSWORD là công khai tên, SĐT, địa chỉ
  * của toàn bộ khách cho bất kỳ ai biết đường dẫn.
  */
@@ -43,8 +43,8 @@ export async function GET() {
     return NextResponse.json({ ok: true, configured: isOrderStoreConfigured(), ...data });
   } catch (e) {
     // Đã cấu hình mà lỗi → báo lỗi thật. Tuyệt đối không lặng lẽ trả đơn mẫu.
-    const message = e instanceof Error ? e.message : "Không đọc được Google Sheet.";
-    console.error("SHEET_LIST_FAILED", message);
+    const message = e instanceof Error ? e.message : "Không đọc được đơn hàng.";
+    console.error("ORDERS_LIST_FAILED", message);
     return NextResponse.json({ ok: false, configured: true, error: message }, { status: 502 });
   }
 }
@@ -53,7 +53,7 @@ export async function PATCH(req: NextRequest) {
   const blocked = guard();
   if (blocked) return blocked;
 
-  let body: { rowKey?: string; patch?: Partial<SheetOrder>; changes?: string[] };
+  let body: { rowKey?: string; patch?: Partial<StoredOrder>; changes?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -66,8 +66,8 @@ export async function PATCH(req: NextRequest) {
     const r = await updateOrder(body.rowKey, body.patch ?? {}, "Bạn", body.changes ?? []);
     return NextResponse.json(r, { status: r.ok ? 200 : 409 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Không ghi được Google Sheet.";
-    console.error("SHEET_UPDATE_FAILED", message);
+    const message = e instanceof Error ? e.message : "Không ghi được vào cơ sở dữ liệu.";
+    console.error("ORDERS_UPDATE_FAILED", message);
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 }
@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
     const r = await appendOrders(parcels);
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Không ghi được Google Sheet.";
-    console.error("SHEET_CREATE_FAILED", message);
+    const message = e instanceof Error ? e.message : "Không ghi được vào cơ sở dữ liệu.";
+    console.error("ORDERS_CREATE_FAILED", message);
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 }
@@ -110,8 +110,8 @@ export async function DELETE(req: NextRequest) {
     const r = await voidOrders(rowKeys);
     return NextResponse.json(r, { status: r.ok ? 200 : 409 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Không ghi được Google Sheet.";
-    console.error("SHEET_VOID_FAILED", message);
+    const message = e instanceof Error ? e.message : "Không ghi được vào cơ sở dữ liệu.";
+    console.error("ORDERS_VOID_FAILED", message);
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 }

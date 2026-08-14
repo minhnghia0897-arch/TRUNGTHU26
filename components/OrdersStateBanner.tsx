@@ -5,7 +5,7 @@ import type { UseOrders } from "@/components/useOrders";
 /**
  * Dải thông báo trạng thái nguồn đơn, dùng chung cho các trang dashboard.
  *
- * Quan trọng: khi đã nối Google Sheet mà đọc lỗi thì phải báo lỗi thật rõ.
+ * Quan trọng: khi đã nối cơ sở dữ liệu mà đọc lỗi thì phải báo lỗi thật rõ.
  * Nếu lặng lẽ hiện đơn mẫu, anh sẽ tưởng hôm nay không có khách nào đặt.
  */
 export default function OrdersStateBanner({ store }: { store: UseOrders }) {
@@ -34,8 +34,8 @@ export default function OrdersStateBanner({ store }: { store: UseOrders }) {
   if (store.source === "seed")
     return (
       <Bar tone="info">
-        Chế độ xem thử — chưa nối Google Sheet, đây là đơn mẫu. Đơn khách đặt thật sẽ không
-        hiện ở đây cho tới khi cấu hình xong (xem <code>docs/google-sheet.md</code>).
+        Chế độ xem thử — chưa nối cơ sở dữ liệu, đây là đơn mẫu. Đơn khách đặt thật sẽ không
+        hiện ở đây cho tới khi cấu hình xong (xem <code>docs/supabase.md</code>).
       </Bar>
     );
 
