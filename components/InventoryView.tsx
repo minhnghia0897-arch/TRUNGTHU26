@@ -1,308 +1,203 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { VO, BANH, ALL_STOCK, SETS, availableSet, type StockItem } from "@/lib/inventory";
-import { getStock, saveStock, STOCK_KEY, getNames, saveNames, NAME_KEY, getItems, saveItems, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import type { Box, Combo, Flavor } from "@/lib/types";
 
-const statusOf = (qty: number, th: number) => (qty <= 0 ? "out" : qty < th ? "low" : "ok");
-const badge = (s: string) =>
-  s === "ok" ? "bg-emerald-100 text-emerald-700" : s === "low" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
-const label = (s: string) => (s === "ok" ? "Đủ" : s === "low" ? "Sắp hết" : "Hết");
+// ============================================================================
+// Tồn kho — đọc thẳng từ danh mục sản phẩm trong database.
+//
+// Bản cũ dựng trên lib/inventory.ts (số mẫu hardcode) + localStorage, nên mỗi
+// máy một con số và đơn của khách trừ vào bản sao trong trình duyệt của khách.
+// Nay tồn nằm cùng bản ghi sản phẩm (§0012), máy chủ trừ lúc tạo đơn.
+// ============================================================================
 
-export default function InventoryView() {
-  // ---- tồn kho dùng chung (đặt đơn tự trừ ở đây) ----
-  const [stock, setStock] = useState<Record<string, number>>(() =>
-    Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
-  );
-  // ---- tên mặt hàng (đổi tên được) + mặt hàng tự thêm ----
-  const [names, setNames] = useState<Record<string, string>>({});
-  const [items, setItems] = useState<CustomItem[]>([]);
-  useEffect(() => {
-    setStock(getStock());
-    setNames(getNames());
-    setItems(getItems());
-    const onChange = (e: StorageEvent) => {
-      if (!e.key || e.key === STOCK_KEY) setStock(getStock());
-      if (!e.key || e.key === NAME_KEY) setNames(getNames());
-      if (!e.key || e.key === ITEMS_KEY) { setItems(getItems()); setStock(getStock()); }
-    };
-    window.addEventListener("storage", onChange);
-    return () => window.removeEventListener("storage", onChange);
-  }, []);
-  // gộp mặt hàng gốc + tự thêm theo nhóm
-  const voItems: StockItem[] = [...VO, ...items.filter((i) => i.group === "vo").map((i) => ({ key: i.key, name: i.name, unit: i.unit, qty: 0, threshold: i.threshold }))];
-  const banhItems: StockItem[] = [...BANH, ...items.filter((i) => i.group === "banh").map((i) => ({ key: i.key, name: i.name, unit: i.unit, qty: 0, threshold: i.threshold }))];
-  const DEFAULT_NAME: Record<string, string> = Object.fromEntries([...ALL_STOCK.map((s) => [s.key, s.name] as const), ...items.map((i) => [i.key, i.name] as const)]);
-  const isCustom = (k: string) => items.some((i) => i.key === k);
+interface Row {
+  key: string;
+  name: string;
+  type: "Bộ quà tặng" | "Vị bánh" | "Hộp";
+  stock: number;
+  allowNegative: boolean;
+  active: boolean;
+  sellable: boolean;
+}
 
-  const addItem = (group: "vo" | "banh") => {
-    const key = `cust-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    const next = [...items, { key, name: group === "vo" ? "Vỏ hộp mới" : "Bánh mới", unit: group === "vo" ? "vỏ" : "bánh", threshold: group === "vo" ? 30 : 40, group }];
-    setItems(next);
-    saveItems(next);
-  };
-  const deleteItem = (key: string) => {
-    const next = items.filter((i) => i.key !== key);
-    setItems(next);
-    saveItems(next);
-  };
-  const nameFor = (k: string) => names[k] ?? DEFAULT_NAME[k] ?? k;
-  const setName = (k: string, v: string) =>
-    setNames((cur) => {
-      const t = v.trim();
-      const next = { ...cur };
-      if (t && t !== DEFAULT_NAME[k]) next[k] = t;
-      else delete next[k]; // để trống hoặc trùng mặc định → về tên gốc
-      saveNames(next);
-      return next;
-    });
-  const qtyOf = (k: string) => stock[k] ?? 0;
-  const setStockQty = (k: string, v: number) =>
-    setStock((cur) => {
-      const next = { ...cur, [k]: Math.max(0, Math.floor(v) || 0) };
-      saveStock(next);
-      return next;
-    });
+const API = "/api/dashboard/products";
 
-  // ---- máy tính bán ----
-  const [setQty, setSetQty] = useState<Record<string, number>>({});
-  const [looseQty, setLooseQty] = useState<Record<string, number>>({});
+export default function InventoryView({
+  boxes,
+  flavors,
+  combos,
+  connected,
+}: {
+  boxes: Box[];
+  flavors: Flavor[];
+  combos: Combo[];
+  connected: boolean;
+}) {
+  const router = useRouter();
+  const [draft, setDraft] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
-  // trừ kho từ đơn mô phỏng
-  const deduction = useMemo(() => {
-    const d: Record<string, number> = {};
-    for (const set of SETS) {
-      const n = setQty[set.key] || 0;
-      if (!n) continue;
-      d[set.voKey] = (d[set.voKey] || 0) + n; // 1 vỏ / set
-      for (const c of set.cakes) d[c.key] = (d[c.key] || 0) + n * c.qty;
+  const rows: Row[] = [
+    ...combos.map((c) => ({
+      key: `combo:${c.id}`, name: c.name, type: "Bộ quà tặng" as const,
+      stock: c.stock ?? 0, allowNegative: c.allow_negative ?? false,
+      active: c.active, sellable: true,
+    })),
+    ...boxes.map((b) => ({
+      key: `box:${b.id}`, name: b.name, type: "Hộp" as const,
+      stock: b.stock ?? 0, allowNegative: b.allow_negative ?? false,
+      active: b.active, sellable: true,
+    })),
+    // Vị chỉ là thành phần của set, không bán lẻ (giá lẻ = 0) → đếm tồn không có
+    // ý nghĩa, nhưng vẫn liệt kê để ai muốn ghi số nội bộ thì ghi.
+    ...flavors.map((f) => ({
+      key: `flavor:${f.id}`, name: f.name, type: "Vị bánh" as const,
+      stock: f.stock ?? 0, allowNegative: f.allow_negative ?? false,
+      active: f.active, sellable: f.price_kr > 0 || f.price_vn > 0,
+    })),
+  ].filter((r) => !r.key.startsWith("removed"));
+
+  const valueOf = (r: Row) => draft[r.key] ?? r.stock;
+  const dirty = (r: Row) => draft[r.key] !== undefined && draft[r.key] !== r.stock;
+
+  const save = async (r: Row) => {
+    const stock = valueOf(r);
+    setSaving(r.key);
+    setError("");
+    try {
+      const res = await fetch(API, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: r.key, patch: { stock } }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Không lưu được tồn kho.");
+      setDraft((d) => {
+        const n = { ...d };
+        delete n[r.key];
+        return n;
+      });
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không lưu được tồn kho.");
+    } finally {
+      setSaving(null);
     }
-    for (const [k, v] of Object.entries(looseQty)) if (v) d[k] = (d[k] || 0) + v;
-    return d;
-  }, [setQty, looseQty]);
+  };
 
-  const hasOrder = Object.values(deduction).some((v) => v > 0);
-  const shortage = ALL_STOCK.filter((s) => (deduction[s.key] || 0) > qtyOf(s.key));
+  // Hàng cần chú ý nổi lên trước: âm trước, rồi sắp hết, rồi còn nhiều.
+  const sorted = [...rows].sort((a, b) => {
+    const rank = (r: Row) => (r.stock < 0 ? 0 : r.stock === 0 ? 1 : r.stock <= 10 ? 2 : 3);
+    return rank(a) - rank(b) || a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
+  });
+
+  const canhBao = rows.filter((r) => r.sellable && r.stock <= 0);
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
+    <main className="min-h-screen bg-slate-50 text-slate-700">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <h1 className="text-[15px] font-semibold text-slate-800">Tồn kho</h1>
-        <span className="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-indigo-500">Tính theo thành phần (BOM)</span>
-      </header>
+        <span className="text-[12px] text-slate-400">{rows.length} mặt hàng</span>
+        <a href="/dashboard/san-pham" className="ml-auto text-[13px] font-medium text-blue-600 hover:underline">
+          Sang Sản phẩm →
+        </a>
+      </div>
 
-      <div className="mx-auto max-w-[1080px] space-y-5 p-5">
-        {/* ===== TỒN SET KHẢ DỤNG ===== */}
-        <Panel title="Set bán được (tính từ tồn thành phần)" note="Tồn set = min(vỏ hộp, ⌊tồn bánh ÷ số lượng trong set⌋)">
-          <table className="w-full text-[13px]">
+      {!connected && (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-[12.5px] text-amber-800">
+          Chưa nối cơ sở dữ liệu — số hiển thị chỉ là hàng mẫu và sửa sẽ không lưu được.
+        </div>
+      )}
+      {error && (
+        <div className="border-b border-rose-200 bg-rose-50 px-5 py-2 text-[12.5px] text-rose-700">{error}</div>
+      )}
+      {canhBao.length > 0 && (
+        <div className="border-b border-rose-200 bg-rose-50 px-5 py-2 text-[12.5px] text-rose-700">
+          Hết hàng: <b>{canhBao.map((r) => r.name).join(", ")}</b>. Khách vẫn đặt được và tồn sẽ xuống âm.
+        </div>
+      )}
+
+      <div className="px-5 py-4">
+        <p className="mb-3 text-[12.5px] text-slate-500">
+          Tồn kho nằm ngay trên sản phẩm. Khách đặt là máy chủ tự trừ, mở máy nào cũng thấy cùng một con số.
+        </p>
+
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table className="w-full min-w-[640px] text-[13px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                <th className="px-3 py-2">Set</th>
-                <th className="px-3 py-2">Định mức (1 set cần)</th>
-                <th className="px-3 py-2 text-right">Làm được</th>
-                <th className="px-3 py-2">Thành phần giới hạn</th>
+                <th className="px-4 py-2.5">Sản phẩm</th>
+                <th className="px-4 py-2.5">Loại</th>
+                <th className="px-4 py-2.5 w-52">Còn bán được</th>
+                <th className="px-4 py-2.5">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {SETS.map((set) => {
-                const av = availableSet(set, qtyOf);
+              {sorted.map((r) => {
+                const v = valueOf(r);
                 return (
-                  <tr key={set.key}>
-                    <td className="px-3 py-2.5 font-medium text-slate-800">{set.name}</td>
-                    <td className="px-3 py-2.5 text-slate-500">
-                      1 {nameFor(set.voKey)} + {set.cakes.map((c) => `${c.qty} ${nameFor(c.key).replace("Bánh ", "").replace(" 150g", "")}`).join(", ")}
+                  <tr key={r.key} className={r.active ? "" : "opacity-55"}>
+                    <td className="px-4 py-2 font-medium text-slate-800">
+                      {r.name}
+                      {!r.active && <span className="ml-1.5 text-[11px] text-slate-400">(ẩn)</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <span className={`rounded px-2 py-0.5 text-[12px] font-semibold ${badge(statusOf(av.count, 10))}`}>{av.count} set</span>
+                    <td className="px-4 py-2 text-slate-500">{r.type}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setDraft((d) => ({ ...d, [r.key]: v - 1 }))}
+                          className="h-7 w-7 flex-none rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          value={v}
+                          onChange={(e) => setDraft((d) => ({ ...d, [r.key]: Number(e.target.value) || 0 }))}
+                          className={`w-20 rounded-lg border px-2 py-1 text-center outline-none focus:border-blue-400 ${v < 0 ? "border-rose-300 text-rose-600" : "border-slate-200"}`}
+                        />
+                        <button
+                          onClick={() => setDraft((d) => ({ ...d, [r.key]: v + 1 }))}
+                          className="h-7 w-7 flex-none rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+                        >
+                          +
+                        </button>
+                        {dirty(r) && (
+                          <button
+                            onClick={() => void save(r)}
+                            disabled={saving === r.key}
+                            className="rounded-lg bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            {saving === r.key ? "Đang lưu…" : "Lưu"}
+                          </button>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-3 py-2.5 text-slate-600">
-                      {av.count === 0 ? <span className="text-rose-600">Hết: {av.bottleneck}</span> : av.bottleneck}
+                    <td className="px-4 py-2">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                          r.stock < 0
+                            ? "bg-rose-100 text-rose-700"
+                            : r.stock === 0
+                              ? "bg-slate-100 text-slate-500"
+                              : r.stock <= 10
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-emerald-100 text-emerald-700"
+                        }`}
+                      >
+                        {r.stock < 0 ? `Âm ${Math.abs(r.stock)}` : r.stock === 0 ? "Hết" : r.stock <= 10 ? "Sắp hết" : "Đủ"}
+                      </span>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </Panel>
-
-        {/* ===== MÁY TÍNH BÁN ===== */}
-        <Panel title="Máy tính bán hàng — mô phỏng trừ kho" note="Nhập số lượng bán → xem trừ kho từng thành phần & tồn còn lại">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <div className="mb-2 text-[12px] font-semibold text-slate-500">Bán Set</div>
-              <div className="space-y-2">
-                {SETS.map((set) => (
-                  <div key={set.key} className="flex items-center gap-2">
-                    <span className="flex-1 text-[13px] text-slate-700">{set.name}</span>
-                    <Stepper value={setQty[set.key] || 0} onChange={(v) => setSetQty((s) => ({ ...s, [set.key]: v }))} />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 text-[12px] font-semibold text-slate-500">Bán bánh lẻ</div>
-              <div className="space-y-2">
-                {BANH.map((f) => (
-                  <div key={f.key} className="flex items-center gap-2">
-                    <span className="flex-1 text-[13px] text-slate-700">{nameFor(f.key)}</span>
-                    <Stepper value={looseQty[f.key] || 0} onChange={(v) => setLooseQty((s) => ({ ...s, [f.key]: v }))} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {hasOrder && (
-            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                    <th className="px-3 py-2">Thành phần bị trừ</th>
-                    <th className="px-3 py-2 text-right">Tồn hiện tại</th>
-                    <th className="px-3 py-2 text-right">Trừ đơn này</th>
-                    <th className="px-3 py-2 text-right">Còn lại</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ALL_STOCK.filter((s) => (deduction[s.key] || 0) > 0).map((s) => {
-                    const d = deduction[s.key] || 0;
-                    const left = qtyOf(s.key) - d;
-                    return (
-                      <tr key={s.key} className={left < 0 ? "bg-rose-50" : ""}>
-                        <td className="px-3 py-2 font-medium text-slate-800">{nameFor(s.key)}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">{qtyOf(s.key)}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-rose-600">−{d}</td>
-                        <td className={`px-3 py-2 text-right font-semibold ${left < 0 ? "text-rose-600" : "text-slate-800"}`}>
-                          {left}{left < 0 ? " (thiếu!)" : ""}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div className={`px-3 py-2 text-[13px] font-medium ${shortage.length ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
-                {shortage.length
-                  ? `⚠ Không đủ hàng: ${shortage.map((s) => nameFor(s.key)).join(", ")}`
-                  : "✓ Đủ hàng cho đơn này"}
-              </div>
-            </div>
-          )}
-          {!hasOrder && <p className="mt-3 text-[13px] text-slate-400">Nhập số lượng ở trên để tính.</p>}
-        </Panel>
-
-        {/* ===== KHO VỎ + BÁNH (sửa số tồn) ===== */}
-        <div className="grid gap-5 md:grid-cols-2">
-          <StockTable title="Kho vỏ hộp" items={voItems} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} isCustom={isCustom} onAdd={() => addItem("vo")} onDelete={deleteItem} />
-          <StockTable title="Kho bánh (mỗi vị 1 SKU)" items={banhItems} qtyOf={qtyOf} onChange={setStockQty} nameFor={nameFor} onRename={setName} isCustom={isCustom} onAdd={() => addItem("banh")} onDelete={deleteItem} />
         </div>
-
-        <p className="text-[12px] text-slate-400">
-          Vỏ hộp và bánh là 2 đơn vị kho riêng. Bán set trừ 1 vỏ + các bánh theo định mức; bán lẻ trừ bánh đó — cùng vị bánh dùng chung một kho. Bản thật: tồn đọc mirror từ Pancake (§15).
-        </p>
       </div>
     </main>
-  );
-}
-
-function Stepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="inline-flex items-center rounded-lg border border-slate-200">
-      <button onClick={() => onChange(Math.max(0, value - 1))} className="px-2.5 py-1 text-slate-500 hover:bg-slate-50">−</button>
-      <input
-        value={value}
-        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
-        className="w-10 border-x border-slate-200 py-1 text-center text-[13px] outline-none"
-      />
-      <button onClick={() => onChange(value + 1)} className="px-2.5 py-1 text-slate-500 hover:bg-slate-50">+</button>
-    </div>
-  );
-}
-
-function StockTable({
-  title,
-  items,
-  qtyOf,
-  onChange,
-  nameFor,
-  onRename,
-  isCustom,
-  onAdd,
-  onDelete,
-}: {
-  title: string;
-  items: StockItem[];
-  qtyOf: (k: string) => number;
-  onChange: (k: string, v: number) => void;
-  nameFor: (k: string) => string;
-  onRename: (k: string, v: string) => void;
-  isCustom: (k: string) => boolean;
-  onAdd: () => void;
-  onDelete: (k: string) => void;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-800">
-        {title}
-        <span className="text-[11px] font-normal text-slate-400">· sửa tên & tồn được</span>
-        <button onClick={onAdd} className="ml-auto rounded-lg bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700">+ Thêm mặt hàng</button>
-      </div>
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="bg-slate-50 text-left text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            <th className="px-4 py-2">Mặt hàng (sửa tên)</th>
-            <th className="px-4 py-2 text-right">Tồn (sửa)</th>
-            <th className="px-4 py-2 text-right">Ngưỡng</th>
-            <th className="px-4 py-2 text-center">Trạng thái</th>
-            <th className="px-2 py-2"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {items.map((s) => {
-            const q = qtyOf(s.key);
-            const st = statusOf(q, s.threshold);
-            const custom = isCustom(s.key);
-            return (
-              <tr key={s.key}>
-                <td className="px-4 py-2">
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      value={nameFor(s.key)}
-                      onChange={(e) => onRename(s.key, e.target.value)}
-                      className="w-full min-w-[8rem] rounded-lg border border-transparent bg-transparent px-2 py-1 font-medium text-slate-800 outline-none hover:border-slate-200 focus:border-blue-400 focus:bg-white"
-                    />
-                    {custom && <span className="flex-none rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">Tự thêm</span>}
-                  </div>
-                </td>
-                <td className="px-4 py-2 text-right">
-                  <input
-                    type="number"
-                    value={q}
-                    onChange={(e) => onChange(s.key, Number(e.target.value))}
-                    className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-400"
-                  />
-                </td>
-                <td className="px-4 py-2.5 text-right text-slate-400">{s.threshold}</td>
-                <td className="px-4 py-2.5 text-center"><span className={`rounded px-2 py-0.5 text-[11px] font-medium ${badge(st)}`}>{label(st)}</span></td>
-                <td className="px-2 py-2.5 text-center">
-                  {custom && (
-                    <button onClick={() => onDelete(s.key)} title="Xoá mặt hàng" className="rounded-lg px-2 py-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500">🗑</button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function Panel({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="mb-1 text-[14px] font-semibold text-slate-800">{title}</div>
-      {note && <div className="mb-3 text-[12px] text-slate-400">{note}</div>}
-      {children}
-    </section>
   );
 }
