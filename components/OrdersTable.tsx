@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ORDERS,
   PIPELINE,
+  RELEASED_STATUS,
   STATUS_COLOR,
   type OrderRow,
   type OrderSource,
@@ -159,15 +160,22 @@ export default function OrdersTable() {
     setSelected(new Set());
   };
 
-  const totals = list.reduce(
-    (a, r) => ({
-      cod: a.cod + rowKrw(r.cod, r),
-      prepaid: a.prepaid + rowKrw(r.prepaid, r),
-      cuoc: a.cuoc + rowKrw(r.cuoc_vc, r),
-      phi: a.phi + rowKrw(r.phi_vc_thu_khach, r),
-    }),
-    { cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
-  );
+  // Đơn huỷ / khách trả lại / đã hoàn toàn bộ KHÔNG tính tiền nữa.
+  //
+  // Trước đây dòng tổng ở đây cộng tất cả, trong khi Thu chi và Khách hàng đã
+  // loại — nên huỷ một đơn xong ba trang báo ba con số khác nhau.
+  const released = list.filter((r) => RELEASED_STATUS.has(r.status)).length;
+  const totals = list
+    .filter((r) => !RELEASED_STATUS.has(r.status))
+    .reduce(
+      (a, r) => ({
+        cod: a.cod + rowKrw(r.cod, r),
+        prepaid: a.prepaid + rowKrw(r.prepaid, r),
+        cuoc: a.cuoc + rowKrw(r.cuoc_vc, r),
+        phi: a.phi + rowKrw(r.phi_vc_thu_khach, r),
+      }),
+      { cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
+    );
 
   const createOrder = async (payload: Omit<OrderRow, "id">) => {
     setShowCreate(false);
@@ -407,6 +415,11 @@ export default function OrdersTable() {
       {/* footer */}
       <div className="sticky bottom-0 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-slate-200 bg-white px-5 py-3 text-[13px]">
         <span className="font-semibold text-slate-800">{list.length} đơn</span>
+        {released > 0 && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] text-slate-500">
+            không tính {released} đơn huỷ/trả/hoàn
+          </span>
+        )}
         <span className="text-slate-500">COD: <b className="text-slate-800">{money(totals.cod)}</b></span>
         <span className="text-slate-500">Trả trước: <b className="text-slate-800">{money(totals.prepaid)}</b></span>
         <span className="text-slate-500">Cước VC: <b className="text-slate-800">{money(totals.cuoc)}</b></span>

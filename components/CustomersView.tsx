@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { STATUS_COLOR, type OrderRow, type Status } from "@/lib/ordersMock";
+import { RELEASED_STATUS, STATUS_COLOR, type OrderRow } from "@/lib/ordersMock";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders } from "@/components/useOrders";
@@ -9,7 +9,6 @@ import { rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn huỷ/trả/hoàn không tính vào tổng chi tiêu
-const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 const digits = (s: string) => s.replace(/\D/g, "");
 /**
  * Mã đơn gốc — nhiều kiện của cùng một đơn dùng chung mã.
@@ -57,7 +56,7 @@ export default function CustomersView() {
       if (!g.orders.includes(code)) g.orders.push(code);
       // Tiền khách đã THỰC TRẢ: COD chỉ tính khi đơn đã đánh dấu "Đã thu tiền",
       // giống cách Thu chi tính. Không thì đơn vừa gửi đi đã ghi khách trả rồi.
-      if (!RELEASED.has(r.status))
+      if (!RELEASED_STATUS.has(r.status))
         g.spentKrw +=
           rowKrw(r.prepaid, r) + (r.status === "Đã thu tiền" ? rowKrw(r.cod, r) : 0);
       m.set(key, g);
@@ -139,7 +138,7 @@ export default function CustomersView() {
                                   key={r.id}
                                   onClick={() => setDetailId(r.id)}
                                   title="Bấm để xem chi tiết đơn"
-                                  className={`cursor-pointer hover:bg-blue-50/60 ${RELEASED.has(r.status) ? "opacity-50" : ""}`}
+                                  className={`cursor-pointer hover:bg-blue-50/60 ${RELEASED_STATUS.has(r.status) ? "opacity-50" : ""}`}
                                 >
                                   <td className="whitespace-nowrap px-3 py-2">
                                     <span className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2">
