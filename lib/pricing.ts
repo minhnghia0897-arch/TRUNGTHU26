@@ -1,4 +1,4 @@
-import type { Box, Flavor, Region, Warehouse } from "./types";
+import type { Box, Combo, Flavor, Region, Warehouse } from "./types";
 import { convertToBuyerCurrency, currencyOf } from "./money";
 
 // ============================================================================
@@ -23,6 +23,30 @@ export function boxPrice(box: Box, flavorIds: string[], flavors: Flavor[], buyer
     return sum + (f ? flavorSurcharge(f, buyer) : 0);
   }, 0);
   return base + sur;
+}
+
+/**
+ * Giá một set (combo).
+ *
+ * Set có giá riêng thì đó chính là giá bán — menu bán theo set, cùng quy cách
+ * hộp vẫn có thể hai mức giá theo loại nhân. Không có giá riêng thì suy từ hộp
+ * như nếp cũ (combo = hộp tự chọn đã điền sẵn).
+ *
+ * Trả `null` khi không suy được vì hộp đã xoá hoặc ngừng bán. CỐ Ý không lùi về
+ * một hộp bất kỳ: chỗ gọi trước đây dùng `?? boxes[0]` nên set trỏ vào hộp đã
+ * tắt sẽ hiện giá của hộp khác — sai giá mà không báo gì.
+ */
+export function comboPrice(
+  combo: Combo,
+  boxes: Box[],
+  flavors: Flavor[],
+  buyer: Region,
+): number | null {
+  const own = buyer === "vn" ? combo.price_vn : combo.price_kr;
+  if (own != null) return own;
+  const box = boxes.find((b) => b.id === combo.box_id);
+  if (!box) return null;
+  return boxPrice(box, combo.flavor_ids, flavors, buyer);
 }
 
 // ---- validate hộp tự chọn (§8.1) -------------------------------------------

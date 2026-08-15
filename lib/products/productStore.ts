@@ -70,11 +70,10 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   set("removed", p.removed);
   if (p.images !== undefined) c.images = p.images.slice(0, MAX_IMAGES);
 
-  // combo không có cột giá — giá combo tính từ hộp + phụ thu vị (§5)
-  if (kind !== "combo") {
-    set("price_vn", p.priceVn);
-    set("price_kr", p.priceKr);
-  }
+  // Set cố định giờ có giá riêng (§0008): bán theo set nên cùng quy cách hộp
+  // vẫn có thể hai mức giá theo loại nhân. Để trống thì suy từ hộp như cũ.
+  set("price_vn", p.priceVn);
+  set("price_kr", p.priceKr);
   if (kind === "combo" && p.flavorIds !== undefined) c.flavor_ids = p.flavorIds;
 
   return c;

@@ -1,7 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import { getBoxes, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
+import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { normalizePhone } from "@/lib/phone";
-import { boxPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
+import { boxPrice, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
 import { cartConsume } from "@/lib/webInventory";
 import type { Region } from "@/lib/types";
@@ -106,8 +106,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   if (!input.lines.length) return { ok: false, error: "Giỏ trống." };
 
   // --- load danh mục (re-check active + giá từ nguồn, không tin client) ---
-  const [boxes, flavors, warehouses, fx] = await Promise.all([
+  const [boxes, combos, flavors, warehouses, fx] = await Promise.all([
     getBoxes(),
+    getCombos(),
     getFlavors(),
     getWarehouses(),
     getFxRate(),
@@ -125,7 +126,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   let subtotal = 0;
   type PricedLine = CreateOrderInput["lines"][number] & { unit: number };
   const pricedLines: PricedLine[] = [];
-  for (const l of input.lines) {
+  // `let` vì nhánh set cố định thay boxId/flavorIds bằng giá trị từ danh mục.
+  for (let l of input.lines) {
     if (!input.recipients.some((r) => r.uid === l.recipientUid))
       return { ok: false, error: "Có dòng hàng chưa gán người nhận hợp lệ." };
     const qty = Math.max(1, Math.floor(l.qty || 1));
@@ -142,10 +144,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       if (!f) return { ok: false, error: "Vị mua lẻ không hợp lệ." };
       unit = region === "vn" ? f.price_vn : f.price_kr;
     } else {
-      // combo: coi như hộp với vị cố định — đơn giản hoá dùng giá box
-      const box = boxes.find((b) => b.id === l.boxId && b.active);
-      if (!box) return { ok: false, error: "Combo không hợp lệ." };
-      unit = boxPrice(box, l.flavorIds ?? [], flavors, region);
+      // Set cố định: tra THEO comboId trong danh mục, không tin boxId/flavorIds
+      // client gửi lên. Trước đây chốt giá thẳng từ boxId nên client đổi sang
+      // hộp rẻ hơn là mua được set giá cao bằng giá hộp rẻ.
+      const combo = combos.find((c) => c.id === l.comboId && c.active);
+      if (!combo) return { ok: false, error: "Set không tồn tại hoặc ngừng bán." };
+      const p = comboPrice(combo, boxes, flavors, region);
+      if (p === null)
+        return { ok: false, error: `Set "${combo.name}" chưa có giá — chưa bán được.` };
+      unit = p;
+      // vị của set do danh mục quyết định, dùng luôn cho mô tả kiện
+      l = { ...l, boxId: combo.box_id, flavorIds: combo.flavor_ids };
     }
 
     subtotal += unit * qty;

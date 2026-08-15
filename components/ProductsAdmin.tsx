@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Box, Flavor, Combo } from "@/lib/types";
-import { boxPrice } from "@/lib/pricing";
+import { boxPrice, comboPrice } from "@/lib/pricing";
 import { ALL_STOCK } from "@/lib/inventory";
 import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
@@ -145,11 +145,10 @@ export default function ProductsAdmin({
       flavorIds: [] as string[],
     })),
     ...combos.map((c) => {
-      const bx = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
       return {
         key: `combo:${c.id}`, type: "Combo" as const, name: c.name,
-        priceVn: boxPrice(bx, c.flavor_ids, flavors, "vn"),
-        priceKr: boxPrice(bx, c.flavor_ids, flavors, "kr"),
+        priceVn: comboPrice(c, boxes, flavors, "vn") ?? 0,
+        priceKr: comboPrice(c, boxes, flavors, "kr") ?? 0,
         cost: 0, discount: 0, active: c.active, flavorIds: c.flavor_ids,
       };
     }),
