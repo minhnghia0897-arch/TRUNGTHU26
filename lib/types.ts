@@ -76,6 +76,7 @@ export interface ProductVariant {
 export interface Combo {
   id: string;
   name: string;
+  badge?: Badge;
   description?: string;
   box_id: string;
   flavor_ids: string[];

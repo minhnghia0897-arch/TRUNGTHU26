@@ -29,6 +29,7 @@ export function parseKey(key: string): { kind: ProductKind; id: string } | null 
 /** Trường trang quản trị gửi lên → cột trong DB. */
 export interface ProductPatch {
   name?: string;
+  badge?: "best_seller" | "must_try" | null;
   code?: string;
   category?: string;
   images?: string[];
@@ -56,6 +57,7 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   };
 
   set("name", p.name);
+  set("badge", p.badge);
   set("code", p.code);
   set("category", p.category);
   set("description", p.description);
