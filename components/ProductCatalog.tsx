@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Badge, Box, Combo, Flavor, Region } from "@/lib/types";
+import { MAX_PRODUCT_IMAGES, type Badge, type Box, type Combo, type Flavor, type Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine, comboPrice, comboOptions } from "@/lib/pricing";
 import {
@@ -19,7 +19,6 @@ type Tab = "box" | "combo" | "la";
 
 // Giỏ hàng dùng chung với trang Đặt hàng (OrderFlow đọc lại đúng key này khi mở /dat-hang).
 const CART_KEY = "tr_cart";
-const MAX_IMAGES = 4; // khớp giới hạn ảnh ở Dashboard
 type CartBlob = { cart?: CartLine[]; buyerRegion?: Region; [k: string]: unknown };
 
 function readCart(): CartBlob {
@@ -71,7 +70,7 @@ function Price({ v, region }: { v: number; region: Region }) {
   );
 }
 
-/** Khung ảnh 4:5 — lướt qua tối đa 4 ảnh, bấm vào mở popup xem lớn. */
+/** Khung ảnh 4:5 — lướt qua các ảnh của sản phẩm, bấm vào mở popup xem lớn. */
 function ImageArea({
   badge,
   w,
@@ -273,7 +272,7 @@ export default function ProductCatalog({
   const imgsByKey = useMemo(() => {
     const m: Record<string, string[]> = {};
     const put = (key: string, images?: string[]) => {
-      const list = (images ?? []).filter(Boolean).slice(0, MAX_IMAGES);
+      const list = (images ?? []).filter(Boolean).slice(0, MAX_PRODUCT_IMAGES);
       if (list.length) m[key] = list;
     };
     boxes.forEach((b) => put(`box:${b.id}`, b.images));
