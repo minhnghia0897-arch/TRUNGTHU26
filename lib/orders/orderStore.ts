@@ -1,4 +1,6 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { adjustStock } from "@/lib/products/stock";
+import { parseKey } from "@/lib/products/productStore";
 import { ORDERS } from "@/lib/ordersMock";
 import {
   SHIPMENT_SELECT,
@@ -199,11 +201,19 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
         note: p.note ?? "",
         assignee: p.assignee ?? null,
         consume: p.consume ?? null,
-        stock_applied: p.stockApplied ?? false,
+        stock_applied: false, // để syncStockForStatus bên dưới trừ, mới ghi đúng cờ
       })
       .select("id")
       .single();
     if (sErr || !ship) fail(sErr, "Không tạo được kiện");
+
+    // Đơn mới ở trạng thái sống thì trừ kho ngay. Quan trọng với đơn nhân bản:
+    // nó chép `consume` của đơn gốc nên có hàng thật để trừ.
+    await syncStockForStatus(
+      ship!.id,
+      { status: p.status, consume: p.consume ?? null, stock_applied: false },
+      p.status,
+    );
 
     rowKeys.push(ship!.id);
   }
@@ -253,7 +263,7 @@ export async function updateOrder(
 
   const { data: existing, error: findErr } = await sb
     .from("shipment")
-    .select("id, recipient_id, web_order_id, web_order ( customer_id )")
+    .select("id, recipient_id, web_order_id, status, consume, stock_applied, web_order ( customer_id )")
     .eq("id", rowKey)
     .maybeSingle();
   if (findErr) fail(findErr, "Không đọc được đơn");
@@ -262,6 +272,9 @@ export async function updateOrder(
   const link = existing as unknown as {
     id: string;
     recipient_id: string;
+    status: string;
+    consume: Record<string, number> | null;
+    stock_applied: boolean;
     web_order: { customer_id: string } | null;
   };
 
@@ -281,12 +294,16 @@ export async function updateOrder(
   put("tags", patch.tags);
   put("note", patch.note);
   put("assignee", patch.assignee);
-  put("consume", patch.consume);
-  put("stock_applied", patch.stockApplied);
+  // `consume` và `stock_applied` do MÁY CHỦ giữ, không nhận từ trình duyệt.
+  // Trình duyệt gửi lại bản nó đọc lúc tải trang; nếu ghi đè thì cờ kho bị đẩy
+  // về giá trị cũ và lần lưu sau sẽ hoàn kho thêm một lần nữa.
   put("voided", patch.voided);
 
   const { error: sErr } = await sb.from("shipment").update(ship).eq("id", rowKey);
   if (sErr) fail(sErr, "Không lưu được đơn");
+
+  // Đổi sang huỷ/trả/hoàn thì hàng quay lại kho; đổi ngược lại thì trừ ra.
+  await syncStockForStatus(rowKey, link, patch.status);
 
   // ---- recipient ----
   const rec: Record<string, unknown> = {};
@@ -335,12 +352,66 @@ export async function updateOrder(
   };
 }
 
+// ------------------------------------------------------------ hoàn / trừ kho
+/** Trạng thái coi như hàng đã quay lại kho. */
+const RELEASED = new Set(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
+
+/**
+ * Đồng bộ tồn kho theo trạng thái đơn — CHẠY Ở MÁY CHỦ.
+ *
+ * Trước đây việc này làm ở trình duyệt và ghi vào localStorage, tức là ghi vào
+ * chỗ không ai đọc: huỷ đơn xong kho thật không hề được hoàn.
+ *
+ * Idempotent qua cờ `stock_applied`: gọi lại nhiều lần không cộng trừ thêm.
+ */
+async function syncStockForStatus(
+  rowKey: string,
+  prev: { status?: string; consume?: Record<string, number> | null; stock_applied?: boolean },
+  nextStatus?: string,
+) {
+  const consume = prev.consume ?? {};
+  const entries = Object.entries(consume).filter(([, n]) => n > 0);
+  if (!entries.length) return;
+
+  const should = !RELEASED.has(nextStatus ?? prev.status ?? "");
+  if (should === Boolean(prev.stock_applied)) return; // đã đúng trạng thái rồi
+
+  const moves = entries
+    .map(([k, n]) => {
+      const p = parseKey(k);
+      return p ? { kind: p.kind, id: p.id, qty: n } : null;
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
+  if (!moves.length) return;
+
+  await adjustStock(moves, should ? -1 : 1);
+
+  const sb = getServiceClient();
+  await sb.from("shipment").update({ stock_applied: should }).eq("id", rowKey);
+}
+
 // ----------------------------------------------------------------- voidOrders
 /** Xoá mềm: đánh dấu đã xoá, giữ bản ghi lại để đối soát. */
 export async function voidOrders(rowKeys: string[], actor = "Bạn"): Promise<UpdateResult> {
   if (!isOrderStoreConfigured() || !rowKeys.length) return { ok: true };
 
   const sb = getServiceClient();
+
+  // Hoàn kho TRƯỚC khi đánh dấu xoá — xoá xong thì không còn đường lần lại
+  // đơn nào đang giữ hàng.
+  const { data: rows } = await sb
+    .from("shipment")
+    .select("id, status, consume, stock_applied")
+    .in("id", rowKeys);
+  for (const r of (rows ?? []) as {
+    id: string;
+    status: string;
+    consume: Record<string, number> | null;
+    stock_applied: boolean;
+  }[]) {
+    await syncStockForStatus(r.id, r, "Huỷ đơn");
+  }
+
   const { error } = await sb
     .from("shipment")
     .update({ voided: true, status: "Huỷ đơn", updated_at: new Date().toISOString() })

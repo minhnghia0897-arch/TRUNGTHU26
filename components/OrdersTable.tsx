@@ -28,12 +28,8 @@ import CreateOrderModal from "@/components/CreateOrderModal";
 import ExportButton from "@/components/ExportButton";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders, stamp } from "@/components/useOrders";
-import { applyStock } from "@/lib/stockStore";
 import { ordersToSheets, exportFileName } from "@/lib/ordersExport";
 import { rowKrw } from "@/lib/orders/orderSchema";
-
-// trạng thái "giải phóng hàng" → hoàn kho
-const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -79,20 +75,11 @@ export default function OrdersTable() {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  // Trừ/hoàn kho theo trạng thái đơn. Đơn "sống" (chưa huỷ/hoàn/trả) → trừ kho;
-  // chuyển sang huỷ/hoàn/trả → hoàn kho lại. Idempotent qua cờ stockApplied.
-  // Tồn kho vẫn nằm trên máy này — xem ghi chú ở docs/supabase.md.
-  const reconcileStock = (order: OrderRow): OrderRow => {
-    if (!order.consume) return order;
-    const should = !RELEASED.has(order.status);
-    const applied = !!order.stockApplied;
-    if (should === applied) return order;
-    applyStock(order.consume, should ? -1 : 1);
-    return { ...order, stockApplied: should };
-  };
-
+  // Kho do MÁY CHỦ cộng trừ theo trạng thái (lib/orders/orderStore.ts). Bản cũ
+  // làm ở đây và ghi vào localStorage — tức ghi vào chỗ không ai đọc, nên huỷ
+  // đơn xong kho thật không bao giờ được hoàn.
   const saveOrder = (input: OrderRow, changes: string[]) => {
-    void store.saveOrder(reconcileStock(input), changes);
+    void store.saveOrder(input, changes);
   };
 
   const money = (krw: number) =>
@@ -159,10 +146,15 @@ export default function OrdersTable() {
       return n;
     });
   const deleteSelected = () => {
-    // hoàn kho cho các đơn đang trừ kho trước khi xoá
-    rows.forEach((r) => {
-      if (selected.has(r.id) && r.stockApplied && r.consume) applyStock(r.consume, 1);
-    });
+    // Xoá là thao tác khó lấy lại từ giao diện — hỏi lại, và nói rõ hệ quả.
+    // Kho được máy chủ hoàn trước khi đánh dấu xoá.
+    const n = selected.size;
+    const ok = window.confirm(
+      `Xoá ${n} đơn khỏi bảng?\n\n` +
+        `Đơn sẽ chuyển sang "Huỷ đơn", bị loại khỏi doanh thu và hàng được hoàn về kho. ` +
+        `Từ bảng này sẽ không mở lại được.`,
+    );
+    if (!ok) return;
     void store.removeOrders([...selected]);
     setSelected(new Set());
   };
@@ -178,16 +170,38 @@ export default function OrdersTable() {
   );
 
   const createOrder = async (payload: Omit<OrderRow, "id">) => {
-    // trừ kho ngay khi tạo (đơn ở trạng thái "sống")
-    const withStock = reconcileStock({ id: 0, ...payload, created: stamp(), stockApplied: false });
     setShowCreate(false);
-    const order = await store.addOrder(withStock);
+    const order = await store.addOrder({ ...payload, created: stamp() });
+    if (order) setDetailId(order.id);
+  };
+
+  /**
+   * Nhân bản một đơn thành đơn mới.
+   *
+   * Nút này trước đây chỉ đóng menu, không làm gì. Đơn mới bắt đầu lại từ
+   * "Mới": bỏ mã vận chuyển và bỏ dấu đã-thu-tiền của đơn cũ, vì đó là dữ kiện
+   * riêng của lần giao trước. Máy chủ sẽ trừ kho cho đơn mới như đơn thường.
+   */
+  const duplicateOrder = async (id: number) => {
+    const row = rows.find((r) => r.id === id);
+    setMenu(null);
+    if (!row) return;
+    const { id: _id, ...rest } = row;
+    void _id;
+    const order = await store.addOrder({
+      ...rest,
+      status: "Mới",
+      vc: "",
+      created: stamp(),
+      stockApplied: false,
+      note: row.note ? `${row.note} (bản sao)` : "Bản sao",
+    });
     if (order) setDetailId(order.id);
   };
 
   const setStatusOf = (id: number, s: Status) => {
     const row = rows.find((r) => r.id === id);
-    if (row) void store.saveOrder(reconcileStock({ ...row, status: s }), [`Trạng thái → ${s}`]);
+    if (row) void store.saveOrder({ ...row, status: s }, [`Trạng thái → ${s}`]);
     setMenu(null);
   };
 
@@ -445,7 +459,7 @@ export default function OrdersTable() {
             <button
               key={label}
               onClick={() => {
-                if (label === "Tạo trùng lặp") return setMenu(null);
+                if (label === "Tạo trùng lặp") return duplicateOrder(menu.id);
                 setStatusOf(menu.id, label as Status);
               }}
               className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] hover:bg-slate-50 ${danger ? "text-rose-600" : "text-slate-700"}`}
@@ -455,7 +469,7 @@ export default function OrdersTable() {
             </button>
           ))}
           <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400">
-            Bản demo · thật sẽ đồng bộ Pancake
+            Huỷ / trả / hoàn: loại khỏi doanh thu và hoàn hàng về kho.
           </div>
         </div>
       )}
