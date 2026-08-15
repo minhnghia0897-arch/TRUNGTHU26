@@ -3,73 +3,65 @@
 import { useState } from "react";
 import type { OrderRow, OrderSource, Carrier, Status } from "@/lib/ordersMock";
 import { PIPELINE } from "@/lib/ordersMock";
-import { VO, SETS, BANH, nameOf } from "@/lib/inventory";
-import { setConsume, cakeConsume, pickConsume } from "@/lib/stockStore";
+import { sellableItems, type SellItem } from "@/lib/pricing";
+import type { Box, Combo, Flavor } from "@/lib/types";
 import { IconXCircle, IconPlus } from "@/components/icons";
 
 const CARRIERS: Carrier[] = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile"];
 const STATUSES: Status[] = [...PIPELINE];
 
 export default function CreateOrderModal({
+  boxes,
+  flavors,
+  combos,
   onCreate,
   onClose,
 }: {
+  boxes: Box[];
+  flavors: Flavor[];
+  combos: Combo[];
   onCreate: (o: Omit<OrderRow, "id">) => void;
   onClose: () => void;
 }) {
   const [source, setSource] = useState<OrderSource>("web");
   const [region, setRegion] = useState<"vn" | "kr">("kr");
   const [status, setStatus] = useState<Status>("Mới");
-  const [prodType, setProdType] = useState<"set" | "cake" | "custom">("set");
-  const [prodKey, setProdKey] = useState<string>(SETS[0]?.key ?? "");
+  const [itemKey, setItemKey] = useState("");
   const [prodQty, setProdQty] = useState(1);
-  // hộp tự chọn: 1 vỏ + các vị (cho phép trùng)
-  const [shellKey, setShellKey] = useState<string>(VO[0]?.key ?? "");
-  const [picks, setPicks] = useState<Record<string, number>>({});
   const [customer, setCustomer] = useState("");
   const [phone, setPhone] = useState("");
   const [carrier, setCarrier] = useState<Carrier>("");
   const [recipient, setRecipient] = useState("");
   const [address, setAddress] = useState("");
-  const [prepaid, setPrepaid] = useState(0);
-  const [cod, setCod] = useState(0);
-  const [cuoc, setCuoc] = useState(0);
+  const [paid, setPaid] = useState(0); // đã cọc; COD suy ra
+  const [shipFee, setShipFee] = useState(0); // phí ship THU CỦA KHÁCH
+  const [cuoc, setCuoc] = useState(0); // cước trả hãng vận chuyển
   const [expected, setExpected] = useState("");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
 
   const cur = region === "kr" ? "₩" : "đ";
+  const money = (v: number) =>
+    region === "kr" ? "₩" + Math.round(v).toLocaleString("en-US") : Math.round(v).toLocaleString("vi-VN") + "đ";
 
-  // tên sản phẩm + tiêu hao kho (BOM)
-  const set = SETS.find((s) => s.key === prodKey);
-  const cake = BANH.find((c) => c.key === prodKey);
-  // hộp tự chọn: số ô mục tiêu = tổng bánh của set dùng chung vỏ (mặc định 4)
-  const shellSlots = SETS.find((s) => s.voKey === shellKey)?.cakes.reduce((n, c) => n + c.qty, 0) ?? 4;
-  const picked = Object.values(picks).reduce((a, b) => a + b, 0);
-  const shellName = VO.find((v) => v.key === shellKey)?.name ?? "Vỏ hộp";
-  const pickText = Object.entries(picks)
-    .filter(([, n]) => n > 0)
-    .map(([k, n]) => `${n} ${nameOf(k).replace("Bánh ", "").replace(" 150g", "")}`)
-    .join(", ");
-  const setPick = (k: string, n: number) => setPicks((s) => ({ ...s, [k]: Math.max(0, n) }));
+  // Danh mục THẬT, giá theo vùng kho. Bản cũ dựng trên bảng hardcode của menu
+  // cũ nên đơn tạo tay ghi tên hàng không tồn tại và khoá tiêu hao không khớp
+  // với sản phẩm — kho không hề nhúc nhích.
+  const items = sellableItems(combos, boxes, flavors, region);
+  const item: SellItem | undefined = items.find((i) => i.key === itemKey) ?? items[0];
 
-  const productName =
-    prodType === "set"
-      ? `${set?.name ?? "Set"} ×${prodQty}`
-      : prodType === "cake"
-        ? `${(cake?.name ?? "Bánh").replace(" 150g", "")} (lẻ) ×${prodQty}`
-        : `Hộp tự chọn (${shellName})${pickText ? `: ${pickText}` : ""} ×${prodQty}`;
-  const consume =
-    prodType === "set"
-      ? setConsume(prodKey, prodQty)
-      : prodType === "cake"
-        ? cakeConsume(prodKey, prodQty)
-        : pickConsume(shellKey, picks, prodQty);
+  const goods = (item?.price ?? 0) * prodQty;
+  const total = goods + shipFee; // tổng phải thu
+  const daCoc = Math.min(Math.max(0, paid), total);
+  const cod = total - daCoc; // COD = tổng (gồm ship) − đã cọc
+
+  const productName = item ? `${item.label} ×${prodQty}` : "";
+  const consume: Record<string, number> = item ? { [item.consumeKey]: prodQty } : {};
 
   function submit() {
     if (!customer.trim()) return setErr("Nhập tên khách hàng.");
     if (!phone.trim()) return setErr("Nhập số điện thoại.");
-    if (prodType === "custom" && picked === 0) return setErr("Chọn ít nhất 1 bánh cho hộp tự chọn.");
+    if (!item) return setErr("Danh mục chưa có sản phẩm nào bán được.");
     onCreate({
       source,
       region,
@@ -83,7 +75,9 @@ export default function CreateOrderModal({
       carrier,
       address: address.trim(),
       cod,
-      prepaid,
+      prepaid: daCoc,
+      shipFee,
+      goodsAmount: goods,
       cuoc_vc: cuoc,
       phi_vc_thu_khach: 0,
       product: productName,
@@ -120,30 +114,23 @@ export default function CreateOrderModal({
           </div>
 
           <div className="rounded-lg border border-slate-200 p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[12px] font-medium text-slate-500">Sản phẩm (trừ kho)</span>
-              <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-slate-200 text-[12px]">
-                {(["set", "cake", "custom"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => {
-                      setProdType(t);
-                      if (t === "set") setProdKey(SETS[0].key);
-                      if (t === "cake") setProdKey(BANH[0].key);
-                    }}
-                    className={`px-3 py-1 ${prodType === t ? "bg-blue-600 text-white" : "text-slate-500"}`}
-                  >
-                    {t === "set" ? "Combo có sẵn" : t === "cake" ? "Bánh lẻ" : "Hộp tự chọn"}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <span className="mb-2 block text-[12px] font-medium text-slate-500">Sản phẩm</span>
 
-            {prodType !== "custom" ? (
+            {items.length === 0 ? (
+              <p className="text-[13px] text-amber-700">
+                Danh mục chưa có sản phẩm nào bán được ở vùng này — vào trang Sản phẩm đặt giá trước.
+              </p>
+            ) : (
               <div className="flex gap-2">
-                <select value={prodKey} onChange={(e) => setProdKey(e.target.value)} className={inp}>
-                  {(prodType === "set" ? SETS : BANH).map((o) => (
-                    <option key={o.key} value={o.key}>{o.name}</option>
+                <select
+                  value={item?.key ?? ""}
+                  onChange={(e) => setItemKey(e.target.value)}
+                  className={inp}
+                >
+                  {items.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label} — {money(o.price)}
+                    </option>
                   ))}
                 </select>
                 <input
@@ -152,52 +139,15 @@ export default function CreateOrderModal({
                   value={prodQty}
                   onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
                   className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
+                  title="Số lượng"
                 />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <select value={shellKey} onChange={(e) => setShellKey(e.target.value)} className={inp}>
-                    {VO.map((v) => (
-                      <option key={v.key} value={v.key}>{v.name}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    value={prodQty}
-                    onChange={(e) => setProdQty(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-20 flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-[13px]"
-                    title="Số hộp giống nhau"
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">Chọn bánh cho hộp (được trùng vị)</span>
-                  <span className={picked === shellSlots ? "font-medium text-emerald-600" : "font-medium text-amber-600"}>
-                    Đã chọn {picked}/{shellSlots} ô
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {BANH.map((f) => {
-                    const n = picks[f.key] || 0;
-                    return (
-                      <div key={f.key} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1">
-                        <span className="flex-1 truncate text-[12px] text-slate-700">{f.name.replace(" 150g", "")}</span>
-                        <button onClick={() => setPick(f.key, n - 1)} className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100">−</button>
-                        <span className="w-4 text-center text-[13px] font-medium">{n}</span>
-                        <button onClick={() => setPick(f.key, n + 1)} className="grid h-6 w-6 place-items-center rounded text-slate-500 hover:bg-slate-100">+</button>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             )}
 
-            <div className="mt-2 text-[11px] text-slate-400">
-              Sẽ trừ kho: {Object.entries(consume).length
-                ? Object.entries(consume).map(([k, v]) => `${v} ${nameOf(k)}`).join(" · ")
-                : "—"}
-            </div>
+            <p className="mt-2 text-[11px] text-slate-400">
+              Giá lấy từ bảng giá. Tạo đơn xong máy chủ trừ kho{" "}
+              {item ? <b>{prodQty} {item.label}</b> : "—"}.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -222,17 +172,36 @@ export default function CreateOrderModal({
             <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Địa chỉ" className={inp} />
           </F>
 
+          {/* Tiền: giá hàng cố định theo bảng giá, hai ô dưới chỉ chia nhau tổng */}
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-[13px]">
+            <div className="flex justify-between text-slate-500">
+              <span>Tiền hàng</span>
+              <span className="font-medium text-slate-700">{money(goods)}</span>
+            </div>
+            <div className="mt-1 flex justify-between text-slate-500">
+              <span>Phí ship khách trả</span>
+              <span className="font-medium text-slate-700">{money(shipFee)}</span>
+            </div>
+            <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 font-semibold text-slate-800">
+              <span>Tổng phải thu</span>
+              <span>{money(total)}</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
-            <F label={`Trả trước (${cur})`}>
-              <input type="number" value={prepaid} onChange={(e) => setPrepaid(Number(e.target.value) || 0)} className={inp} />
+            <F label={`Phí ship khách trả (${cur})`}>
+              <input type="number" value={shipFee} onChange={(e) => setShipFee(Math.max(0, Number(e.target.value) || 0))} className={inp} />
             </F>
-            <F label={`COD (${cur})`}>
-              <input type="number" value={cod} onChange={(e) => setCod(Number(e.target.value) || 0)} className={inp} />
+            <F label={`Đã cọc (${cur})`}>
+              <input type="number" value={daCoc} onChange={(e) => setPaid(Number(e.target.value) || 0)} className={inp} />
             </F>
-            <F label={`Cước VC (${cur})`}>
+            <F label={`Cước VC trả hãng (${cur})`}>
               <input type="number" value={cuoc} onChange={(e) => setCuoc(Number(e.target.value) || 0)} className={inp} />
             </F>
           </div>
+          <p className="-mt-2 text-[11.5px] text-slate-400">
+            COD còn phải thu = <b>{money(cod)}</b> (tổng gồm ship trừ đã cọc).
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <F label="Dự kiến nhận">

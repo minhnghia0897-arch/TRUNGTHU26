@@ -1,6 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { adjustStock, type StockMove } from "@/lib/products/stock";
+import { findLink, markLinkUsed } from "@/lib/orders/links";
 
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
@@ -281,10 +282,27 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   try {
     const sb = getServiceClient();
 
+    // Khách đến từ link Messenger: tra token Ở MÁY CHỦ để biết đó là ai.
+    //
+    // Bản cũ tra trong localStorage của TRÌNH DUYỆT KHÁCH — nơi không bao giờ
+    // có link vì link được tạo trên máy của shop. Nên tên khách Facebook chưa
+    // bao giờ gắn được vào đơn, chỉ có mỗi cái thẻ "Messenger".
+    const link = await findLink(buyer.refToken);
+
     // upsert customer theo phone chuẩn hoá
     const { data: cust, error: cErr } = await sb
       .from("customer")
-      .upsert({ name: buyer.name, phone: buyerPhone, region }, { onConflict: "phone" })
+      .upsert(
+        {
+          name: buyer.name,
+          phone: buyerPhone,
+          region,
+          // Giữ tên khách tự nhập làm chính; tên Messenger đi kèm để tra lại.
+          messenger_name: link?.customerName ?? null,
+          psid: link?.psid ?? null,
+        },
+        { onConflict: "phone" },
+      )
       .select("id")
       .single();
     if (cErr || !cust) throw cErr ?? new Error("Không tạo được khách.");
@@ -394,6 +412,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         moves.push({ kind: "flavor", id: l.flavorIds[0], qty: l.qty });
     }
     await adjustStock(moves, -1);
+
+    // Ghi lại token đã sinh ra đơn nào — để không dùng lại nhầm và để đối soát.
+    if (buyer.refToken) await markLinkUsed(buyer.refToken, code);
 
     return { ok: true, order: summary };
   } catch (e) {

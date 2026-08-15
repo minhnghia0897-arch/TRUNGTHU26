@@ -5,17 +5,13 @@ import { useRouter } from "next/navigation";
 import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo, type Warehouse } from "@/lib/types";
 import ShippingSettings from "./ShippingSettings";
 import { boxPrice, comboPrice } from "@/lib/pricing";
-import { ALL_STOCK } from "@/lib/inventory";
-import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const API_PRODUCTS = "/api/dashboard/products";
 const API_UPLOAD = "/api/dashboard/upload";
 
 // mặt hàng kho — liên kết theo KEY (mã SKU), tên hiển thị lấy live từ kho
-type InvItem = { key: string; name: string; qty: number; threshold: number; status: "ok" | "low" | "out" };
 // map tên gốc → key (để nâng cấp các liên kết cũ lưu theo tên)
-const KEY_BY_DEFAULT_NAME: Record<string, string> = Object.fromEntries(ALL_STOCK.map((s) => [s.name, s.key]));
 
 // Mẫu mã (thuộc tính) — mỗi lựa chọn là 1 tổ hợp bánh của cùng một sản phẩm.
 // VD Vinh Hiển có "Nhân đặc biệt" 55.000₩ và "Nhân cổ truyền cao cấp" 60.000₩.
@@ -106,45 +102,6 @@ export default function ProductsAdmin({
   const [chooser, setChooser] = useState(false);
   const [draft, setDraft] = useState<Product | null>(null);
   const [showTrash, setShowTrash] = useState(false);
-
-  // ---- kho dùng chung (đồng bộ với trang Tồn kho) ----
-  const [stock, setStockState] = useState<Record<string, number>>(() =>
-    Object.fromEntries(ALL_STOCK.map((s) => [s.key, s.qty])),
-  );
-  const [names, setNames] = useState<Record<string, string>>({});
-  const [items, setItems] = useState<CustomItem[]>([]);
-
-  useEffect(() => {
-    setStockState(getStock());
-    setNames(getNames());
-    setItems(getItems());
-    const onChange = (e: StorageEvent) => {
-      if (!e.key || e.key === STOCK_KEY) setStockState(getStock());
-      if (!e.key || e.key === NAME_KEY) setNames(getNames());
-      if (!e.key || e.key === ITEMS_KEY) { setItems(getItems()); setStockState(getStock()); }
-    };
-    window.addEventListener("storage", onChange);
-    return () => window.removeEventListener("storage", onChange);
-  }, []);
-
-  // tồn kho live (gồm cả mặt hàng tự thêm) — nguồn cho liên kết & "Có thể bán"
-  const skus = [...ALL_STOCK, ...items.map((i) => ({ key: i.key, name: i.name, threshold: i.threshold }))];
-  const liveInv: InvItem[] = skus.map((s) => {
-    const qty = stock[s.key] ?? 0;
-    const name = names[s.key] ?? s.name;
-    return { key: s.key, name, qty, threshold: s.threshold, status: qty <= 0 ? "out" : qty < s.threshold ? "low" : "ok" };
-  });
-  const invByKey = (k?: string) => (k ? liveInv.find((i) => i.key === k) : undefined);
-
-  // ghi tồn kho (dùng chung) — kẹp ≥ 0 trừ khi cho phép bán âm
-  const writeStock = (key: string, qty: number, allowNegative?: boolean) => {
-    const v = allowNegative ? Math.floor(qty) : Math.max(0, Math.floor(qty) || 0);
-    setStockState((cur) => {
-      const next = { ...cur, [key]: v };
-      saveStock(next);
-      return next;
-    });
-  };
 
   // sản phẩm gốc từ catalog
   // Nạp đủ các trường mà form có sửa. Thiếu bất kỳ trường nào ở đây là mở sản
@@ -428,7 +385,7 @@ export default function ProductsAdmin({
         <p className="mt-3 text-[12px] text-slate-400">
           {showTrash
             ? "Sản phẩm đã xoá — bấm “Khôi phục” để đưa lại danh sách."
-            : "Bấm vào một sản phẩm để sửa/xoá. “Có thể bán” lấy trực tiếp từ Tồn kho theo mã SKU (đổi tên/tồn bên kho là tự đồng bộ). Demo lưu ở trình duyệt — bản thật ghi vào Supabase."}
+            : "Bấm vào một sản phẩm để sửa/xoá. Cột “Có thể bán” là tồn kho của chính sản phẩm — khách đặt thì máy chủ tự trừ."}
         </p>
       </div>
 
@@ -444,9 +401,7 @@ export default function ProductsAdmin({
           product={editing}
           create={!!draft}
           flavors={flavors}
-          inventory={liveInv}
           onSave={handleSave}
-          writeStock={writeStock}
           onDelete={!draft ? () => removeAny(editing.key) : undefined}
           onClose={() => { setDraft(null); setEditKey(null); }}
         />
@@ -495,18 +450,14 @@ function EditModal({
   product,
   create,
   flavors,
-  inventory,
   onSave,
-  writeStock,
   onDelete,
   onClose,
 }: {
   product: Product;
   create?: boolean;
   flavors: Flavor[];
-  inventory: InvItem[];
   onSave: (patch: Override) => void;
-  writeStock: (key: string, qty: number, allowNegative?: boolean) => void;
   onDelete?: () => void;
   onClose: () => void;
 }) {

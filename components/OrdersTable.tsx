@@ -31,6 +31,7 @@ import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders, stamp } from "@/components/useOrders";
 import { ordersToSheets, exportFileName } from "@/lib/ordersExport";
 import { rowKrw } from "@/lib/orders/orderSchema";
+import type { Box, Combo, Flavor } from "@/lib/types";
 
 const FX = 18.5;
 type Cur = "krw" | "vnd";
@@ -57,7 +58,15 @@ const MENU: { label: Status | "Tạo trùng lặp"; Icon: typeof IconTruck; dang
   { label: "Tạo trùng lặp", Icon: IconCopyDoc },
 ];
 
-export default function OrdersTable() {
+export default function OrdersTable({
+  boxes,
+  flavors,
+  combos,
+}: {
+  boxes: Box[];
+  flavors: Flavor[];
+  combos: Combo[];
+}) {
   // Nguồn đơn dùng chung với trang Khách hàng / Thu chi. Đã nối cơ sở dữ liệu thì
   // mọi thao tác đi thẳng vào database; chưa nối thì chạy đơn mẫu để xem thử.
   const store = useOrders();
@@ -146,6 +155,24 @@ export default function OrdersTable() {
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
+  /**
+   * Gắn một nhãn cho các đơn đang chọn.
+   *
+   * Nút này trước đây không có onClick — bấm không làm gì. Nhãn đã có sẵn thì
+   * bỏ qua đơn đó để không nhân đôi.
+   */
+  const addTagToSelected = () => {
+    const raw = window.prompt(`Gắn nhãn cho ${selected.size} đơn đang chọn:`);
+    const tag = raw?.trim();
+    if (!tag) return;
+    rows
+      .filter((r) => selected.has(r.id) && !r.tags.includes(tag))
+      .forEach((r) => {
+        void store.saveOrder({ ...r, tags: [...r.tags, tag] }, [`Thêm nhãn "${tag}"`]);
+      });
+    setSelected(new Set());
+  };
+
   const deleteSelected = () => {
     // Xoá là thao tác khó lấy lại từ giao diện — hỏi lại, và nói rõ hệ quả.
     // Kho được máy chủ hoàn trước khi đánh dấu xoá.
@@ -299,7 +326,10 @@ export default function OrdersTable() {
           >
             <IconTrash width={15} height={15} /> Xoá
           </button>
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-50">
+          <button
+            onClick={addTagToSelected}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-50"
+          >
             <IconPlus width={15} height={15} /> Thêm nhãn
           </button>
           <button
@@ -488,7 +518,15 @@ export default function OrdersTable() {
       )}
 
       {/* form tạo đơn mới */}
-      {showCreate && <CreateOrderModal onCreate={createOrder} onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateOrderModal
+          boxes={boxes}
+          flavors={flavors}
+          combos={combos}
+          onCreate={createOrder}
+          onClose={() => setShowCreate(false)}
+        />
+      )}
 
       {/* popup chi tiết đơn */}
       {detailId !== null && (() => {
