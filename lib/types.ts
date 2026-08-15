@@ -24,7 +24,7 @@ export interface Box {
   discount?: number;
   note?: string;
   supply_link?: string;
-  variants?: { name: string; contents: string }[];
+  variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
   removed?: boolean;
@@ -52,11 +52,25 @@ export interface Flavor {
   discount?: number;
   note?: string;
   supply_link?: string;
-  variants?: { name: string; contents: string }[];
+  variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
   removed?: boolean;
   active: boolean;
+}
+
+/**
+ * Một lựa chọn của sản phẩm — VD Vinh Hiển có "Nhân đặc biệt" và "Nhân cổ
+ * truyền cao cấp", cùng một hộp nhưng khác ruột và khác giá.
+ *
+ * Có giá thì lựa chọn đó bán được và giá đó là giá bán. Không giá thì chỉ là
+ * mẫu mã mô tả, giá lấy của sản phẩm — giữ nguyên nếp cũ.
+ */
+export interface ProductVariant {
+  name: string;
+  contents: string;
+  price_vn?: number | null;
+  price_kr?: number | null;
 }
 
 export interface Combo {
@@ -80,7 +94,7 @@ export interface Combo {
   discount?: number;
   note?: string;
   supply_link?: string;
-  variants?: { name: string; contents: string }[];
+  variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
   removed?: boolean;

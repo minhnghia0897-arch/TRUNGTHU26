@@ -25,8 +25,30 @@ export function boxPrice(box: Box, flavorIds: string[], flavors: Flavor[], buyer
   return base + sur;
 }
 
+/** Một lựa chọn bán được của set, giá đã theo tiền tệ người đặt. */
+export interface ComboOption {
+  name: string;
+  contents: string;
+  price: number;
+}
+
 /**
- * Giá một set (combo).
+ * Các lựa chọn bán được của một set — VD Vinh Hiển có "Nhân đặc biệt" 55.000₩
+ * và "Nhân cổ truyền cao cấp" 60.000₩: cùng một hộp, khác ruột, khác giá.
+ *
+ * Lựa chọn không có giá ở vùng đang xem thì bỏ khỏi danh sách, KHÔNG rơi về giá
+ * của lựa chọn khác — thà không bán còn hơn bán sai giá.
+ */
+export function comboOptions(combo: Combo, buyer: Region): ComboOption[] {
+  return (combo.variants ?? []).flatMap((v) => {
+    const price = buyer === "vn" ? v.price_vn : v.price_kr;
+    return price == null ? [] : [{ name: v.name, contents: v.contents, price }];
+  });
+}
+
+/**
+ * Giá một set (combo). Set có nhiều lựa chọn thì trả giá thấp nhất — con số
+ * hiện ngoài thẻ sản phẩm ("từ ..."), còn giá thật chốt theo lựa chọn khách bấm.
  *
  * Set có giá riêng thì đó chính là giá bán — menu bán theo set, cùng quy cách
  * hộp vẫn có thể hai mức giá theo loại nhân. Không có giá riêng thì suy từ hộp
@@ -42,11 +64,16 @@ export function comboPrice(
   flavors: Flavor[],
   buyer: Region,
 ): number | null {
+  const opts = comboOptions(combo, buyer);
+  if (opts.length) return Math.min(...opts.map((o) => o.price));
   const own = buyer === "vn" ? combo.price_vn : combo.price_kr;
   if (own != null) return own;
   const box = boxes.find((b) => b.id === combo.box_id);
   if (!box) return null;
-  return boxPrice(box, combo.flavor_ids, flavors, buyer);
+  const derived = boxPrice(box, combo.flavor_ids, flavors, buyer);
+  // Giá 0 không bao giờ là cố ý — đó là "chưa đặt giá ở vùng này". Thà không
+  // bày bán còn hơn để khách bấm mua một hộp quà giá 0.
+  return derived > 0 ? derived : null;
 }
 
 // ---- validate hộp tự chọn (§8.1) -------------------------------------------
@@ -99,6 +126,8 @@ export interface CartLine {
   kind: "box" | "combo" | "la";
   boxId?: string;
   comboId?: string;
+  /** Lựa chọn của set khách đã bấm (VD "Nhân cổ truyền cao cấp"). */
+  variantName?: string;
   flavorIds?: string[];
   qty: number;
   unitPrice: number; // đã theo vùng người đặt
