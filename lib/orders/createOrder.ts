@@ -1,7 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { normalizePhone } from "@/lib/phone";
-import { boxPrice, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
+import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
 import { cartConsume } from "@/lib/webInventory";
 import type { Region } from "@/lib/types";
@@ -26,6 +26,7 @@ export interface CreateOrderInput {
     kind: "box" | "combo" | "la";
     boxId?: string;
     comboId?: string;
+    variantName?: string;
     flavorIds?: string[];
     qty: number;
     recipientUid: string;
@@ -149,10 +150,24 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       // hộp rẻ hơn là mua được set giá cao bằng giá hộp rẻ.
       const combo = combos.find((c) => c.id === l.comboId && c.active);
       if (!combo) return { ok: false, error: "Set không tồn tại hoặc ngừng bán." };
-      const p = comboPrice(combo, boxes, flavors, region);
-      if (p === null)
-        return { ok: false, error: `Set "${combo.name}" chưa có giá — chưa bán được.` };
-      unit = p;
+
+      // Set nhiều lựa chọn (VD hai loại nhân) thì giá theo ĐÚNG lựa chọn khách
+      // bấm, tra lại trong danh mục — không nhận giá client gửi lên.
+      const opts = comboOptions(combo, region);
+      if (opts.length) {
+        const picked = opts.find((o) => o.name === l.variantName);
+        if (!picked)
+          return {
+            ok: false,
+            error: `Set "${combo.name}" cần chọn loại nhân (${opts.map((o) => o.name).join(" / ")}).`,
+          };
+        unit = picked.price;
+      } else {
+        const p = comboPrice(combo, boxes, flavors, region);
+        if (p === null)
+          return { ok: false, error: `Set "${combo.name}" chưa có giá — chưa bán được.` };
+        unit = p;
+      }
       // vị của set do danh mục quyết định, dùng luôn cho mô tả kiện
       l = { ...l, boxId: combo.box_id, flavorIds: combo.flavor_ids };
     }
@@ -168,11 +183,19 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       const f = flavors.find((x) => x.id === l.flavorIds?.[0]);
       return `${f?.name ?? "Bánh lẻ"}${times}`;
     }
+    // Set: gọi đúng tên set + loại nhân. Không mượn tên hộp — hộp chỉ là quy
+    // cách và thường đã tắt bán, tra trong `boxes` (chỉ có hàng đang bán) sẽ
+    // không thấy, nhãn rơi về chữ "Combo" trống nghĩa trên đơn.
+    if (l.kind === "combo") {
+      const c = combos.find((x) => x.id === l.comboId);
+      const opt = l.variantName ? ` · ${l.variantName}` : "";
+      return `${c?.name ?? "Set"}${opt}${times}`;
+    }
     const box = boxes.find((b) => b.id === l.boxId);
     const vi = (l.flavorIds ?? [])
       .map((id) => flavors.find((f) => f.id === id)?.name)
       .filter(Boolean);
-    const base = box?.name ?? (l.kind === "combo" ? "Combo" : "Hộp");
+    const base = box?.name ?? "Hộp";
     return `${base}${times}${vi.length ? ` (${vi.join(", ")})` : ""}`;
   };
 

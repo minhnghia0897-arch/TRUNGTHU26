@@ -14,6 +14,7 @@ import {
   shipFeeForRegion,
   type CartLine,
   comboPrice,
+  comboOptions,
 } from "@/lib/pricing";
 import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
@@ -137,12 +138,28 @@ export default function OrderFlow({
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
     if (!c) return;
-    const unit = comboPrice(c, boxes, flavors, buyerRegion);
+    // Vào bằng link ?combo=<id> thì chưa biết khách muốn loại nhân nào — lấy
+    // lựa chọn rẻ nhất và ghi rõ tên vào giỏ để khách thấy mà đổi.
+    const opts = comboOptions(c, buyerRegion);
+    const pick = opts.length
+      ? opts.reduce((a, b2) => (b2.price < a.price ? b2 : a))
+      : null;
+    const unit = pick ? pick.price : comboPrice(c, boxes, flavors, buyerRegion);
     if (unit === null) return; // set chưa có giá thì không cho thêm vào giỏ
-    const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
     setCart((cart) => [
       ...cart,
-      { uid: nid(), kind: "combo", boxId: b.id, comboId: c.id, flavorIds: c.flavor_ids, qty: 1, unitPrice: unit, name: c.name, recipientUids: [] },
+      {
+        uid: nid(),
+        kind: "combo",
+        boxId: c.box_id,
+        comboId: c.id,
+        variantName: pick?.name,
+        flavorIds: c.flavor_ids,
+        qty: 1,
+        unitPrice: unit,
+        name: pick ? `${c.name} · ${pick.name}` : c.name,
+        recipientUids: [],
+      },
     ]);
   };
   const addFlavor = (flavorId: string) => {
@@ -418,6 +435,8 @@ export default function OrderFlow({
       kind: l.kind,
       boxId: l.boxId,
       comboId: l.comboId,
+      // phải gửi kèm: máy chủ chốt giá set theo ĐÚNG loại nhân khách đã bấm
+      variantName: l.variantName,
       flavorIds: l.flavorIds,
       qty: qtyForRecipient(l, ruid),
       recipientUid: ruid,
