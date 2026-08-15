@@ -103,16 +103,26 @@ export interface ShipFee {
   shipping: number;
   handling: number;
 }
+/**
+ * Phí ship + xử lý của MỘT KIỆN, quy về tiền tệ người đặt (§6).
+ *
+ * `parcelQty` là số phần trong kiện đó — dùng để xét ngưỡng miễn phí ship của
+ * kho. Không truyền thì coi như chưa đủ ngưỡng (thu phí như thường), nên chỗ
+ * gọi cũ vẫn chạy đúng.
+ */
 export function shipFeeForRegion(
   recipientRegion: Region,
   buyer: Region,
   warehouses: Warehouse[],
   fxKrwVnd: number,
+  parcelQty = 0,
 ): ShipFee {
   const wh = warehouses.find((w) => w.region === recipientRegion && w.active);
   if (!wh) return { shipping: 0, handling: 0 };
   if (wh.shipping_mode === "included") return { shipping: 0, handling: 0 };
-  const ship = wh.fee_table.ship ?? 0;
+  const freeFrom = wh.fee_table.free_from_qty ?? 0;
+  const freeShip = freeFrom > 0 && parcelQty >= freeFrom;
+  const ship = freeShip ? 0 : (wh.fee_table.ship ?? 0);
   const handling = wh.fee_table.handling ?? 0;
   return {
     shipping: Math.round(convertToBuyerCurrency(ship, wh.local_currency, buyer, fxKrwVnd)),
@@ -128,6 +138,14 @@ export interface CartLine {
   comboId?: string;
   /** Lựa chọn của set khách đã bấm (VD "Nhân cổ truyền cao cấp"). */
   variantName?: string;
+  /**
+   * Các vị của lựa chọn đã bấm, lấy từ `contents` của variant.
+   *
+   * Set bán theo lựa chọn nhân (Vinh Hiển, Kim Ngọc Các) để `flavor_ids` trống
+   * vì mỗi lựa chọn một bộ vị khác nhau — không có trường này thì giỏ hàng chỉ
+   * hiện một dấu gạch.
+   */
+  flavorText?: string;
   flavorIds?: string[];
   qty: number;
   unitPrice: number; // đã theo vùng người đặt
@@ -169,9 +187,12 @@ export function computeBill(
   let shipping = 0;
   let handling = 0;
   for (const r of recipients) {
-    const hasItems = cart.some((l) => l.recipientUids.includes(r.uid));
-    if (!hasItems) continue;
-    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd);
+    // số phần trong kiện của người nhận này — cơ sở xét ngưỡng miễn phí ship
+    const parcelQty = cart
+      .filter((l) => l.recipientUids.includes(r.uid))
+      .reduce((n, l) => n + qtyForRecipient(l, r.uid), 0);
+    if (!parcelQty) continue;
+    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd, parcelQty);
     shipping += fee.shipping;
     handling += fee.handling;
   }

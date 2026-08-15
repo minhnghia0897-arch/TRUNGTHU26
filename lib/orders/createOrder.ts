@@ -209,7 +209,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     .map((r): OrderParcel | null => {
       const mine = pricedLines.filter((l) => l.recipientUid === r.uid);
       if (!mine.length) return null;
-      const fee = shipFeeForRegion(r.region, region, warehouses, fx);
+      // Ngưỡng miễn phí ship xét theo số phần trong CHÍNH kiện này (§ fee_table)
+      const parcelQty = mine.reduce((n, l) => n + l.qty, 0);
+      const fee = shipFeeForRegion(r.region, region, warehouses, fx, parcelQty);
       shippingTotal += fee.shipping;
       handlingTotal += fee.handling;
       const sub = mine.reduce((s, l) => s + l.unit * l.qty, 0);

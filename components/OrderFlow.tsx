@@ -135,6 +135,13 @@ export default function OrderFlow({
   const flavorNames = (ids?: string[]) =>
     (ids ?? []).map((id) => flavors.find((f) => f.id === id)?.name).filter(Boolean).join(" · ");
 
+  /**
+   * Vị của một dòng giỏ hàng. Set bán theo lựa chọn nhân giữ vị trong
+   * `flavorText`; set chọn vị rời (Sắc Đỏ) giữ trong `flavorIds`.
+   */
+  const lineFlavors = (it: { flavorText?: string; flavorIds?: string[] }) =>
+    it.flavorText?.trim() || flavorNames(it.flavorIds);
+
   // khách Messenger đã map từ token ?ref (nếu có)
   const refLink = ref ? findLink(ref) : undefined;
 
@@ -157,6 +164,7 @@ export default function OrderFlow({
         boxId: c.box_id ?? undefined,
         comboId: c.id,
         variantName: pick?.name,
+        flavorText: pick?.contents?.trim() || undefined,
         flavorIds: c.flavor_ids,
         qty: 1,
         unitPrice: unit,
@@ -491,7 +499,8 @@ export default function OrderFlow({
         parcels.forEach((r, i) => {
           const items = cart.filter((it) => it.recipientUids.includes(r.uid));
           const sub = items.reduce((s, it) => s + it.unitPrice * qtyForRecipient(it, r.uid), 0);
-          const fee = shipFeeForRegion(r.region, buyerRegion, warehouses, fx);
+          const parcelQty = items.reduce((n, it) => n + qtyForRecipient(it, r.uid), 0);
+          const fee = shipFeeForRegion(r.region, buyerRegion, warehouses, fx, parcelQty);
           // Dashboard hiểu `region` là kho VÀ là tiền tệ của số tiền trên dòng.
           // Đơn tính theo tiền người đặt, nên kiện giao khác vùng phải quy đổi lại
           // về tiền tệ của kho đó, không thì Thu chi/Khách hàng đọc sai.
@@ -598,7 +607,7 @@ export default function OrderFlow({
         const lines = items
           .map((it) => {
             const q = qtyForRecipient(it, r.uid);
-            const fl = it.kind !== "la" && flavorNames(it.flavorIds) ? ` (${flavorNames(it.flavorIds)})` : "";
+            const fl = it.kind !== "la" && lineFlavors(it) ? ` (${lineFlavors(it)})` : "";
             return `   • ${it.name}${q > 1 ? ` ×${q}` : ""}${fl} — ${fmt(it.unitPrice * q)}`;
           })
           .join("\n");
@@ -737,10 +746,7 @@ export default function OrderFlow({
                         {it.name}
                       </div>
                       <div className="mt-1 text-xs opacity-70">
-                        {(it.flavorIds ?? [])
-                          .map((id) => flavors.find((f) => f.id === id)?.name)
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
+                        {lineFlavors(it) || "—"}
                       </div>
                     </div>
                     <button
@@ -898,8 +904,8 @@ export default function OrderFlow({
                 <div key={it.uid} className="flex items-center justify-between gap-2 border-b border-dashed border-line py-1.5 text-[12.5px] last:border-b-0">
                   <span className="min-w-0">
                     <span className="font-medium">{it.name}{!multi && it.qty > 1 ? ` ×${it.qty}` : ""}</span>
-                    {it.kind !== "la" && flavorNames(it.flavorIds) && (
-                      <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                    {it.kind !== "la" && lineFlavors(it) && (
+                      <span className="block text-[10px] text-ink/55">{lineFlavors(it)}</span>
                     )}
                   </span>
                   <div className="flex flex-none items-center gap-2">
@@ -990,7 +996,7 @@ export default function OrderFlow({
                     setRecipientQty={setRecipientQty}
 
                     fmt={fmt}
-                    flavorNames={flavorNames}
+                    lineFlavors={lineFlavors}
                     suggestedDate={suggestedDate}
                     suggestedDDMM={suggestedDDMM}
 
@@ -1066,7 +1072,7 @@ export default function OrderFlow({
                 assign={assign}
                 setRecipientQty={setRecipientQty}
                 fmt={fmt}
-                flavorNames={flavorNames}
+                lineFlavors={lineFlavors}
                 suggestedDate={suggestedDate}
                 suggestedDDMM={suggestedDDMM}
 
@@ -1090,7 +1096,7 @@ export default function OrderFlow({
                 <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
                 <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
               </div>
-              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+              <RecipientBlocks recipients={recipients} cart={cart} lineFlavors={lineFlavors} fmt={fmt} />
             </div>
 
             <div className="rounded border border-line bg-white p-3.5">
@@ -1132,7 +1138,7 @@ export default function OrderFlow({
               </div>
 
               {/* quà theo từng người nhận (địa chỉ, ngày, số lượng, tiền) */}
-              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+              <RecipientBlocks recipients={recipients} cart={cart} lineFlavors={lineFlavors} fmt={fmt} />
               <div className="border-b border-dashed border-line" />
 
               <div className="pt-2.5 text-[12.5px]">
@@ -1213,7 +1219,7 @@ export default function OrderFlow({
               </div>
 
               {/* quà theo từng người nhận */}
-              <RecipientBlocks recipients={recipients} cart={cart} flavorNames={flavorNames} fmt={fmt} />
+              <RecipientBlocks recipients={recipients} cart={cart} lineFlavors={lineFlavors} fmt={fmt} />
               <div className="border-b border-dashed border-line" />
 
               {/* tổng */}
@@ -1535,7 +1541,7 @@ function RecipientsEditor({
   assign,
   setRecipientQty,
   fmt,
-  flavorNames,
+  lineFlavors,
   suggestedDate,
   suggestedDDMM,
   sameAsBuyer,
@@ -1549,7 +1555,7 @@ function RecipientsEditor({
   assign: (itemUid: string, rUid: string) => void;
   setRecipientQty: (itemUid: string, rUid: string, delta: number) => void;
   fmt: (v: number) => string;
-  flavorNames: (ids?: string[]) => string;
+  lineFlavors: (it: { flavorText?: string; flavorIds?: string[] }) => string;
   suggestedDate: string;
   suggestedDDMM: string;
   sameAsBuyer: boolean;
@@ -1641,7 +1647,7 @@ function RecipientsEditor({
           <div className="space-y-1.5">
             {cart.map((it) => {
               const sel = it.recipientUids.includes(r.uid);
-              const fl = it.kind !== "la" ? flavorNames(it.flavorIds) : "";
+              const fl = it.kind !== "la" ? lineFlavors(it) : "";
               const q = qtyForRecipient(it, r.uid);
               return (
                 <div
@@ -1700,12 +1706,12 @@ function RecipientsEditor({
 function RecipientBlocks({
   recipients,
   cart,
-  flavorNames,
+  lineFlavors,
   fmt,
 }: {
   recipients: Recipient[];
   cart: CartLine[];
-  flavorNames: (ids?: string[]) => string;
+  lineFlavors: (it: { flavorText?: string; flavorIds?: string[] }) => string;
   fmt: (v: number) => string;
 }) {
   return (
@@ -1737,8 +1743,8 @@ function RecipientBlocks({
                   <div key={it.uid} className="flex items-start justify-between gap-2 text-[12px]">
                     <span className="min-w-0">
                       <span className="font-medium">{it.name}{q > 1 ? ` ×${q}` : ""}</span>
-                      {it.kind !== "la" && flavorNames(it.flavorIds) && (
-                        <span className="block text-[10px] text-ink/55">{flavorNames(it.flavorIds)}</span>
+                      {it.kind !== "la" && lineFlavors(it) && (
+                        <span className="block text-[10px] text-ink/55">{lineFlavors(it)}</span>
                       )}
                     </span>
                     <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * q)}</span>
