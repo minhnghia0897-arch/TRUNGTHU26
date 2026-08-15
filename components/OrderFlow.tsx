@@ -136,11 +136,24 @@ export default function OrderFlow({
     (ids ?? []).map((id) => flavors.find((f) => f.id === id)?.name).filter(Boolean).join(" · ");
 
   /**
-   * Vị của một dòng giỏ hàng. Set bán theo lựa chọn nhân giữ vị trong
-   * `flavorText`; set chọn vị rời (Sắc Đỏ) giữ trong `flavorIds`.
+   * Vị của một dòng giỏ hàng.
+   *
+   * Tra từ DANH MỤC trước, `flavorText` đã lưu chỉ là phương án dự phòng. Hai lý
+   * do: giỏ hàng nằm trong localStorage nên dòng tạo từ trước khi có trường này
+   * sẽ trống; và khi shop sửa lại danh sách vị thì giỏ đang mở cũng đúng theo.
+   *
+   * Set bán theo lựa chọn nhân giữ vị trong `contents` của lựa chọn; set chọn vị
+   * rời (Sắc Đỏ) giữ trong `flavorIds`.
    */
-  const lineFlavors = (it: { flavorText?: string; flavorIds?: string[] }) =>
-    it.flavorText?.trim() || flavorNames(it.flavorIds);
+  const lineFlavors = (it: CartLine) => {
+    if (it.comboId && it.variantName) {
+      const v = combos
+        .find((c) => c.id === it.comboId)
+        ?.variants?.find((x) => x.name === it.variantName);
+      if (v?.contents?.trim()) return v.contents.trim();
+    }
+    return it.flavorText?.trim() || flavorNames(it.flavorIds);
+  };
 
   // khách Messenger đã map từ token ?ref (nếu có)
   const refLink = ref ? findLink(ref) : undefined;
@@ -1555,7 +1568,7 @@ function RecipientsEditor({
   assign: (itemUid: string, rUid: string) => void;
   setRecipientQty: (itemUid: string, rUid: string, delta: number) => void;
   fmt: (v: number) => string;
-  lineFlavors: (it: { flavorText?: string; flavorIds?: string[] }) => string;
+  lineFlavors: (it: CartLine) => string;
   suggestedDate: string;
   suggestedDDMM: string;
   sameAsBuyer: boolean;
@@ -1711,7 +1724,7 @@ function RecipientBlocks({
 }: {
   recipients: Recipient[];
   cart: CartLine[];
-  lineFlavors: (it: { flavorText?: string; flavorIds?: string[] }) => string;
+  lineFlavors: (it: CartLine) => string;
   fmt: (v: number) => string;
 }) {
   return (
