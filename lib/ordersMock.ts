@@ -25,6 +25,19 @@ export type Status =
   | "Đã hoàn toàn bộ"
   | "Huỷ đơn";
 
+/**
+ * Trạng thái "đơn không còn hiệu lực": hàng quay lại kho và TIỀN KHÔNG CÒN
+ * TÍNH — không vào doanh thu, không vào COD, không vào trả trước.
+ *
+ * Trước đây mỗi màn hình tự khai một bản. Lệch một chỗ là bảng này loại đơn
+ * huỷ còn bảng kia vẫn cộng, hai trang nói hai số về cùng một tháng.
+ */
+export const RELEASED_STATUS = new Set<Status>([
+  "Huỷ đơn",
+  "Khách trả lại",
+  "Đã hoàn toàn bộ",
+]);
+
 export interface OrderRow {
   id: number;
   source: OrderSource;
@@ -44,6 +57,8 @@ export interface OrderRow {
    * thêm. Tách ra để màn hình chi tiết tính được tiền hàng thuần.
    */
   shipFee?: number;
+  /** Tiền hàng của kiện theo giá niêm yết lúc đặt. Mốc để tính tổng phải thu. */
+  goodsAmount?: number;
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;

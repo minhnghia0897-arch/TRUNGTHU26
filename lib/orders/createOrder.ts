@@ -359,6 +359,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         recipient_id: recipIdByUid[r.uid],
         fulfillment_region: r.region,
         warehouse_id: wh.id,
+        goods_amount: parcel.subtotal,
         shipping_fee: parcel.shipping,
         handling_fee: parcel.handling,
         shipping_mode: wh.shipping_mode,

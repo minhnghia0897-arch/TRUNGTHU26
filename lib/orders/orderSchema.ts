@@ -98,6 +98,7 @@ export interface ShipmentRow {
   cuoc_vc: Cell;
   shipping_fee: Cell;
   handling_fee: Cell;
+  goods_amount: Cell;
   phi_vc_thu_khach: Cell;
   tags: unknown;
   note: Cell;
@@ -165,6 +166,9 @@ export function rowToOrder(s: ShipmentRow): StoredOrder {
     // dồn vào `prepaid` nên nếu không tách ra thì màn hình chi tiết hiển thị
     // "giá sản phẩm" bao gồm luôn cước ship.
     shipFee: num(s.shipping_fee) + num(s.handling_fee),
+    // Tiền hàng chốt theo giá niêm yết lúc đặt (§0013). Đây mới là mốc để tính
+    // tổng phải thu — KHÔNG suy từ prepaid + cod, vì đó là cách chia tiền.
+    goodsAmount: num(s.goods_amount),
     cuoc_vc: num(s.cuoc_vc),
     phi_vc_thu_khach: num(s.phi_vc_thu_khach),
     tags: tags.filter(Boolean),
@@ -187,7 +191,7 @@ export function rowToOrder(s: ShipmentRow): StoredOrder {
  */
 export const SHIPMENT_SELECT = `
   id, fulfillment_region, vc_code, carrier, status, cod, prepaid, cuoc_vc,
-  shipping_fee, handling_fee,
+  shipping_fee, handling_fee, goods_amount,
   phi_vc_thu_khach, tags, note, source, assignee, product_summary, consume,
   stock_applied, voided, parcel_index, parcel_count, updated_at,
   web_order ( code, transfer_code, currency, fx_rate_snapshot, created_at,

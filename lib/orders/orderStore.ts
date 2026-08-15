@@ -1,6 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { adjustStock } from "@/lib/products/stock";
 import { parseKey } from "@/lib/products/productStore";
+import { RELEASED_STATUS, type Status } from "@/lib/ordersMock";
 import { ORDERS } from "@/lib/ordersMock";
 import {
   SHIPMENT_SELECT,
@@ -353,9 +354,6 @@ export async function updateOrder(
 }
 
 // ------------------------------------------------------------ hoàn / trừ kho
-/** Trạng thái coi như hàng đã quay lại kho. */
-const RELEASED = new Set(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
-
 /**
  * Đồng bộ tồn kho theo trạng thái đơn — CHẠY Ở MÁY CHỦ.
  *
@@ -373,7 +371,7 @@ async function syncStockForStatus(
   const entries = Object.entries(consume).filter(([, n]) => n > 0);
   if (!entries.length) return;
 
-  const should = !RELEASED.has(nextStatus ?? prev.status ?? "");
+  const should = !RELEASED_STATUS.has((nextStatus ?? prev.status ?? "") as Status);
   if (should === Boolean(prev.stock_applied)) return; // đã đúng trạng thái rồi
 
   const moves = entries

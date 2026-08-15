@@ -3,13 +3,13 @@
 // Tiền giữ nguyên tiền tệ của kho (VN → đ, Hàn → ₩) và có thêm một cột quy đổi
 // về đơn vị đang chọn để cộng tổng được trong Excel.
 // ============================================================================
-import type { OrderRow, Status } from "./ordersMock";
+import { RELEASED_STATUS } from "./ordersMock";
+import type { OrderRow } from "./ordersMock";
 import type { SheetSpec } from "./xlsx";
 
 export type ExportCurrency = "krw" | "vnd";
 
 /** Trạng thái không tính vào doanh thu (giống quy ước hoàn kho ở bảng đơn). */
-const VOIDED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
 const SOURCE_LABEL: Record<OrderRow["source"], string> = {
   web: "Online",
@@ -97,8 +97,8 @@ export function ordersToSheets(rows: OrderRow[], opts: ExportOptions): SheetSpec
   // Đơn huỷ / khách trả lại / đã hoàn tiền KHÔNG tính vào doanh thu — tách riêng
   // để con số mang sang kế toán dùng được ngay.
   const amountOf = (r: OrderRow) => convertRowMoney(r.prepaid + r.cod, r.region, cur, fx);
-  const live = rows.filter((r) => !VOIDED.has(r.status));
-  const voided = rows.filter((r) => VOIDED.has(r.status));
+  const live = rows.filter((r) => !RELEASED_STATUS.has(r.status));
+  const voided = rows.filter((r) => RELEASED_STATUS.has(r.status));
   const sum = (list: OrderRow[]) => list.reduce((s, r) => s + amountOf(r), 0);
 
   const byStatus = new Map<string, { n: number; money: number }>();

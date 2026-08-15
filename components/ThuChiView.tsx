@@ -1,21 +1,19 @@
 "use client";
 
-import { type Status } from "@/lib/ordersMock";
+import { RELEASED_STATUS } from "@/lib/ordersMock";
 import { rowKrw } from "@/lib/orders/orderSchema";
 import { useOrders } from "@/components/useOrders";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 
 const FX = 18.5;
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
-// đơn đã nhả (huỷ/trả/hoàn) không tính doanh thu
-const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
 export default function ThuChiView() {
   // Cùng một nguồn với trang Đơn hàng — trước đây trang này bỏ qua phần đã sửa
   // nên đổi trạng thái đơn xong doanh thu ở đây vẫn đứng yên.
   const store = useOrders();
 
-  const all = store.rows.filter((r) => !RELEASED.has(r.status));
+  const all = store.rows.filter((r) => !RELEASED_STATUS.has(r.status));
   const webCount = all.filter((r) => r.source !== "facebook").length;
 
   // COD chỉ tính là tiền ĐÃ VỀ khi đơn được đánh dấu "Đã thu tiền".
