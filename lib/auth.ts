@@ -16,6 +16,19 @@ const secret = () => process.env.DASHBOARD_PASSWORD ?? "";
 /** Có đặt mật khẩu hay chưa. Chưa đặt = chế độ mở, chỉ dùng khi chạy máy nhà. */
 export const isAuthEnabled = () => secret().length > 0;
 
+/**
+ * Đã nối database thật hay chưa.
+ *
+ * Đọc thẳng biến môi trường thay vì mượn `isServiceRoleConfigured` ở
+ * lib/supabase/server.ts, vì middleware chạy trên Edge — kéo cả thư viện
+ * Supabase vào đó là thừa và dễ vỡ.
+ *
+ * Dùng để quyết định: chưa đặt mật khẩu thì cho vào (dữ liệu mẫu, chạy máy
+ * nhà) hay khoá cứng (dữ liệu thật, không được để hở).
+ */
+export const isLiveDataConfigured = () =>
+  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 const enc = new TextEncoder();
 
 const b64url = (bytes: ArrayBuffer) => {
