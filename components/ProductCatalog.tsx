@@ -78,12 +78,15 @@ function ImageArea({
   images = [],
   alt = "",
   onOpen,
+  onEmptyClick,
 }: {
   badge?: Badge;
   w?: number;
   images?: string[];
   alt?: string;
   onOpen?: (i: number) => void;
+  /** Bấm vào ô ảnh trống. Sản phẩm chưa có ảnh vẫn phải mở được chi tiết. */
+  onEmptyClick?: () => void;
 }) {
   const [i, setI] = useState(0);
   const n = images.length;
@@ -98,6 +101,15 @@ function ImageArea({
         <button type="button" onClick={() => onOpen?.(i)} aria-label={`Xem ảnh ${alt}`} className="absolute inset-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={images[i]} alt={alt} className="h-full w-full object-cover" />
+        </button>
+      ) : onEmptyClick ? (
+        <button
+          type="button"
+          onClick={onEmptyClick}
+          aria-label={`Xem chi tiết ${alt}`}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <IconLotus width={54} height={54} className="text-gold/45" />
         </button>
       ) : (
         <IconLotus width={54} height={54} className="text-gold/45" />
@@ -273,6 +285,10 @@ export default function ProductCatalog({
   // Ảnh sản phẩm lấy thẳng từ danh mục do máy chủ truyền xuống.
   // Trước đây đọc localStorage "tr_product_edits" nên ảnh chỉ hiện trên máy đã
   // upload — khách vào web thấy khung trắng. Giờ ảnh nằm trên Supabase Storage.
+  // Bộ quà tặng đang mở chi tiết. Thẻ ngoài danh sách cố tình gọn — ảnh lớn,
+  // mô tả đầy đủ và danh sách vị của từng loại nhân nằm ở đây.
+  const [detail, setDetail] = useState<Combo | null>(null);
+
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
   const imagesOf = (key: string) => imgsByKey[key] ?? [];
 
@@ -424,10 +440,16 @@ export default function ProductCatalog({
                     w={b?.weight}
                     images={imagesOf(`combo:${c.id}`)}
                     alt={c.name}
-                    onOpen={(i) => setLightbox({ images: imagesOf(`combo:${c.id}`), index: i, title: c.name })}
+                    onOpen={() => setDetail(c)}
+                    onEmptyClick={() => setDetail(c)}
                   />
                   <div className="flex flex-1 flex-col p-3 text-center">
-                    <h3 className="text-[13px] font-semibold leading-tight text-navy">{c.name}</h3>
+                    <button
+                      onClick={() => setDetail(c)}
+                      className="text-[13px] font-semibold leading-tight text-navy underline-offset-2 hover:underline"
+                    >
+                      {c.name}
+                    </button>
                     {(c.description || flavorLine) && (
                       <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{c.description || flavorLine}</p>
                     )}
