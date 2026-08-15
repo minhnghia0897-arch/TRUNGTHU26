@@ -115,7 +115,10 @@ export default function OrderFlow({
     simulated?: boolean;
   }>(null);
 
-  const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0];
+  // CÓ THỂ KHÔNG CÓ HỘP NÀO. Menu bán theo bộ quà tặng thì không hộp tự chọn nào
+  // đang bán, `boxes` rỗng. Trước đây code coi như luôn có hộp nên `box.slots`
+  // làm sập cả trang đặt hàng — khách không đặt được gì.
+  const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0] ?? null;
   const fmt = (v: number) => formatMoney(v, buyerRegion);
 
   // Ảnh bìa lấy thẳng từ danh mục máy chủ truyền xuống. Bản cũ đọc localStorage
@@ -347,15 +350,16 @@ export default function OrderFlow({
   );
 
   // ---- builder ----
-  const builderTotal =
-    boxPrice(box, picks.filter(Boolean), flavors, buyerRegion);
+  const builderTotal = box ? boxPrice(box, picks.filter(Boolean), flavors, buyerRegion) : 0;
   function pick(fid: string) {
+    if (!box) return;
     const next = [...picks];
     next[openSlot] = fid;
     setPicks(next);
     if (openSlot < box.slots - 1) setOpenSlot(openSlot + 1);
   }
   function addBox() {
+    if (!box) return;
     const v = validateBoxFill(box, picks.filter(Boolean), flavors);
     if (!v.ok) {
       alert(v.error);
@@ -785,8 +789,8 @@ export default function OrderFlow({
           </section>
         )}
 
-        {/* STEP 1.5 — BUILDER */}
-        {step === 1.5 && (
+        {/* STEP 1.5 — BUILDER (chỉ khi còn bán hộp tự chọn) */}
+        {step === 1.5 && box && (
           <section className="step-in">
             <div className="eyebrow">Hộp tự chọn</div>
             <h2 className="title-heritage mb-4 text-lg">Lấp từng ô</h2>
