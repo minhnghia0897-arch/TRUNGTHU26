@@ -108,12 +108,12 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
         {/* kpi */}
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <Kpi lab="Doanh số hợp nhất" val={money(k.revenueKrw)} sub="▲ 18% vs kỳ trước" tone="up" />
+          <Kpi lab="Đã về" val={money(k.revenueKrw)} sub="đã CK + COD đã thu" tone="up" />
           <Kpi lab="Số đơn web" val={String(k.orders)} sub={`${k.packages} kiện`} />
           <Kpi lab="Kiện theo vùng" val={`${k.pkgKr}🇰🇷 · ${k.pkgVn}🇻🇳`} sub="tách 2 kho" />
-          <Kpi lab="Đang vận chuyển" val={String(k.shipping)} sub="theo webhook" mirror />
-          <Kpi lab="Cảnh báo tồn" val={String(k.lowStock)} sub="dưới ngưỡng" mirror alert />
-          <Kpi lab="Lỗi đẩy Pancake" val={String(k.pushFailed)} sub="cần đẩy lại" alert />
+          <Kpi lab="Đang vận chuyển" val={String(k.shipping)} sub="đã gửi hàng" />
+          <Kpi lab="Cảnh báo tồn" val={String(k.lowStock)} sub="còn ≤ 10" alert />
+          <Kpi lab="Lỗi đẩy Pancake" val={String(k.pushFailed)} sub="chưa nối Pancake" />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
@@ -191,7 +191,7 @@ export default function Dashboard({ data }: { data: DashboardData }) {
               </div>
             </Panel>
 
-            <Panel title="Tồn kho" src="mirror" mirror>
+            <Panel title="Tồn kho" src="web-native">
               <div className="divide-y divide-slate-100">
                 {data.inventory.map((i, idx) => (
                   <div key={idx} className="flex items-center justify-between py-2.5 text-[13px]">
@@ -214,7 +214,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
                 ))}
               </div>
               <p className="mt-3 text-[11px] text-slate-400">
-                Nguồn chân lý = Pancake. Web chỉ hiển thị + cảnh báo, không sửa.
+                Tồn kho nằm trên chính sản phẩm — sửa ở trang{" "}
+                <a href="/dashboard/ton-kho" className="text-blue-600 hover:underline">Tồn kho</a>.
               </p>
             </Panel>
           </div>
