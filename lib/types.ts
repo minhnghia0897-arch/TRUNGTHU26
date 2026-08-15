@@ -4,6 +4,15 @@ export type Region = "vn" | "kr";
 export type Currency = "vnd" | "krw";
 export type Badge = "best_seller" | "must_try" | null;
 
+/**
+ * Số ảnh tối đa của một sản phẩm.
+ *
+ * Trước đây con số này được khai ba lần độc lập (trang bán, trang quản trị,
+ * tầng lưu). Lệch một chỗ là ảnh lưu được mà không hiện ra, hoặc ngược lại —
+ * nên để đúng một chỗ.
+ */
+export const MAX_PRODUCT_IMAGES = 6;
+
 export interface Box {
   id: string;
   name: string;
@@ -15,7 +24,7 @@ export interface Box {
   allowed_flavor_weight: 150 | 60;
   specs: Record<string, unknown>;
   badge?: Badge;
-  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa MAX_PRODUCT_IMAGES. */
   images?: string[];
   // --- các trường trang quản trị dùng (§0006) ---
   code?: string;
@@ -45,7 +54,7 @@ export interface Flavor {
   price_kr: number;
   sort: number;
   badge?: Badge;
-  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa MAX_PRODUCT_IMAGES. */
   images?: string[];
   // --- các trường trang quản trị dùng (§0006) ---
   code?: string;
@@ -94,7 +103,7 @@ export interface Combo {
    */
   price_vn?: number | null;
   price_kr?: number | null;
-  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa MAX_PRODUCT_IMAGES. */
   images?: string[];
   // --- các trường trang quản trị dùng (§0006) ---
   code?: string;

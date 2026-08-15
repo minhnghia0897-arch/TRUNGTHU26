@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isProductStoreConfigured, uploadProductImage } from "@/lib/products/productStore";
+import { MAX_PRODUCT_IMAGES } from "@/lib/types";
 
 // Nhận ảnh sản phẩm rồi đẩy lên Supabase Storage, trả về URL công khai.
 // Middleware đã chặn ai chưa đăng nhập (/api/dashboard/*).
@@ -27,8 +28,11 @@ export async function POST(req: NextRequest) {
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   if (!files.length)
     return NextResponse.json({ ok: false, error: "Chưa chọn ảnh nào." }, { status: 400 });
-  if (files.length > 4)
-    return NextResponse.json({ ok: false, error: "Tối đa 4 ảnh mỗi lần." }, { status: 400 });
+  if (files.length > MAX_PRODUCT_IMAGES)
+    return NextResponse.json(
+      { ok: false, error: `Tối đa ${MAX_PRODUCT_IMAGES} ảnh mỗi lần.` },
+      { status: 400 },
+    );
 
   try {
     const urls: string[] = [];

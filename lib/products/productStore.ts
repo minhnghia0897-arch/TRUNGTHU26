@@ -1,5 +1,5 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import type { Box, Combo, Flavor, ProductVariant } from "@/lib/types";
+import { MAX_PRODUCT_IMAGES, type Box, type Combo, type Flavor, type ProductVariant } from "@/lib/types";
 
 // ============================================================================
 // Sửa danh mục sản phẩm — CHỈ CHẠY Ở SERVER (service role).
@@ -50,8 +50,6 @@ export interface ProductPatch {
   description?: string;
 }
 
-const MAX_IMAGES = 4;
-
 function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> {
   const c: Record<string, unknown> = {};
   const set = (col: string, v: unknown) => {
@@ -73,7 +71,7 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   set("allow_negative", p.allowNegative);
   set("active", p.active);
   set("removed", p.removed);
-  if (p.images !== undefined) c.images = p.images.slice(0, MAX_IMAGES);
+  if (p.images !== undefined) c.images = p.images.slice(0, MAX_PRODUCT_IMAGES);
 
   // Set cố định giờ có giá riêng (§0008): bán theo set nên cùng quy cách hộp
   // vẫn có thể hai mức giá theo loại nhân. Để trống thì suy từ hộp như cũ.

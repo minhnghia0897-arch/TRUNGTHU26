@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Box, Flavor, Combo } from "@/lib/types";
+import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo } from "@/lib/types";
 import { boxPrice, comboPrice } from "@/lib/pricing";
 import { ALL_STOCK } from "@/lib/inventory";
 import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
@@ -31,7 +31,7 @@ interface Override {
   code?: string; // Mã SP
   category?: string; // Danh mục
   image?: string; // legacy 1 ảnh
-  images?: string[]; // tối đa 4 ảnh
+  images?: string[]; // tối đa MAX_PRODUCT_IMAGES ảnh
   cost?: number;
   priceVn?: number;
   priceKr?: number;
@@ -523,7 +523,7 @@ function EditModal({
   const [flavorIds, setFlavorIds] = useState<string[]>(product.flavorIds ?? []);
   const fileRef = useRef<HTMLInputElement>(null);
   const hasSet = product.type === "Hộp" || product.type === "Combo";
-  const MAX = 4;
+  const MAX = MAX_PRODUCT_IMAGES;
 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -601,7 +601,7 @@ function EditModal({
         </div>
 
         <div className="max-h-[74vh] space-y-4 overflow-y-auto p-5">
-          {/* ảnh — tối đa 4 */}
+          {/* ảnh sản phẩm */}
           <div>
             <span className="mb-1.5 block text-[12px] font-medium text-slate-500">Ảnh sản phẩm ({images.length}/{MAX})</span>
             <div className="flex flex-wrap gap-2">
