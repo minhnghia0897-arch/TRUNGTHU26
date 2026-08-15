@@ -153,11 +153,7 @@ export default function ProductsAdmin({
     discount: r.discount ?? 0,
     note: r.note,
     supplyLink: r.supply_link,
-<<<<<<< HEAD
     stockQty: r.stock ?? 0,
-=======
-    stockKey: r.stock_key,
->>>>>>> origin/main
     allowNegative: r.allow_negative,
     variants: r.variants,
     dbImages: r.images ?? [],
@@ -189,10 +185,6 @@ export default function ProductsAdmin({
   const mergedBase: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
     const images = o.images ?? (o.image ? [o.image] : p.dbImages);
-<<<<<<< HEAD
-=======
-    const stockKey = o.stockKey ?? (o.stock ? KEY_BY_DEFAULT_NAME[o.stock] : p.stockKey);
->>>>>>> origin/main
     return {
       ...p,
       images,
