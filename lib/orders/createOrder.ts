@@ -1,11 +1,26 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { adjustStock, type StockMove } from "@/lib/products/stock";
+
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
-import { cartConsume } from "@/lib/webInventory";
 import type { Region } from "@/lib/types";
+
+/** Dòng đơn → tiêu hao kho theo khoá sản phẩm. Cùng quy ước với parseKey(). */
+function linesToConsume(lines: { kind: string; comboId?: string; boxId?: string; flavorIds?: string[]; qty: number }[]) {
+  const c: Record<string, number> = {};
+  const add = (k: string | undefined, n: number) => {
+    if (!k || n <= 0) return;
+    c[k] = (c[k] ?? 0) + n;
+  };
+  for (const l of lines) {
+    if (l.kind === "combo" && l.comboId) add(`combo:${l.comboId}`, l.qty);
+    else if (l.kind === "box" && l.boxId) add(`box:${l.boxId}`, l.qty);
+    else if (l.kind === "la" && l.flavorIds?.[0]) add(`flavor:${l.flavorIds[0]}`, l.qty);
+  }
+  return c;
+}
 
 // ============================================================================
 // Tạo đơn (§8.1) — transaction: validate + re-check giá server-side + snapshot
@@ -50,7 +65,13 @@ export interface OrderParcel {
   handling: number;
   fee: number; // shipping + handling
   total: number; // subtotal + fee
-  consume: Record<string, number>; // tiêu hao SKU theo BOM
+  /**
+   * Tiêu hao kho của kiện: khoá sản phẩm (`combo:<id>` / `box:<id>` /
+   * `flavor:<id>`) → số lượng. Trước đây là mã SKU của bảng định mức cũ, mà
+   * bảng đó dựng theo menu cũ nên set bán theo lựa chọn nhân ra rỗng — huỷ đơn
+   * không biết hoàn cái gì.
+   */
+  consume: Record<string, number>;
 }
 
 export interface CreateOrderResult {
@@ -229,7 +250,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         handling: fee.handling,
         fee: fee.shipping + fee.handling,
         total: sub + fee.shipping + fee.handling,
-        consume: cartConsume(mine),
+        consume: linesToConsume(mine),
       };
     })
     .filter((x): x is OrderParcel => x !== null);
@@ -351,7 +372,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         cod: 0,
         product_summary: parcel.items,
         consume: parcel.consume,
-        stock_applied: false,
+        stock_applied: true,
         assignee: "Web",
         tags: [fromMessenger ? "Messenger" : "Web"],
         note: parcel.note?.trim() ?? "",

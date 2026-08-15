@@ -5,7 +5,6 @@ import { STATUS_COLOR, type OrderRow, type Status } from "@/lib/ordersMock";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders } from "@/components/useOrders";
-import { applyStock } from "@/lib/stockStore";
 import { rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
@@ -40,16 +39,10 @@ export default function CustomersView() {
   const [q, setQ] = useState("");
   const [detailId, setDetailId] = useState<number | null>(null);
 
+  // Kho do MÁY CHỦ cộng trừ theo trạng thái (lib/orders/orderStore.ts). Bản cũ
+  // làm ở đây và ghi vào localStorage — chỗ không ai đọc.
   const saveOrder = (input: OrderRow, changes: string[]) => {
-    let updated = input;
-    if (input.consume) {
-      const should = !RELEASED.has(input.status);
-      if (should !== !!input.stockApplied) {
-        applyStock(input.consume, should ? -1 : 1);
-        updated = { ...input, stockApplied: should };
-      }
-    }
-    void store.saveOrder(updated, changes);
+    void store.saveOrder(input, changes);
   };
 
   const customers = useMemo(() => {
@@ -62,7 +55,11 @@ export default function CustomersView() {
       g.rows.push(r);
       const code = codeOf(r);
       if (!g.orders.includes(code)) g.orders.push(code);
-      if (!RELEASED.has(r.status)) g.spentKrw += rowKrw(r.prepaid + r.cod, r);
+      // Tiền khách đã THỰC TRẢ: COD chỉ tính khi đơn đã đánh dấu "Đã thu tiền",
+      // giống cách Thu chi tính. Không thì đơn vừa gửi đi đã ghi khách trả rồi.
+      if (!RELEASED.has(r.status))
+        g.spentKrw +=
+          rowKrw(r.prepaid, r) + (r.status === "Đã thu tiền" ? rowKrw(r.cod, r) : 0);
       m.set(key, g);
     }
     const list = [...m.values()];
