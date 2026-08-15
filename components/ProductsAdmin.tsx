@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo } from "@/lib/types";
+import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo, type Warehouse } from "@/lib/types";
+import ShippingSettings from "./ShippingSettings";
 import { boxPrice, comboPrice } from "@/lib/pricing";
 import { ALL_STOCK } from "@/lib/inventory";
 import { getStock, saveStock, getNames, getItems, STOCK_KEY, NAME_KEY, ITEMS_KEY, type CustomItem } from "@/lib/stockStore";
@@ -85,11 +86,13 @@ export default function ProductsAdmin({
   boxes,
   flavors,
   combos,
+  warehouses,
   connected = false,
 }: {
   boxes: Box[];
   flavors: Flavor[];
   combos: Combo[];
+  warehouses: Warehouse[];
   /** Đã nối cơ sở dữ liệu chưa. Chưa nối thì mọi thay đổi không lưu được. */
   connected?: boolean;
 }) {
@@ -300,7 +303,7 @@ export default function ProductsAdmin({
     t === "Hộp" ? <IconShirt width={15} height={15} /> : t === "Combo" ? <IconGift width={15} height={15} /> : <IconCart width={15} height={15} />;
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-slate-50 pb-10">
       <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
         <h1 className="text-[15px] font-semibold text-slate-800">Sản phẩm</h1>
         <span className="text-[13px] text-slate-400">{merged.length} mục</span>
@@ -334,6 +337,7 @@ export default function ProductsAdmin({
           {saveError}
         </div>
       )}
+      {!showTrash && <ShippingSettings warehouses={warehouses} connected={connected} />}
       {saving && (
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-2 text-[12px] text-slate-500">
           Đang lưu…
@@ -447,6 +451,7 @@ export default function ProductsAdmin({
           onClose={() => { setDraft(null); setEditKey(null); }}
         />
       )}
+
     </main>
   );
 }

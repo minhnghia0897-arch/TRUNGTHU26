@@ -2,7 +2,6 @@ import { getBoxes, getFlavors, getCombos, getWarehouses } from "@/lib/catalog";
 import { getAllProducts } from "@/lib/products/productStore";
 import { getWarehousesForAdmin } from "@/lib/products/shipping";
 import ProductsAdmin from "@/components/ProductsAdmin";
-import ShippingSettings from "@/components/ShippingSettings";
 
 export const metadata = { title: "Doran King — Sản phẩm" };
 export const dynamic = "force-dynamic"; // sửa sản phẩm xong tải lại là thấy ngay
@@ -18,9 +17,12 @@ export default async function SanPhamAdmin() {
   const warehouses = (await getWarehousesForAdmin()) ?? (await getWarehouses());
 
   return (
-    <>
-      <ProductsAdmin boxes={boxes} flavors={flavors} combos={combos} connected={Boolean(all)} />
-      <ShippingSettings warehouses={warehouses} connected={Boolean(all)} />
-    </>
+    <ProductsAdmin
+      boxes={boxes}
+      flavors={flavors}
+      combos={combos}
+      warehouses={warehouses}
+      connected={Boolean(all)}
+    />
   );
 }
