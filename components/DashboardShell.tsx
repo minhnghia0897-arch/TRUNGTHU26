@@ -39,9 +39,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         {/* logo */}
         <div className="flex h-14 items-center gap-2.5 border-b border-slate-100 px-4">
           <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-blue-600 text-[13px] font-bold text-white">
-            TR
+            DK
           </span>
-          {!collapsed && <span className="truncate font-semibold text-slate-800">Trăng Rằm</span>}
+          {!collapsed && <span className="truncate font-semibold text-slate-800">Doran King</span>}
         </div>
 
         {/* nav */}

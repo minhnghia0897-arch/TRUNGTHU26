@@ -1,7 +1,7 @@
 import { getBoxes, getFlavors, getCombos } from "@/lib/catalog";
 import ProductCatalog from "@/components/ProductCatalog";
 
-export const metadata = { title: "Trăng Rằm — Sản phẩm" };
+export const metadata = { title: "Doran King — Sản phẩm" };
 
 export default async function SanPhamPage() {
   const [boxes, flavors, combos] = await Promise.all([

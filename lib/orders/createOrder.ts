@@ -1,8 +1,9 @@
-import { getServiceClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
+import { cartConsume } from "@/lib/webInventory";
 import type { Region } from "@/lib/types";
 
 // ============================================================================
@@ -19,6 +20,7 @@ export interface CreateOrderInput {
     address: string;
     region: Region;
     desiredDate?: string;
+    note?: string;
   }[];
   lines: {
     kind: "box" | "combo" | "la";
@@ -28,6 +30,25 @@ export interface CreateOrderInput {
     qty: number;
     recipientUid: string;
   }[];
+}
+
+/** Một kiện = một người nhận = một bản ghi `shipment`. */
+export interface OrderParcel {
+  /** uid người nhận do client sinh — chỉ dùng nội bộ để khớp kiện với recipient. */
+  uid: string;
+  recipientName: string;
+  recipientPhone: string;
+  address: string;
+  region: Region; // kho xuất hàng — KHÔNG phải tiền tệ
+  desiredDate?: string;
+  note?: string;
+  items: string; // mô tả sản phẩm của kiện
+  subtotal: number; // tiền hàng, ở tiền tệ NGƯỜI ĐẶT
+  shipping: number;
+  handling: number;
+  fee: number; // shipping + handling
+  total: number; // subtotal + fee
+  consume: Record<string, number>; // tiêu hao SKU theo BOM
 }
 
 export interface CreateOrderResult {
@@ -41,14 +62,36 @@ export interface CreateOrderResult {
     shippingTotal: number;
     handlingTotal: number;
     grandTotal: number;
-    shipments: { recipientName: string; region: Region; fee: number }[];
+    shipments: OrderParcel[];
     simulated?: boolean;
+    /** Đã lưu được vào cơ sở dữ liệu chưa. false = đơn hợp lệ nhưng chưa lưu. */
+    synced?: boolean;
   };
 }
 
-const rand = (n: number) => Math.floor(Math.random() * n);
-const genCode = () => "TR-" + (1000 + rand(9000));
-const genTransfer = () => "TR" + Date.now().toString(36).toUpperCase().slice(-6);
+// Bỏ các ký tự khách dễ chép nhầm khi ghi nội dung chuyển khoản: B/8, I/1, O/0, S/5, Z/2
+const CODE_CHARS = "ACDEFGHJKLMNPQRTUVWXY34679";
+const randChars = (n: number) => {
+  let s = "";
+  for (let i = 0; i < n; i += 1) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  return s;
+};
+
+/**
+ * Mã đơn dạng TR-260814-KQF7.
+ * Bản cũ `"TR-" + rand(9000)` trùng nhau tới 50% chỉ sau ~112 đơn — mà mã này là
+ * mã tra cứu của khách, trùng mã là đơn của hai khách nhập vào nhau. Có phần
+ * ngày nên đơn khác ngày không bao giờ đụng; phần đuôi cho 26^4 ≈ 457.000 khả
+ * năng mỗi ngày.
+ */
+const genCode = () => {
+  const d = new Date();
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `TR-${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${randChars(4)}`;
+};
+
+/** Nội dung CK = mã đơn bỏ gạch nối → nhìn sao kê ngân hàng là ra đúng đơn. */
+const genTransfer = (code: string) => code.replace(/-/g, "");
 const genIdem = (code: string, i: number) => `${code}-ship-${i}`;
 
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -109,23 +152,56 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     pricedLines.push({ ...l, qty, unit });
   }
 
+  // Mô tả sản phẩm cho một dòng — dùng cho bảng đơn và tin nhắn xác nhận.
+  const lineLabel = (l: PricedLine): string => {
+    const times = l.qty > 1 ? ` ×${l.qty}` : "";
+    if (l.kind === "la") {
+      const f = flavors.find((x) => x.id === l.flavorIds?.[0]);
+      return `${f?.name ?? "Bánh lẻ"}${times}`;
+    }
+    const box = boxes.find((b) => b.id === l.boxId);
+    const vi = (l.flavorIds ?? [])
+      .map((id) => flavors.find((f) => f.id === id)?.name)
+      .filter(Boolean);
+    const base = box?.name ?? (l.kind === "combo" ? "Combo" : "Hộp");
+    return `${base}${times}${vi.length ? ` (${vi.join(", ")})` : ""}`;
+  };
+
   // --- phí ship + handling theo recipient, quy đổi qua fx snapshot ---
+  // Tiền của MỌI kiện đều ở tiền tệ NGƯỜI ĐẶT (§5: một đơn một tiền tệ).
+  // Kho giao là chuyện khác, nằm ở trường `region` — hai trục không trộn.
   let shippingTotal = 0;
   let handlingTotal = 0;
   const shipments = input.recipients
-    .map((r) => {
-      const hasItems = pricedLines.some((l) => l.recipientUid === r.uid);
-      if (!hasItems) return null;
+    .map((r): OrderParcel | null => {
+      const mine = pricedLines.filter((l) => l.recipientUid === r.uid);
+      if (!mine.length) return null;
       const fee = shipFeeForRegion(r.region, region, warehouses, fx);
       shippingTotal += fee.shipping;
       handlingTotal += fee.handling;
-      return { recipientName: r.name, region: r.region, fee: fee.shipping + fee.handling };
+      const sub = mine.reduce((s, l) => s + l.unit * l.qty, 0);
+      return {
+        uid: r.uid,
+        recipientName: r.name,
+        recipientPhone: normalizePhone(r.phone, r.region) ?? r.phone ?? "",
+        address: r.address,
+        region: r.region,
+        desiredDate: r.desiredDate,
+        note: r.note,
+        items: mine.map(lineLabel).join(", "),
+        subtotal: sub,
+        shipping: fee.shipping,
+        handling: fee.handling,
+        fee: fee.shipping + fee.handling,
+        total: sub + fee.shipping + fee.handling,
+        consume: cartConsume(mine),
+      };
     })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+    .filter((x): x is OrderParcel => x !== null);
 
   const grandTotal = subtotal + shippingTotal + handlingTotal;
   const code = genCode();
-  const transferCode = genTransfer();
+  const transferCode = genTransfer(code);
   const currency = currencyOf(region);
 
   const summary = {
@@ -139,8 +215,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     shipments,
   };
 
-  // --- chưa cấu hình Supabase → trả đơn mô phỏng (dev), luồng vẫn chạy ---
-  if (!isSupabaseConfigured) {
+  // --- chưa cấu hình service role → trả đơn mô phỏng (dev), luồng vẫn chạy ---
+  // Ghi bảng đơn bắt buộc service role (§4.3), anon key không đủ.
+  if (!isServiceRoleConfigured) {
     return { ok: true, order: { ...summary, simulated: true } };
   }
 
@@ -211,25 +288,41 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       });
     }
 
-    // shipments (1/recipient) — idempotency_key cố định (§10.2)
+    // shipments (1/recipient) — idempotency_key cố định (§10.2).
+    // Ghi luôn các trường vận hành để bảng điều hành hiển thị được ngay:
+    // tiền thực của kiện, trạng thái khởi tạo, tóm tắt hàng, tiêu hao kho.
+    const fromMessenger = Boolean(buyer.refToken);
     let i = 0;
     for (const r of input.recipients) {
-      if (!pricedLines.some((l) => l.recipientUid === r.uid)) continue;
+      const parcel = shipments.find((p) => p.uid === r.uid);
+      if (!parcel) continue;
       i += 1;
       const wh = warehouses.find((w) => w.region === r.region && w.active)!;
-      const fee = shipFeeForRegion(r.region, region, warehouses, fx);
-      await sb.from("shipment").insert({
+      const { error: shErr } = await sb.from("shipment").insert({
         web_order_id: order.id,
         recipient_id: recipIdByUid[r.uid],
         fulfillment_region: r.region,
         warehouse_id: wh.id,
-        shipping_fee: fee.shipping,
-        handling_fee: fee.handling,
+        shipping_fee: parcel.shipping,
+        handling_fee: parcel.handling,
         shipping_mode: wh.shipping_mode,
         idempotency_key: genIdem(code, i),
-        prepaid: 0,
-        source: "web",
+        parcel_index: i,
+        parcel_count: shipments.length,
+        status: "Mới",
+        // Trả trước = tiền thực của kiện, ở TIỀN TỆ NGƯỜI ĐẶT (§5) — cùng đơn vị
+        // với web_order.currency, nên cộng các kiện lại đúng bằng grand_total.
+        prepaid: parcel.total,
+        cod: 0,
+        product_summary: parcel.items,
+        consume: parcel.consume,
+        stock_applied: false,
+        assignee: "Web",
+        tags: [fromMessenger ? "Messenger" : "Web"],
+        note: parcel.note?.trim() ?? "",
+        source: fromMessenger ? "facebook" : "web",
       });
+      if (shErr) throw shErr;
     }
 
     return { ok: true, order: summary };

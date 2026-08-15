@@ -1,34 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ORDERS, type OrderRow, type Status } from "@/lib/ordersMock";
+import { type Status } from "@/lib/ordersMock";
+import { rowKrw } from "@/lib/orders/orderSchema";
+import { useOrders } from "@/components/useOrders";
+import OrdersStateBanner from "@/components/OrdersStateBanner";
 
 const FX = 18.5;
-const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn đã nhả (huỷ/trả/hoàn) không tính doanh thu
 const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
 export default function ThuChiView() {
-  // đơn tạo tay + đơn web (localStorage) — gộp với đơn mẫu
-  const [extra, setExtra] = useState<OrderRow[]>([]);
-  useEffect(() => {
-    try {
-      setExtra(JSON.parse(localStorage.getItem("tr_order_new") || "[]"));
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  // Cùng một nguồn với trang Đơn hàng — trước đây trang này bỏ qua phần đã sửa
+  // nên đổi trạng thái đơn xong doanh thu ở đây vẫn đứng yên.
+  const store = useOrders();
 
-  const all = [...extra, ...ORDERS].filter((r) => !RELEASED.has(r.status));
-  const webCount = extra.filter((r) => !RELEASED.has(r.status)).length;
+  const all = store.rows.filter((r) => !RELEASED.has(r.status));
+  const webCount = all.filter((r) => r.source !== "facebook").length;
 
   const t = all.reduce(
     (a, r) => ({
-      prepaid: a.prepaid + toKrw(r.prepaid, r.region),
-      cod: a.cod + toKrw(r.cod, r.region),
-      cuoc: a.cuoc + toKrw(r.cuoc_vc, r.region),
-      phi: a.phi + toKrw(r.phi_vc_thu_khach, r.region),
+      prepaid: a.prepaid + rowKrw(r.prepaid, r),
+      cod: a.cod + rowKrw(r.cod, r),
+      cuoc: a.cuoc + rowKrw(r.cuoc_vc, r),
+      phi: a.phi + rowKrw(r.phi_vc_thu_khach, r),
     }),
     { prepaid: 0, cod: 0, cuoc: 0, phi: 0 },
   );
@@ -37,7 +32,7 @@ export default function ThuChiView() {
 
   const byRegion = (["kr", "vn"] as const).map((rg) => {
     const rows = all.filter((r) => r.region === rg);
-    const rev = rows.reduce((s, r) => s + toKrw(r.prepaid + r.cod, r.region), 0);
+    const rev = rows.reduce((s, r) => s + rowKrw(r.prepaid + r.cod, r), 0);
     return { rg, count: rows.length, rev };
   });
 
@@ -59,6 +54,8 @@ export default function ThuChiView() {
           </span>
         )}
       </header>
+
+      <OrdersStateBanner store={store} />
 
       <div className="p-5">
         <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -93,7 +90,10 @@ export default function ThuChiView() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-[12px] text-slate-400">Đã gộp đơn web + đơn tạo tay (localStorage). Đơn huỷ/trả/hoàn không tính doanh thu. Bản thật đọc từ Supabase.</p>
+        <p className="mt-3 text-[12px] text-slate-400">
+          Đơn huỷ / khách trả lại / đã hoàn tiền không tính vào doanh thu. Số tiền quy về ₩
+          theo tỉ giá đã chốt lúc tạo từng đơn.
+        </p>
       </div>
     </main>
   );

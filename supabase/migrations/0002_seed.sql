@@ -1,13 +1,13 @@
 -- =====================================================================
--- Trăng Rằm · seed dữ liệu mẫu (dev). Money = integer đơn vị nhỏ nhất.
+-- Doran King · seed dữ liệu mẫu (dev). Money = integer đơn vị nhỏ nhất.
 -- Khớp khối DATA trong các mockup HTML.
 -- =====================================================================
 
 -- ---------- config ----------
 insert into app_config(key, value) values
   ('fx_rate',             '{"krw_vnd": 18.5}'::jsonb),
-  ('bank_vn',             '{"name":"Vietcombank · CTY TRANG RAM","acc":"0123456789","label":"VietQR napas247"}'::jsonb),
-  ('bank_kr',             '{"name":"KakaoBank · TRANG RAM","acc":"3333-01-2345678","label":"QR Toss"}'::jsonb),
+  ('bank_vn',             '{"name":"Vietcombank · CTY DORAN KING","acc":"0123456789","label":"VietQR napas247"}'::jsonb),
+  ('bank_kr',             '{"name":"KakaoBank · DORAN KING","acc":"3333-01-2345678","label":"QR Toss"}'::jsonb),
   ('low_stock_threshold', '{"value": 40}'::jsonb)
 on conflict (key) do update set value = excluded.value, updated_at = now();
 

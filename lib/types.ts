@@ -15,6 +15,19 @@ export interface Box {
   allowed_flavor_weight: 150 | 60;
   specs: Record<string, unknown>;
   badge?: Badge;
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  images?: string[];
+  // --- các trường trang quản trị dùng (§0006) ---
+  code?: string;
+  category?: string;
+  cost?: number;
+  discount?: number;
+  note?: string;
+  supply_link?: string;
+  variants?: { name: string; contents: string }[];
+  stock_key?: string;
+  allow_negative?: boolean;
+  removed?: boolean;
   active: boolean;
 }
 
@@ -30,6 +43,19 @@ export interface Flavor {
   price_kr: number;
   sort: number;
   badge?: Badge;
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  images?: string[];
+  // --- các trường trang quản trị dùng (§0006) ---
+  code?: string;
+  category?: string;
+  cost?: number;
+  discount?: number;
+  note?: string;
+  supply_link?: string;
+  variants?: { name: string; contents: string }[];
+  stock_key?: string;
+  allow_negative?: boolean;
+  removed?: boolean;
   active: boolean;
 }
 
@@ -39,6 +65,19 @@ export interface Combo {
   description?: string;
   box_id: string;
   flavor_ids: string[];
+  /** Ảnh sản phẩm (URL công khai trên Supabase Storage), tối đa 4. */
+  images?: string[];
+  // --- các trường trang quản trị dùng (§0006) ---
+  code?: string;
+  category?: string;
+  cost?: number;
+  discount?: number;
+  note?: string;
+  supply_link?: string;
+  variants?: { name: string; contents: string }[];
+  stock_key?: string;
+  allow_negative?: boolean;
+  removed?: boolean;
   active: boolean;
 }
 

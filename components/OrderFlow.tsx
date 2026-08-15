@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Box, Combo, Flavor, Region, Warehouse } from "@/lib/types";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, convertToBuyerCurrency, currencyOf } from "@/lib/money";
 import {
   boxPrice,
   flavorSurcharge,
@@ -11,6 +11,7 @@ import {
   computeBill,
   qtyForRecipient,
   lineTotalQty,
+  shipFeeForRegion,
   type CartLine,
 } from "@/lib/pricing";
 import { applyStock } from "@/lib/stockStore";
@@ -64,12 +65,12 @@ const ZALO_LINK = "https://zalo.me/0982576263";
 
 // Tài khoản nhận tiền (demo — thay bằng TK thật của anh sau).
 const BANKS = {
-  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY TRANG RAM" },
-  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "TRANG RAM" },
+  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY DORAN KING" },
+  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "DORAN KING" },
 };
 const vietqrUrl = (amountVnd?: number) => {
   const num = BANKS.vn.number.replace(/\s/g, "");
-  const q = amountVnd ? `?amount=${amountVnd}&addInfo=${encodeURIComponent("Trang Ram")}` : "";
+  const q = amountVnd ? `?amount=${amountVnd}&addInfo=${encodeURIComponent("Doran King")}` : "";
   return `https://img.vietqr.io/image/${BANKS.vn.bin}-${num}-compact2.png${q}`;
 };
 
@@ -115,25 +116,10 @@ export default function OrderFlow({
   const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0];
   const fmt = (v: number) => formatMoney(v, buyerRegion);
 
-  // ảnh sản phẩm lấy từ Dashboard (localStorage tr_product_edits) — key box:<id> / flavor:<id>
-  const [imgs, setImgs] = useState<Record<string, string>>({});
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("tr_product_edits");
-      if (!raw) return;
-      const ov = JSON.parse(raw) as Record<string, { images?: string[]; image?: string }>;
-      const m: Record<string, string> = {};
-      for (const [k, v] of Object.entries(ov)) {
-        const first = v?.images?.[0] ?? v?.image;
-        if (first) m[k] = first;
-      }
-      setImgs(m);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const boxImg = (id: string) => imgs[`box:${id}`];
-  const flavorImg = (id: string) => imgs[`flavor:${id}`];
+  // Ảnh bìa lấy thẳng từ danh mục máy chủ truyền xuống. Bản cũ đọc localStorage
+  // "tr_product_edits" nên ảnh chỉ hiện trên máy đã upload — khách thấy trống.
+  const boxImg = (id: string) => boxes.find((b) => b.id === id)?.images?.[0];
+  const flavorImg = (id: string) => flavors.find((f) => f.id === id)?.images?.[0];
 
   // ngày gợi ý "trước Trung Thu 1 tuần" — tính ở client để không lệch SSR
   const [suggestedDate, setSuggestedDate] = useState("");
@@ -195,7 +181,7 @@ export default function OrderFlow({
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `bill-${done?.code ?? "trang-ram"}.png`;
+        a.download = `bill-${done?.code ?? "doran-king"}.png`;
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -452,6 +438,7 @@ export default function OrderFlow({
             address: r.address,
             region: r.region,
             desiredDate: r.desiredDate,
+            note: r.note,
           })),
           lines: expandedLines,
         }),
@@ -471,34 +458,52 @@ export default function OrderFlow({
       const st = new Date();
       const p2 = (x: number) => String(x).padStart(2, "0");
       try {
-        addDashboardOrder({
-          source: ref ? "facebook" : "web",
-          vc: "",
-          tags: ref ? ["Messenger"] : ["Web"],
-          note:
-            `Web ${data.order.code} · CK ${data.order.transferCode}${link ? ` · Messenger: ${link.customerName}` : ""}` +
-            // ghi chú khách tự viết cho từng người nhận
-            recipients
-              .filter((r) => r.note?.trim())
-              .map((r, i) => ` · 📝 ${r.name || `Người nhận ${i + 1}`}: ${r.note.trim()}`)
-              .join(""),
-          customer: buyerName.trim(),
-          recipient: r0?.name || buyerName.trim(),
-          phone: buyerPhone.trim(),
-          carrier: "",
-          address: r0?.address || "",
-          region: buyerRegion,
-          cod: 0,
-          prepaid: data.order.grandTotal,
-          cuoc_vc: 0,
-          phi_vc_thu_khach: 0,
-          status: "Mới",
-          created: `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`,
-          assignee: "Web",
-          product: cart.map((l) => `${l.name}${lineTotalQty(l) > 1 ? ` ×${lineTotalQty(l)}` : ""}`).join(", "),
-          expected: r0?.desiredDate || undefined,
-          consume: cartConsume(expandedLines),
-          stockApplied: true,
+        // MỖI NGƯỜI NHẬN = 1 DÒNG ĐƠN (1 kiện, 1 địa chỉ, 1 kho, 1 vận đơn riêng).
+        // Tiền chia theo từng người → cộng lại đúng bằng tổng đơn, không đếm trùng doanh thu.
+        const parcels = recipients.filter((r) => cart.some((it) => it.recipientUids.includes(r.uid)));
+        const createdAt = `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`;
+        parcels.forEach((r, i) => {
+          const items = cart.filter((it) => it.recipientUids.includes(r.uid));
+          const sub = items.reduce((s, it) => s + it.unitPrice * qtyForRecipient(it, r.uid), 0);
+          const fee = shipFeeForRegion(r.region, buyerRegion, warehouses, fx);
+          // Dashboard hiểu `region` là kho VÀ là tiền tệ của số tiền trên dòng.
+          // Đơn tính theo tiền người đặt, nên kiện giao khác vùng phải quy đổi lại
+          // về tiền tệ của kho đó, không thì Thu chi/Khách hàng đọc sai.
+          const amount = Math.round(
+            convertToBuyerCurrency(sub + fee.shipping + fee.handling, currencyOf(buyerRegion), r.region, fx),
+          );
+          addDashboardOrder({
+            source: ref ? "facebook" : "web",
+            vc: "",
+            tags: ref ? ["Messenger"] : ["Web"],
+            note:
+              `Web ${data.order.code} · CK ${data.order.transferCode}` +
+              (parcels.length > 1 ? ` · Kiện ${i + 1}/${parcels.length}` : "") +
+              (link ? ` · Messenger: ${link.customerName}` : "") +
+              (r.note?.trim() ? ` · 📝 ${r.note.trim()}` : ""),
+            customer: buyerName.trim(),
+            recipient: r.name || buyerName.trim(),
+            phone: buyerPhone.trim(),
+            carrier: "",
+            address: r.address || "",
+            region: r.region, // kho theo người nhận, không phải vùng người đặt
+            cod: 0,
+            prepaid: amount,
+            cuoc_vc: 0,
+            phi_vc_thu_khach: 0,
+            status: "Mới",
+            created: createdAt,
+            assignee: "Web",
+            product: items
+              .map((it) => {
+                const q = qtyForRecipient(it, r.uid);
+                return `${it.name}${q > 1 ? ` ×${q}` : ""}`;
+              })
+              .join(", "),
+            expected: r.desiredDate || undefined,
+            consume: cartConsume(expandedLines.filter((l) => l.recipientUid === r.uid)),
+            stockApplied: true,
+          });
         });
       } catch {
         /* ignore */
@@ -656,7 +661,7 @@ export default function OrderFlow({
         <a href="/san-pham" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Trăng Rằm</a>
+        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Doran King</a>
       </header>
 
       {/* stepper */}
@@ -1090,7 +1095,7 @@ export default function OrderFlow({
             {/* bill đầy đủ */}
             <div className="rounded-lg border border-line bg-white p-4">
               <div className="border-b border-dashed border-line pb-3 text-center">
-                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="title-heritage text-base tracking-[0.16em]">Doran King</div>
                 <div className="eyebrow mt-0.5">Chi tiết đơn hàng</div>
               </div>
 
@@ -1165,7 +1170,7 @@ export default function OrderFlow({
             {/* ===== HOÁ ĐƠN (chụp/tải ảnh) ===== */}
             <div ref={receiptRef} className="rounded-lg border border-line bg-white p-4">
               <div className="border-b border-dashed border-line pb-3 text-center">
-                <div className="title-heritage text-base tracking-[0.16em]">Trăng Rằm</div>
+                <div className="title-heritage text-base tracking-[0.16em]">Doran King</div>
                 <div className="eyebrow mt-0.5">Phiếu đặt hàng</div>
                 <div className="mt-1.5 text-[12px] text-ink/70">
                   Mã đơn <b className="font-serif text-maroon">{done.code}</b> · Nội dung CK{" "}
@@ -1442,7 +1447,7 @@ function BankCard({
           <div className="mt-2 flex justify-center">
             <a
               href={qrUrl}
-              download="trang-ram-qr.png"
+              download="doran-king-qr.png"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 rounded-full border border-gold bg-white px-3.5 py-1.5 text-[12px] font-medium text-maroon transition active:scale-95 hover:bg-cream"

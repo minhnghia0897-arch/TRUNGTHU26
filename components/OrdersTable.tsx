@@ -25,11 +25,13 @@ import {
 } from "@/components/icons";
 import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
 import CreateOrderModal from "@/components/CreateOrderModal";
+import ExportButton from "@/components/ExportButton";
+import OrdersStateBanner from "@/components/OrdersStateBanner";
+import { useOrders, stamp } from "@/components/useOrders";
 import { applyStock } from "@/lib/stockStore";
+import { ordersToSheets, exportFileName } from "@/lib/ordersExport";
+import { rowKrw } from "@/lib/orders/orderSchema";
 
-const HISTORY_KEY = "tr_order_history";
-const EDITS_KEY = "tr_order_edits";
-const NEW_KEY = "tr_order_new";
 // trạng thái "giải phóng hàng" → hoàn kho
 const RELEASED = new Set<Status>(["Huỷ đơn", "Khách trả lại", "Đã hoàn toàn bộ"]);
 
@@ -37,7 +39,11 @@ const FX = 18.5;
 type Cur = "krw" | "vnd";
 type SourceFilter = "all" | OrderSource;
 
-const toKrw = (v: number, region: "vn" | "kr") => (region === "kr" ? v : v / FX);
+const SOURCE_LABEL: Record<OrderSource, string> = {
+  web: "Online",
+  facebook: "Facebook",
+  pos: "Tại quầy",
+};
 
 function SourceIcon({ s }: { s: OrderSource }) {
   if (s === "facebook") return <IconFacebook className="text-[#1877F2]" width={15} height={15} />;
@@ -55,7 +61,12 @@ const MENU: { label: Status | "Tạo trùng lặp"; Icon: typeof IconTruck; dang
 ];
 
 export default function OrdersTable() {
-  const [rows, setRows] = useState<OrderRow[]>(ORDERS);
+  // Nguồn đơn dùng chung với trang Khách hàng / Thu chi. Đã nối cơ sở dữ liệu thì
+  // mọi thao tác đi thẳng vào database; chưa nối thì chạy đơn mẫu để xem thử.
+  const store = useOrders();
+  const rows = store.rows;
+  const history = store.history;
+
   const [source, setSource] = useState<SourceFilter>("all");
   const [warehouse, setWarehouse] = useState<"all" | "vn" | "kr">("all");
   const [status, setStatus] = useState<Status | "all">("all");
@@ -67,31 +78,10 @@ export default function OrdersTable() {
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [history, setHistory] = useState<Record<number, HistoryEntry[]>>({});
-
-  // nạp lịch sử + đơn đã sửa (localStorage) — demo persist; thật sẽ đọc DB/bảng audit
-  useEffect(() => {
-    try {
-      const h = localStorage.getItem(HISTORY_KEY);
-      if (h) setHistory(JSON.parse(h));
-      const e = localStorage.getItem(EDITS_KEY);
-      const edits: Record<number, OrderRow> = e ? JSON.parse(e) : {};
-      const n = localStorage.getItem(NEW_KEY);
-      const created: OrderRow[] = n ? JSON.parse(n) : [];
-      setRows((rs) => [...created, ...rs].map((r) => edits[r.id] ?? r));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const stamp = () => {
-    const n = new Date();
-    const p = (x: number) => String(x).padStart(2, "0");
-    return `${p(n.getDate())}/${p(n.getMonth() + 1)}/${n.getFullYear()} ${p(n.getHours())}:${p(n.getMinutes())}`;
-  };
 
   // Trừ/hoàn kho theo trạng thái đơn. Đơn "sống" (chưa huỷ/hoàn/trả) → trừ kho;
   // chuyển sang huỷ/hoàn/trả → hoàn kho lại. Idempotent qua cờ stockApplied.
+  // Tồn kho vẫn nằm trên máy này — xem ghi chú ở docs/supabase.md.
   const reconcileStock = (order: OrderRow): OrderRow => {
     if (!order.consume) return order;
     const should = !RELEASED.has(order.status);
@@ -101,37 +91,8 @@ export default function OrdersTable() {
     return { ...order, stockApplied: should };
   };
 
-  const persistEdit = (order: OrderRow) => {
-    try {
-      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
-      edits[order.id] = order;
-      localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
-      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
-      const idx = created.findIndex((o) => o.id === order.id);
-      if (idx >= 0) {
-        created[idx] = order;
-        localStorage.setItem(NEW_KEY, JSON.stringify(created));
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
   const saveOrder = (input: OrderRow, changes: string[]) => {
-    const updated = reconcileStock(input); // trừ/hoàn kho nếu đổi trạng thái
-    setRows((rs) => rs.map((r) => (r.id === updated.id ? updated : r)));
-    persistEdit(updated);
-    // ghi lịch sử
-    setHistory((h) => {
-      const entry: HistoryEntry = { at: stamp(), by: "Bạn", changes };
-      const next = { ...h, [updated.id]: [entry, ...(h[updated.id] ?? [])] };
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    void store.saveOrder(reconcileStock(input), changes);
   };
 
   const money = (krw: number) =>
@@ -163,6 +124,20 @@ export default function OrdersTable() {
 
   const list = status === "all" ? baseRows : baseRows.filter((r) => r.status === status);
 
+  // Xuất Excel: đang tick dòng nào thì xuất đúng những dòng đó, không thì xuất
+  // trọn kết quả đang lọc (không chỉ trang hiện tại).
+  const exportRows = selected.size ? rows.filter((r) => selected.has(r.id)) : list;
+  const exportNote =
+    [
+      selected.size ? `Đang chọn ${selected.size} đơn` : null,
+      source === "all" ? null : `Nguồn: ${SOURCE_LABEL[source]}`,
+      warehouse === "all" ? null : `Kho: ${warehouse === "vn" ? "VN" : "Hàn"}`,
+      status === "all" ? null : `Trạng thái: ${status}`,
+      q.trim() ? `Tìm: "${q.trim()}"` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Tất cả đơn";
+
   // phân trang
   const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
   const curPage = Math.min(page, totalPages);
@@ -188,66 +163,31 @@ export default function OrdersTable() {
     rows.forEach((r) => {
       if (selected.has(r.id) && r.stockApplied && r.consume) applyStock(r.consume, 1);
     });
-    setRows((rs) => rs.filter((r) => !selected.has(r.id)));
-    // dọn localStorage để đơn xoá không quay lại sau reload
-    try {
-      const edits: Record<number, OrderRow> = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}");
-      selected.forEach((id) => delete edits[id]);
-      localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
-      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
-      localStorage.setItem(NEW_KEY, JSON.stringify(created.filter((o) => !selected.has(o.id))));
-    } catch {
-      /* ignore */
-    }
+    void store.removeOrders([...selected]);
     setSelected(new Set());
   };
 
   const totals = list.reduce(
     (a, r) => ({
-      cod: a.cod + toKrw(r.cod, r.region),
-      prepaid: a.prepaid + toKrw(r.prepaid, r.region),
-      cuoc: a.cuoc + toKrw(r.cuoc_vc, r.region),
-      phi: a.phi + toKrw(r.phi_vc_thu_khach, r.region),
+      cod: a.cod + rowKrw(r.cod, r),
+      prepaid: a.prepaid + rowKrw(r.prepaid, r),
+      cuoc: a.cuoc + rowKrw(r.cuoc_vc, r),
+      phi: a.phi + rowKrw(r.phi_vc_thu_khach, r),
     }),
     { cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
   );
 
-  const createOrder = (payload: Omit<OrderRow, "id">) => {
-    const id = Math.max(1000, ...rows.map((r) => r.id)) + 1;
+  const createOrder = async (payload: Omit<OrderRow, "id">) => {
     // trừ kho ngay khi tạo (đơn ở trạng thái "sống")
-    const order: OrderRow = reconcileStock({ id, ...payload, created: stamp(), stockApplied: false });
-    setRows((rs) => [order, ...rs]);
-    // lưu đơn mới
-    try {
-      const created: OrderRow[] = JSON.parse(localStorage.getItem(NEW_KEY) || "[]");
-      localStorage.setItem(NEW_KEY, JSON.stringify([order, ...created]));
-    } catch {
-      /* ignore */
-    }
-    // lịch sử
-    setHistory((h) => {
-      const entry: HistoryEntry = { at: stamp(), by: "Bạn", changes: ["Tạo đơn mới"] };
-      const next = { ...h, [id]: [entry] };
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    const withStock = reconcileStock({ id: 0, ...payload, created: stamp(), stockApplied: false });
     setShowCreate(false);
-    setDetailId(id);
+    const order = await store.addOrder(withStock);
+    if (order) setDetailId(order.id);
   };
 
   const setStatusOf = (id: number, s: Status) => {
-    setRows((rs) =>
-      rs.map((r) => {
-        if (r.id !== id) return r;
-        const reconciled = reconcileStock({ ...r, status: s }); // trừ/hoàn kho
-        persistEdit(reconciled);
-        return reconciled;
-      }),
-    );
+    const row = rows.find((r) => r.id === id);
+    if (row) void store.saveOrder(reconcileStock({ ...row, status: s }), [`Trạng thái → ${s}`]);
     setMenu(null);
   };
 
@@ -295,7 +235,16 @@ export default function OrdersTable() {
           <option value="krw">₩ KRW</option>
           <option value="vnd">đ VND</option>
         </select>
+        <ExportButton
+          count={exportRows.length}
+          build={() => ({
+            sheets: ordersToSheets(exportRows, { cur, fx: FX, filterNote: exportNote }),
+            fileName: exportFileName(),
+          })}
+        />
       </div>
+
+      <OrdersStateBanner store={store} />
 
       {/* source tabs */}
       <div className="flex gap-6 border-b border-slate-200 bg-white px-5">
@@ -414,7 +363,7 @@ export default function OrdersTable() {
                   {r.address}
                 </Td>
                 <Td className="whitespace-nowrap text-right font-medium text-slate-700">
-                  {money(toKrw(r.prepaid, r.region))}
+                  {money(rowKrw(r.prepaid, r))}
                 </Td>
                 <Td>
                   <button
