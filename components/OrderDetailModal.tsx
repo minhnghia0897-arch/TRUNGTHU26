@@ -55,7 +55,25 @@ export default function OrderDetailModal({
     setSaved(false);
   };
 
-  const total = d.prepaid + d.cod;
+  // TỔNG PHẢI THU LÀ CỐ ĐỊNH — chốt lúc mở popup, không đổi khi sửa ô nào.
+  //
+  // Trước đây `total` = prepaid + cod, tức là gõ vào ô nào thì giá đơn cũng
+  // nhảy theo: sửa COD lên là tự nhiên đơn đắt thêm. Nay hai ô chỉ CHIA nhau
+  // một tổng cố định — gõ ô này thì ô kia tự bù.
+  const [total] = useState(order.prepaid + order.cod);
+
+  // Tiền ship khách trả nằm TRONG tổng, không cộng thêm. Tách ra để dòng
+  // "Sản phẩm" hiện đúng tiền hàng thuần.
+  const shipFee = Math.min(d.shipFee ?? 0, total);
+  const goods = total - shipFee;
+
+  /** Sửa một ô thì ô kia bù lại, giữ nguyên tổng và không đụng tới cước ship. */
+  const setSplit = (which: "prepaid" | "cod", raw: number) => {
+    const v = Math.min(Math.max(0, Math.round(raw) || 0), total);
+    setD((o) => ({ ...o, prepaid: which === "prepaid" ? v : total - v, cod: which === "cod" ? v : total - v }));
+    setSaved(false);
+  };
+
   const paidFull = d.cod === 0 && d.prepaid > 0;
 
   function diff(): string[] {
@@ -121,19 +139,43 @@ export default function OrderDetailModal({
                   <div className="truncate text-[14px] font-medium text-slate-800">{d.product ?? "Set bánh Trung Thu (6 vị)"}</div>
                   <div className="mt-0.5 text-[12px] text-slate-400">Thuế 0% · KM {money(0)}</div>
                 </div>
-                <div className="text-right text-[15px] font-semibold text-slate-800">{money(total)}</div>
+                <div className="text-right">
+                  <div className="text-[15px] font-semibold text-slate-800">{money(goods)}</div>
+                  {shipFee > 0 && (
+                    <div className="mt-0.5 text-[11.5px] text-slate-400">+ ship {money(shipFee)}</div>
+                  )}
+                </div>
               </div>
             </Card>
 
             <Card title="Thanh toán">
+              {/* Tổng phải thu cố định — hai ô dưới chỉ chia nhau con số này */}
+              <div className="mb-2 rounded-lg bg-slate-50 px-3 py-2 text-[13px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>Tiền hàng</span>
+                  <span className="font-medium text-slate-700">{money(goods)}</span>
+                </div>
+                <div className="mt-1 flex justify-between text-slate-500">
+                  <span>Phí ship khách trả</span>
+                  <span className="font-medium text-slate-700">{money(shipFee)}</span>
+                </div>
+                <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 font-semibold text-slate-800">
+                  <span>Tổng phải thu</span>
+                  <span>{money(total)}</span>
+                </div>
+              </div>
+
               <Field label="Trả trước (đã CK)">
-                <NumInput value={d.prepaid} onChange={(v) => set("prepaid", v)} />
+                <NumInput value={d.prepaid} onChange={(v) => setSplit("prepaid", v)} />
               </Field>
               <Field label="COD (thu hộ)">
-                <NumInput value={d.cod} onChange={(v) => set("cod", v)} />
+                <NumInput value={d.cod} onChange={(v) => setSplit("cod", v)} />
               </Field>
+              <p className="px-1 pb-1 text-[11.5px] text-slate-400">
+                Sửa một ô thì ô kia tự bù — tổng phải thu và phí ship không đổi.
+              </p>
               <div className="flex justify-between py-1 text-[13px]">
-                <span className="text-slate-500">Cước VC</span>
+                <span className="text-slate-500">Cước VC trả hãng</span>
                 <span className="font-medium text-slate-700">{money(d.cuoc_vc)}</span>
               </div>
               <div className={`mt-2 rounded-lg px-3 py-2 text-[13px] font-medium ${paidFull ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
