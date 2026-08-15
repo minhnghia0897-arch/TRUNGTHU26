@@ -39,6 +39,11 @@ export interface OrderRow {
   region: Region; // kr → kho Hàn, vn → kho VN
   cod: number;
   prepaid: number;
+  /**
+   * Phí ship + phí xử lý KHÁCH TRẢ, nằm trong `prepaid`/`cod` chứ không cộng
+   * thêm. Tách ra để màn hình chi tiết tính được tiền hàng thuần.
+   */
+  shipFee?: number;
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;
