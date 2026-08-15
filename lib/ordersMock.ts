@@ -44,6 +44,8 @@ export interface OrderRow {
    * thêm. Tách ra để màn hình chi tiết tính được tiền hàng thuần.
    */
   shipFee?: number;
+  /** Tiền hàng của kiện theo giá niêm yết lúc đặt. Mốc để tính tổng phải thu. */
+  goodsAmount?: number;
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;

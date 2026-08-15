@@ -47,7 +47,15 @@ export default function OrderDetailModal({
   onSave: (updated: OrderRow, changes: string[]) => void;
   onClose: () => void;
 }) {
-  const [d, setD] = useState<OrderRow>(order);
+  // Chuẩn hoá ngay lúc mở: COD = tổng − đã cọc, theo đúng định nghĩa.
+  // Đơn dính lỗi cũ (COD gõ tay làm đơn dày thêm) tự về đúng, bấm Lưu là xong.
+  const [d, setD] = useState<OrderRow>(() => {
+    const ship = order.shipFee ?? 0;
+    const goodsAmt = order.goodsAmount ?? Math.max(0, order.prepaid + order.cod - ship);
+    const tong = goodsAmt + ship;
+    const daCoc = Math.min(Math.max(0, order.prepaid), tong);
+    return { ...order, prepaid: daCoc, cod: tong - daCoc };
+  });
   const [saved, setSaved] = useState(false);
   const money = (v: number) => nat(v, d.region);
   const set = <K extends keyof OrderRow>(k: K, v: OrderRow[K]) => {
@@ -55,17 +63,19 @@ export default function OrderDetailModal({
     setSaved(false);
   };
 
-  // TỔNG PHẢI THU LÀ CỐ ĐỊNH — chốt lúc mở popup, không đổi khi sửa ô nào.
+  // TỔNG PHẢI THU LẤY TỪ GIÁ NIÊM YẾT LÚC ĐẶT, không suy từ cách chia tiền.
   //
-  // Trước đây `total` = prepaid + cod, tức là gõ vào ô nào thì giá đơn cũng
-  // nhảy theo: sửa COD lên là tự nhiên đơn đắt thêm. Nay hai ô chỉ CHIA nhau
-  // một tổng cố định — gõ ô này thì ô kia tự bù.
-  const [total] = useState(order.prepaid + order.cod);
+  // Bản đầu tiên lấy `prepaid + cod` làm mốc. Sai ở chỗ: đó là cách chia tiền,
+  // không phải giá đơn. Gõ 50.000 vào ô COD là đơn tự dày thêm 50.000 — và con
+  // số sai đó được lưu xuống database. Nay mốc là goods_amount + phí ship, cả
+  // hai đều chốt lúc tạo đơn theo bảng giá (§0013).
+  //
+  // Đơn cũ chưa có goods_amount thì lùi về prepaid + cod như trước.
+  const shipFee = d.shipFee ?? 0;
+  const goods = d.goodsAmount ?? Math.max(0, order.prepaid + order.cod - shipFee);
+  const total = goods + shipFee;
 
-  // Tiền ship khách trả nằm TRONG tổng, không cộng thêm. Tách ra để dòng
-  // "Sản phẩm" hiện đúng tiền hàng thuần.
-  const shipFee = Math.min(d.shipFee ?? 0, total);
-  const goods = total - shipFee;
+
 
   /** Sửa một ô thì ô kia bù lại, giữ nguyên tổng và không đụng tới cước ship. */
   const setSplit = (which: "prepaid" | "cod", raw: number) => {
@@ -165,14 +175,14 @@ export default function OrderDetailModal({
                 </div>
               </div>
 
-              <Field label="Trả trước (đã CK)">
+              <Field label="Đã cọc / trả trước">
                 <NumInput value={d.prepaid} onChange={(v) => setSplit("prepaid", v)} />
               </Field>
-              <Field label="COD (thu hộ)">
+              <Field label="COD còn phải thu">
                 <NumInput value={d.cod} onChange={(v) => setSplit("cod", v)} />
               </Field>
               <p className="px-1 pb-1 text-[11.5px] text-slate-400">
-                Sửa một ô thì ô kia tự bù — tổng phải thu và phí ship không đổi.
+                COD = tổng phải thu − đã cọc. Sửa ô nào thì ô kia tự bù.
               </p>
               <div className="flex justify-between py-1 text-[13px]">
                 <span className="text-slate-500">Cước VC trả hãng</span>
