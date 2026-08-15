@@ -36,8 +36,8 @@ interface Override {
   priceVn?: number;
   priceKr?: number;
   discount?: number; // %
-  stock?: string; // legacy: tên mặt hàng kho (được nâng cấp sang stockKey)
-  stockKey?: string; // mã SKU kho được liên kết
+  stock?: string; // legacy: tên mặt hàng kho (chỉ còn để lọc bỏ khi gửi lên)
+  stockQty?: number; // tồn kho của chính sản phẩm
   allowNegative?: boolean; // cho phép bán tồn kho âm
   note?: string; // ghi chú nội bộ
   supplyLink?: string; // link nhập hàng
@@ -59,7 +59,7 @@ interface Product {
   cost: number;
   discount: number;
   images: string[];
-  stockKey?: string; // liên kết kho theo mã SKU
+  stockQty: number; // tồn kho của chính sản phẩm
   allowNegative?: boolean;
   note?: string;
   supplyLink?: string;
@@ -70,10 +70,12 @@ interface Product {
 
 /** Override (kiểu của màn hình) → thân yêu cầu API. Bỏ 2 trường cũ image/stock. */
 function toPatch(o: Override) {
-  const { image: _image, stock: _stock, ...rest } = o;
+  const { image: _image, stock: _stock, stockQty, ...rest } = o;
   void _image;
   void _stock;
-  return rest;
+  // Màn hình gọi là stockQty (khỏi lẫn với trường legacy `stock` kiểu chuỗi),
+  // API gọi là stock — đổi tên đúng một chỗ này.
+  return stockQty === undefined ? rest : { ...rest, stock: stockQty };
 }
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
@@ -151,7 +153,7 @@ export default function ProductsAdmin({
     discount: r.discount ?? 0,
     note: r.note,
     supplyLink: r.supply_link,
-    stockKey: r.stock_key,
+    stockQty: r.stock ?? 0,
     allowNegative: r.allow_negative,
     variants: r.variants,
     dbImages: r.images ?? [],
@@ -183,7 +185,6 @@ export default function ProductsAdmin({
   const mergedBase: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
     const images = o.images ?? (o.image ? [o.image] : p.dbImages);
-    const stockKey = o.stockKey ?? (o.stock ? KEY_BY_DEFAULT_NAME[o.stock] : p.stockKey);
     return {
       ...p,
       images,
@@ -194,7 +195,7 @@ export default function ProductsAdmin({
       priceKr: o.priceKr ?? p.priceKr,
       cost: o.cost ?? p.cost,
       discount: o.discount ?? p.discount,
-      stockKey,
+      stockQty: o.stockQty ?? p.stockQty,
       allowNegative: o.allowNegative ?? p.allowNegative,
       note: o.note ?? p.note,
       supplyLink: o.supplyLink ?? p.supplyLink,
@@ -271,7 +272,7 @@ export default function ProductsAdmin({
     code: "",
     category: "",
     priceVn: 0, priceKr: 0, cost: 0, discount: 0,
-    images: [], active: true, flavorIds: [], variants: [], allowNegative: false,
+    images: [], active: true, flavorIds: [], variants: [], allowNegative: false, stockQty: 0,
   });
 
   const handleSave = (patch: Override) => {
@@ -357,9 +358,8 @@ export default function ProductsAdmin({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {merged.map((p) => {
-                const inv = invByKey(p.stockKey);
-                const sellable = inv ? inv.qty : null;
-                const negative = sellable !== null && sellable < 0;
+                const sellable = p.stockQty;
+                const negative = sellable < 0;
                 return (
                   <tr key={p.key} className={showTrash ? "" : "cursor-pointer hover:bg-slate-50"} onClick={() => { if (!showTrash) setEditKey(p.key); }}>
                     <td className="px-4 py-2">
@@ -389,17 +389,14 @@ export default function ProductsAdmin({
                       {p.discount ? <span className="ml-1 text-[11px] text-rose-500">-{p.discount}%</span> : null}
                     </td>
                     <td className="px-4 py-2">
-                      {inv ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="text-slate-600">{inv.name}</span>
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${negative ? "bg-rose-100 text-rose-700" : inv.status === "ok" ? "bg-emerald-100 text-emerald-700" : inv.status === "low" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
-                            {sellable}
-                          </span>
-                          {p.allowNegative && <span className="text-[10px] text-slate-400">(bán âm)</span>}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${negative ? "bg-rose-100 text-rose-700" : sellable === 0 ? "bg-slate-100 text-slate-500" : sellable <= 10 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
+                        >
+                          {sellable}
                         </span>
-                      ) : (
-                        <span className="text-slate-300">Chưa liên kết</span>
-                      )}
+                        {p.allowNegative && <span className="text-[10px] text-slate-400">(bán âm)</span>}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-center">
                       {showTrash ? (
@@ -517,9 +514,7 @@ function EditModal({
   const [priceVn, setPriceVn] = useState(product.priceVn);
   const [priceKr, setPriceKr] = useState(product.priceKr);
   const [discount, setDiscount] = useState(product.discount);
-  const [stockKey, setStockKey] = useState(product.stockKey ?? "");
-  const initQty = inventory.find((i) => i.key === product.stockKey)?.qty ?? 0;
-  const [stockQty, setStockQty] = useState(initQty);
+  const [stockQty, setStockQty] = useState(product.stockQty ?? 0);
   const [allowNegative, setAllowNegative] = useState(!!product.allowNegative);
   const [note, setNote] = useState(product.note ?? "");
   const [supplyLink, setSupplyLink] = useState(product.supplyLink ?? "");
@@ -577,19 +572,12 @@ function EditModal({
     setVariants((v) => v.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const removeVariant = (i: number) => setVariants((v) => v.filter((_, j) => j !== i));
 
-  const onPickStock = (k: string) => {
-    setStockKey(k);
-    setStockQty(inventory.find((i) => i.key === k)?.qty ?? 0);
-  };
-
   const submit = () => {
-    // ghi tồn kho vào kho dùng chung nếu có liên kết
-    if (stockKey) writeStock(stockKey, stockQty, allowNegative);
     onSave({
+      stockQty,
       name, code: code.trim() || undefined, category: category.trim() || undefined,
       images, image: images[0] || undefined,
       cost, priceVn, priceKr, discount,
-      stockKey: stockKey || undefined,
       allowNegative,
       note: note.trim() || undefined,
       supplyLink: supplyLink.trim() || undefined,
@@ -600,7 +588,6 @@ function EditModal({
   };
 
   const inp = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
-  const selectedInv = inventory.find((i) => i.key === stockKey);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4" onClick={onClose}>
@@ -683,35 +670,27 @@ function EditModal({
             )}
           </div>
 
-          {/* liên kết kho + tồn + bán âm */}
+          {/* tồn kho — nằm ngay trên sản phẩm, không phải liên kết SKU rời */}
           <div className="rounded-lg border border-slate-200 p-3">
             <span className="mb-2 block text-[12px] font-semibold text-slate-500">Kho hàng</span>
             <div className="grid grid-cols-2 gap-3">
-              <L label="Liên kết SKU kho">
-                <select value={stockKey} onChange={(e) => onPickStock(e.target.value)} className={inp}>
-                  <option value="">— Không liên kết —</option>
-                  {inventory.map((i) => (
-                    <option key={i.key} value={i.key}>{i.name} (tồn {i.qty})</option>
-                  ))}
-                </select>
-              </L>
-              <L label="Tồn kho (Có thể bán)">
+              <L label="Tồn kho (còn bán được)">
                 <input
                   type="number"
                   value={stockQty}
-                  disabled={!stockKey}
                   onChange={(e) => setStockQty(Number(e.target.value) || 0)}
-                  className={`${inp} ${!stockKey ? "cursor-not-allowed bg-slate-50 text-slate-400" : ""}`}
+                  className={`${inp} ${stockQty < 0 ? "border-rose-300 text-rose-600" : ""}`}
                 />
               </L>
+              <div className="flex items-end pb-1.5">
+                <p className="text-[11.5px] leading-relaxed text-slate-400">
+                  Khách đặt là máy chủ tự trừ. Số này dùng chung cho mọi máy.
+                </p>
+              </div>
             </div>
-            <label className="mt-2 flex items-center gap-2 text-[13px] text-slate-700">
-              <input type="checkbox" checked={allowNegative} onChange={(e) => setAllowNegative(e.target.checked)} className="h-4 w-4 accent-blue-600" />
-              Cho phép bán tồn kho âm
-            </label>
-            {stockKey && (
-              <p className="mt-1.5 text-[11px] text-slate-400">
-                Ghi vào Tồn kho dùng chung — mã <b>{selectedInv?.key}</b>. Đơn bán/huỷ sẽ tự cộng trừ số này.
+            {stockQty < 0 && (
+              <p className="mt-1.5 text-[11.5px] font-medium text-rose-600">
+                Đang âm {Math.abs(stockQty)} — đã nhận đơn nhiều hơn số hàng có thật.
               </p>
             )}
           </div>

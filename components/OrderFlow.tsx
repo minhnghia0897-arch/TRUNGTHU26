@@ -473,8 +473,9 @@ export default function OrderFlow({
         alert(data.error ?? "Tạo đơn thất bại.");
         return;
       }
-      // trừ kho theo BOM (demo, dùng chung kho với dashboard) — theo dòng đã tách người nhận
-      applyStock(cartConsume(expandedLines), -1);
+      // Kho do MÁY CHỦ trừ lúc tạo đơn (lib/products/stock.ts). Trước đây trừ ở
+      // đây — tức là trong trình duyệt của khách — nên số tồn của chủ shop không
+      // bao giờ nhúc nhích, mà mỗi khách lại trừ vào bản sao của riêng mình.
       // định danh từ token Messenger (§10.1): map token → khách, đánh dấu đã dùng
       const link = ref ? findLink(ref) : undefined;
       if (ref && link) markUsed(ref, data.order.code);

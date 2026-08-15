@@ -27,6 +27,8 @@ export interface Box {
   variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
+  /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
+  stock?: number;
   removed?: boolean;
   active: boolean;
 }
@@ -55,6 +57,8 @@ export interface Flavor {
   variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
+  /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
+  stock?: number;
   removed?: boolean;
   active: boolean;
 }
@@ -102,6 +106,8 @@ export interface Combo {
   variants?: ProductVariant[];
   stock_key?: string;
   allow_negative?: boolean;
+  /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
+  stock?: number;
   removed?: boolean;
   active: boolean;
 }

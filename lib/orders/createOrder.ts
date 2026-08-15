@@ -1,5 +1,6 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
+import { adjustStock, type StockMove } from "@/lib/products/stock";
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
@@ -356,6 +357,19 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       });
       if (shErr) throw shErr;
     }
+
+    // Trừ kho SAU KHI đơn đã ghi xong. Trước đây việc này làm ở trình duyệt của
+    // khách nên chủ shop không bao giờ thấy số tồn thay đổi.
+    // Không chặn khi hết hàng — tồn xuống âm và bảng điều hành báo đỏ, hợp với
+    // mùa Trung Thu đặt trước nhiều.
+    const moves: StockMove[] = [];
+    for (const l of pricedLines) {
+      if (l.kind === "combo" && l.comboId) moves.push({ kind: "combo", id: l.comboId, qty: l.qty });
+      else if (l.kind === "box" && l.boxId) moves.push({ kind: "box", id: l.boxId, qty: l.qty });
+      else if (l.kind === "la" && l.flavorIds?.[0])
+        moves.push({ kind: "flavor", id: l.flavorIds[0], qty: l.qty });
+    }
+    await adjustStock(moves, -1);
 
     return { ok: true, order: summary };
   } catch (e) {

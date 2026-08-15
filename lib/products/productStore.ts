@@ -40,6 +40,8 @@ export interface ProductPatch {
   note?: string;
   supplyLink?: string;
   variants?: ProductVariant[];
+  /** Tồn kho của chính sản phẩm (§0012). */
+  stock?: number;
   stockKey?: string;
   allowNegative?: boolean;
   active?: boolean;
@@ -66,6 +68,7 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   set("note", p.note);
   set("supply_link", p.supplyLink);
   set("variants", p.variants);
+  set("stock", p.stock);
   set("stock_key", p.stockKey);
   set("allow_negative", p.allowNegative);
   set("active", p.active);
