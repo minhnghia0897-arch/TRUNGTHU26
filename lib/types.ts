@@ -126,7 +126,15 @@ export interface Warehouse {
   region: Region;
   name: string;
   shipping_mode: "separate" | "included";
-  fee_table: { ship?: number; handling?: number };
+  /**
+   * Phí của kho, tính bằng `local_currency`.
+   *
+   * `free_from_qty`: mua từ bao nhiêu phần trở lên thì MIỄN PHÍ SHIP. Tính
+   * THEO TỪNG KIỆN vì phí ship cũng tính theo kiện — gửi 3 người là 3 kiện,
+   * kiện nào đủ số thì kiện đó được miễn. 0 hoặc bỏ trống = không miễn.
+   * Phí xử lý (`handling`) vẫn thu như thường.
+   */
+  fee_table: { ship?: number; handling?: number; free_from_qty?: number };
   local_currency: Currency;
   active: boolean;
 }
