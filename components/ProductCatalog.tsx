@@ -601,6 +601,167 @@ export default function ProductCatalog({
       </div>
 
       {/* popup xem ảnh lớn — ngay trong trang, không rời trang */}
+      {/* CHI TIẾT BỘ QUÀ TẶNG — ảnh lớn, quy cách, và từng loại nhân kèm đủ vị.
+          Thẻ ngoài danh sách cố tình gọn (2 cột hẹp) nên mọi thông tin dài
+          dòng dồn về đây. */}
+      {detail && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/50"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-app overflow-y-auto rounded-t-2xl border-t border-line bg-cream pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative">
+              <ImageArea
+                badge={detail.badge}
+                w={boxes.find((x) => x.id === detail.box_id)?.weight}
+                images={imagesOf(`combo:${detail.id}`)}
+                alt={detail.name}
+                onOpen={(i) =>
+                  setLightbox({ images: imagesOf(`combo:${detail.id}`), index: i, title: detail.name })
+                }
+              />
+              <button
+                onClick={() => setDetail(null)}
+                aria-label="Đóng"
+                className="absolute left-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full bg-black/45 text-[17px] leading-none text-white backdrop-blur"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="px-4 pt-4">
+              {detail.category && <div className="eyebrow">{detail.category}</div>}
+              <h3 className="title-heritage mt-0.5 text-xl">{detail.name}</h3>
+              {detail.description && (
+                <p className="mt-2 text-[12.5px] leading-relaxed text-ink/70">{detail.description}</p>
+              )}
+
+              {(() => {
+                const opts = comboOptions(detail, region);
+
+                // Set một giá (VD Sắc Đỏ): liệt kê thẳng các vị trong hộp.
+                if (!opts.length) {
+                  const price = comboPrice(detail, boxes, flavors, region);
+                  const names = detail.flavor_ids
+                    .map((fid) => flavors.find((x) => x.id === fid)?.name)
+                    .filter(Boolean) as string[];
+                  return (
+                    <>
+                      {names.length > 0 && (
+                        <div className="mt-4">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-navy/50">
+                            Gồm {names.length} vị
+                          </div>
+                          <ul className="mt-1.5 space-y-1">
+                            {names.map((n) => (
+                              <li key={n} className="flex gap-2 text-[12.5px] text-ink/75">
+                                <span className="text-gold">•</span>
+                                {n}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {price !== null && (
+                        <div className="mt-5 flex items-center justify-between gap-3 rounded-card bg-white p-3.5 shadow-card">
+                          <div className="price-lg text-[17px]">
+                            {formatMoney(price, region)}
+                            <span className="unit"> / hộp</span>
+                          </div>
+                          <button
+                            onClick={() =>
+                              addToCart(`combo:${detail.id}`, {
+                                kind: "combo",
+                                boxId: detail.box_id,
+                                comboId: detail.id,
+                                flavorIds: detail.flavor_ids,
+                                unitPrice: price,
+                                name: detail.name,
+                              })
+                            }
+                            className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${detail.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                          >
+                            {added === `combo:${detail.id}` ? (
+                              <>
+                                <IconCheck width={13} height={13} /> Đã thêm
+                              </>
+                            ) : (
+                              <>
+                                <IconCart width={13} height={13} /> Thêm vào giỏ
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                }
+
+                // Set nhiều lựa chọn: mỗi loại nhân một khối, có đủ vị bên trong.
+                return (
+                  <div className="mt-5">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-navy/50">
+                      Chọn loại nhân
+                    </div>
+                    <div className="mt-2 space-y-3">
+                      {opts.map((o) => {
+                        const key = `combo:${detail.id}:${o.name}`;
+                        const vi = o.contents.split("·").map((x) => x.trim()).filter(Boolean);
+                        return (
+                          <div key={o.name} className="rounded-card bg-white p-3.5 shadow-card">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="text-[13.5px] font-semibold text-navy">{o.name}</span>
+                              <span className="price-lg text-[15px]">{formatMoney(o.price, region)}</span>
+                            </div>
+                            {vi.length > 0 && (
+                              <ul className="mt-2 space-y-1">
+                                {vi.map((n) => (
+                                  <li key={n} className="flex gap-2 text-[12px] text-ink/70">
+                                    <span className="text-gold">•</span>
+                                    {n}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <button
+                              onClick={() =>
+                                addToCart(key, {
+                                  kind: "combo",
+                                  boxId: detail.box_id,
+                                  comboId: detail.id,
+                                  variantName: o.name,
+                                  flavorIds: detail.flavor_ids,
+                                  unitPrice: o.price,
+                                  name: `${detail.name} · ${o.name}`,
+                                })
+                              }
+                              className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                            >
+                              {added === key ? (
+                                <>
+                                  <IconCheck width={13} height={13} /> Đã thêm
+                                </>
+                              ) : (
+                                <>
+                                  <IconCart width={13} height={13} /> Thêm vào giỏ
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {lightbox && (
         <Lightbox
           images={lightbox.images}
