@@ -418,7 +418,9 @@ export default function ProductCatalog({
               return (
                 <article key={c.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
                   <ImageArea
-                    badge="best_seller"
+                    // Huy hiệu đọc từ dữ liệu. Trước đây hardcode "best_seller"
+                    // nên MỌI bộ quà tặng đều đeo Best Seller — nói sai với khách.
+                    badge={c.badge}
                     w={b?.weight}
                     images={imagesOf(`combo:${c.id}`)}
                     alt={c.name}
