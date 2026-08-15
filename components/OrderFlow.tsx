@@ -13,6 +13,7 @@ import {
   lineTotalQty,
   shipFeeForRegion,
   type CartLine,
+  comboPrice,
 } from "@/lib/pricing";
 import { applyStock } from "@/lib/stockStore";
 import { cartConsume } from "@/lib/webInventory";
@@ -136,8 +137,9 @@ export default function OrderFlow({
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
     if (!c) return;
+    const unit = comboPrice(c, boxes, flavors, buyerRegion);
+    if (unit === null) return; // set chưa có giá thì không cho thêm vào giỏ
     const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
-    const unit = boxPrice(b, c.flavor_ids, flavors, buyerRegion);
     setCart((cart) => [
       ...cart,
       { uid: nid(), kind: "combo", boxId: b.id, comboId: c.id, flavorIds: c.flavor_ids, qty: 1, unitPrice: unit, name: c.name, recipientUids: [] },

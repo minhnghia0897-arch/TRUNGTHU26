@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Badge, Box, Combo, Flavor, Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
-import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine } from "@/lib/pricing";
+import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine, comboPrice } from "@/lib/pricing";
 import {
   IconLotus,
   IconCrown,
@@ -379,8 +379,11 @@ export default function ProductCatalog({
         {tab === "combo" && (
           <div className="grid grid-cols-2 gap-3">
             {combos.map((c) => {
+              const price = comboPrice(c, boxes, flavors, region);
+              // Không suy được giá (hộp quy cách đã tắt, set chưa đặt giá) thì
+              // giấu hẳn thẻ. Trước đây lùi về boxes[0] nên bày giá của hộp khác.
+              if (price === null) return null;
               const b = boxes.find((x) => x.id === c.box_id) ?? boxes[0];
-              const price = boxPrice(b, c.flavor_ids, flavors, region);
               // card 2 cột hẹp → gộp tên vị thành 1 dòng thay vì chip rời
               const flavorLine = c.flavor_ids
                 .map((fid) => flavors.find((x) => x.id === fid)?.name)
