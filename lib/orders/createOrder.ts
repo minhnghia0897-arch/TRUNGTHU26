@@ -169,7 +169,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         unit = p;
       }
       // vị của set do danh mục quyết định, dùng luôn cho mô tả kiện
-      l = { ...l, boxId: combo.box_id, flavorIds: combo.flavor_ids };
+      l = { ...l, boxId: combo.box_id ?? undefined, flavorIds: combo.flavor_ids };
     }
 
     subtotal += unit * qty;

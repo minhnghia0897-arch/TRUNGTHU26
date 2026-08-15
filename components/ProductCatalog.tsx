@@ -474,7 +474,7 @@ export default function ProductCatalog({
                                 onClick={() =>
                                   addToCart(key, {
                                     kind: "combo",
-                                    boxId: c.box_id,
+                                    boxId: c.box_id ?? undefined,
                                     comboId: c.id,
                                     variantName: o.name,
                                     flavorIds: c.flavor_ids,
@@ -505,7 +505,7 @@ export default function ProductCatalog({
                           onClick={() =>
                             addToCart(`combo:${c.id}`, {
                               kind: "combo",
-                              boxId: c.box_id,
+                              boxId: c.box_id ?? undefined,
                               comboId: c.id,
                               flavorIds: c.flavor_ids,
                               unitPrice: price,
@@ -675,7 +675,7 @@ export default function ProductCatalog({
                             onClick={() =>
                               addToCart(`combo:${detail.id}`, {
                                 kind: "combo",
-                                boxId: detail.box_id,
+                                boxId: detail.box_id ?? undefined,
                                 comboId: detail.id,
                                 flavorIds: detail.flavor_ids,
                                 unitPrice: price,
@@ -730,7 +730,7 @@ export default function ProductCatalog({
                               onClick={() =>
                                 addToCart(key, {
                                   kind: "combo",
-                                  boxId: detail.box_id,
+                                  boxId: detail.box_id ?? undefined,
                                   comboId: detail.id,
                                   variantName: o.name,
                                   flavorIds: detail.flavor_ids,
