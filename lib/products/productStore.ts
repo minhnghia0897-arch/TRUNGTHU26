@@ -148,18 +148,11 @@ export async function createProduct(
       price_kr: patch.priceKr ?? 0,
     });
   } else {
-    // combo bắt buộc gắn vào một vỏ hộp
-    const { data: box } = await sb
-      .from("box")
-      .select("id")
-      .eq("active", true)
-      .eq("removed", false)
-      .limit(1)
-      .maybeSingle();
-    if (!box) throw new Error("Chưa có vỏ hộp nào đang bán để gắn combo vào.");
+    // Set không cần vỏ hộp (§0011): giá, quy cách và vị đều nằm trên chính set.
+    // Trước đây bắt buộc có hộp nên không tạo được set khi shop bỏ hộp tự chọn.
     Object.assign(cols, {
-      name: patch.name ?? "Combo mới",
-      box_id: (box as { id: string }).id,
+      name: patch.name ?? "Bộ quà tặng mới",
+      box_id: null,
       flavor_ids: patch.flavorIds ?? [],
     });
   }

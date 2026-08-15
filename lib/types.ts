@@ -78,7 +78,11 @@ export interface Combo {
   name: string;
   badge?: Badge;
   description?: string;
-  box_id: string;
+  /**
+   * Vỏ hộp dùng chung quy cách. Để trống với set tự mô tả đủ — giá, quy cách và
+   * vị đều nằm trên chính set, vỏ hộp không giữ thêm thông tin gì (§0011).
+   */
+  box_id: string | null;
   flavor_ids: string[];
   /**
    * Giá bán của set. Có giá = giá đó là giá bán, hộp chỉ còn là quy cách.

@@ -154,7 +154,7 @@ export default function OrderFlow({
       {
         uid: nid(),
         kind: "combo",
-        boxId: c.box_id,
+        boxId: c.box_id ?? undefined,
         comboId: c.id,
         variantName: pick?.name,
         flavorIds: c.flavor_ids,
