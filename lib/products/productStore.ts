@@ -1,5 +1,5 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
-import type { Box, Combo, Flavor } from "@/lib/types";
+import type { Box, Combo, Flavor, ProductVariant } from "@/lib/types";
 
 // ============================================================================
 // Sửa danh mục sản phẩm — CHỈ CHẠY Ở SERVER (service role).
@@ -39,7 +39,7 @@ export interface ProductPatch {
   discount?: number;
   note?: string;
   supplyLink?: string;
-  variants?: { name: string; contents: string }[];
+  variants?: ProductVariant[];
   stockKey?: string;
   allowNegative?: boolean;
   active?: boolean;

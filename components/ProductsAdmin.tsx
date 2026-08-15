@@ -16,10 +16,14 @@ type InvItem = { key: string; name: string; qty: number; threshold: number; stat
 // map tên gốc → key (để nâng cấp các liên kết cũ lưu theo tên)
 const KEY_BY_DEFAULT_NAME: Record<string, string> = Object.fromEntries(ALL_STOCK.map((s) => [s.name, s.key]));
 
-// Mẫu mã (thuộc tính) — mỗi SET là 1 tổ hợp bánh, giống "Thuộc tính sản phẩm" của Pancake
+// Mẫu mã (thuộc tính) — mỗi lựa chọn là 1 tổ hợp bánh của cùng một sản phẩm.
+// VD Vinh Hiển có "Nhân đặc biệt" 55.000₩ và "Nhân cổ truyền cao cấp" 60.000₩.
 interface Variant {
-  name: string; // SET A, SET B…
-  contents: string; // "matcha, thập cẩm, đậu xanh…"
+  name: string; // Nhân đặc biệt, Nhân cổ truyền…
+  contents: string; // "matcha · thập cẩm · đậu xanh…"
+  /** Giá của riêng lựa chọn này. Để trống = dùng giá chung của sản phẩm. */
+  price_vn?: number | null;
+  price_kr?: number | null;
 }
 
 interface Override {
@@ -138,30 +142,48 @@ export default function ProductsAdmin({
   };
 
   // sản phẩm gốc từ catalog
-  const base: Omit<Product, "images">[] = [
+  // Nạp đủ các trường mà form có sửa. Thiếu bất kỳ trường nào ở đây là mở sản
+  // phẩm ra rồi bấm Lưu sẽ GHI RỖNG ĐÈ LÊN dữ liệu thật — mất ảnh, mất mẫu mã.
+  const common = (r: Box | Flavor | Combo) => ({
+    code: r.code,
+    category: r.category,
+    cost: r.cost ?? 0,
+    discount: r.discount ?? 0,
+    note: r.note,
+    supplyLink: r.supply_link,
+    stockKey: r.stock_key,
+    allowNegative: r.allow_negative,
+    variants: r.variants,
+    dbImages: r.images ?? [],
+  });
+
+  const base: (Omit<Product, "images"> & { dbImages: string[] })[] = [
     ...boxes.map((b) => ({
       key: `box:${b.id}`, type: "Hộp" as const, name: b.name,
-      priceVn: b.price_vn, priceKr: b.price_kr, cost: 0, discount: 0, active: b.active,
+      priceVn: b.price_vn, priceKr: b.price_kr, active: b.active,
       flavorIds: [] as string[],
+      ...common(b),
     })),
-    ...combos.map((c) => {
-      return {
-        key: `combo:${c.id}`, type: "Combo" as const, name: c.name,
-        priceVn: comboPrice(c, boxes, flavors, "vn") ?? 0,
-        priceKr: comboPrice(c, boxes, flavors, "kr") ?? 0,
-        cost: 0, discount: 0, active: c.active, flavorIds: c.flavor_ids,
-      };
-    }),
+    ...combos.map((c) => ({
+      key: `combo:${c.id}`, type: "Combo" as const, name: c.name,
+      // Giá chung của set. Set có mẫu mã kèm giá thì đây là giá thấp nhất
+      // (con số "từ ..." ngoài trang bán); giá thật nằm ở từng mẫu mã.
+      priceVn: comboPrice(c, boxes, flavors, "vn") ?? 0,
+      priceKr: comboPrice(c, boxes, flavors, "kr") ?? 0,
+      active: c.active, flavorIds: c.flavor_ids,
+      ...common(c),
+    })),
     ...flavors.map((f) => ({
       key: `flavor:${f.id}`, type: "Vị" as const, premium: f.premium, name: f.name,
-      priceVn: f.price_vn, priceKr: f.price_kr, cost: 0, discount: 0, active: f.active,
+      priceVn: f.price_vn, priceKr: f.price_kr, active: f.active,
+      ...common(f),
     })),
   ];
 
   const mergedBase: Product[] = base.map((p) => {
     const o = ov[p.key] ?? {};
-    const images = o.images ?? (o.image ? [o.image] : []);
-    const stockKey = o.stockKey ?? (o.stock ? KEY_BY_DEFAULT_NAME[o.stock] : undefined);
+    const images = o.images ?? (o.image ? [o.image] : p.dbImages);
+    const stockKey = o.stockKey ?? (o.stock ? KEY_BY_DEFAULT_NAME[o.stock] : p.stockKey);
     return {
       ...p,
       images,
@@ -549,7 +571,8 @@ function EditModal({
     setFlavorIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   // mẫu mã (thuộc tính)
-  const addVariant = () => setVariants((v) => [...v, { name: `SET ${String.fromCharCode(65 + v.length)}`, contents: "" }]);
+  const addVariant = () =>
+    setVariants((v) => [...v, { name: "", contents: "", price_vn: null, price_kr: null }]);
   const setVariant = (i: number, patch: Partial<Variant>) =>
     setVariants((v) => v.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const removeVariant = (i: number) => setVariants((v) => v.filter((_, j) => j !== i));
@@ -700,16 +723,72 @@ function EditModal({
                 <span className="text-[12px] font-semibold text-slate-500">Mẫu mã / Thuộc tính ({variants.length})</span>
                 <button onClick={addVariant} className="ml-auto rounded-lg bg-blue-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-blue-700">+ Thêm mẫu mã</button>
               </div>
-              {variants.length === 0 && <p className="text-[12px] text-slate-400">Chưa có mẫu mã. VD: SET A → matcha, thập cẩm, đậu xanh, cốm dừa…</p>}
-              <div className="space-y-2">
+              {variants.length === 0 && (
+                <p className="text-[12px] text-slate-400">
+                  Chưa có mẫu mã. Dùng khi cùng một sản phẩm bán nhiều kiểu khác giá —
+                  VD Vinh Hiển: “Nhân đặc biệt” 55.000₩ và “Nhân cổ truyền cao cấp” 60.000₩.
+                </p>
+              )}
+              <div className="space-y-2.5">
                 {variants.map((v, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input value={v.name} onChange={(e) => setVariant(i, { name: e.target.value })} placeholder="SET A" className="w-24 flex-none rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] font-medium outline-none focus:border-blue-400" />
-                    <input value={v.contents} onChange={(e) => setVariant(i, { contents: e.target.value })} placeholder="matcha, thập cẩm, đậu xanh…" className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] outline-none focus:border-blue-400" />
-                    <button onClick={() => removeVariant(i)} className="flex-none rounded-lg border border-slate-200 px-2 text-slate-400 hover:bg-rose-50 hover:text-rose-500">🗑</button>
+                  <div key={i} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">
+                    <div className="flex gap-2">
+                      <input
+                        value={v.name}
+                        onChange={(e) => setVariant(i, { name: e.target.value })}
+                        placeholder="Nhân đặc biệt"
+                        className="w-44 flex-none rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] font-medium outline-none focus:border-blue-400"
+                      />
+                      <input
+                        value={v.contents}
+                        onChange={(e) => setVariant(i, { contents: e.target.value })}
+                        placeholder="matcha · thập cẩm · đậu xanh…"
+                        className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[13px] outline-none focus:border-blue-400"
+                      />
+                      <button
+                        onClick={() => removeVariant(i)}
+                        title="Xoá mẫu mã"
+                        className="flex-none rounded-lg border border-slate-200 bg-white px-2 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-[12px] text-slate-500">
+                        Giá Hàn ₩
+                        <input
+                          type="number"
+                          value={v.price_kr ?? ""}
+                          onChange={(e) =>
+                            setVariant(i, { price_kr: e.target.value === "" ? null : Number(e.target.value) })
+                          }
+                          placeholder="theo giá chung"
+                          className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[13px] outline-none focus:border-blue-400"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[12px] text-slate-500">
+                        Giá VN đ
+                        <input
+                          type="number"
+                          value={v.price_vn ?? ""}
+                          onChange={(e) =>
+                            setVariant(i, { price_vn: e.target.value === "" ? null : Number(e.target.value) })
+                          }
+                          placeholder="theo giá chung"
+                          className="w-32 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[13px] outline-none focus:border-blue-400"
+                        />
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>
+              {variants.length > 0 && (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-slate-400">
+                  Mẫu mã có giá thì trang bán hiện <b>một thẻ sản phẩm</b> với mỗi mẫu mã một nút bấm
+                  kèm giá riêng, giá lớn ghi “từ …”. Bỏ trống ô giá thì mẫu mã đó chỉ là mô tả và
+                  dùng giá chung ở trên.
+                </p>
+              )}
 
               {/* biến thể bánh cho set (danh sách vị được phép) */}
               <L label={`Bánh được phép cho vào set (${flavorIds.length})`}>
