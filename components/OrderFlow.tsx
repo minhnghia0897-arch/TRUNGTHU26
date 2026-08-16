@@ -16,11 +16,7 @@ import {
   comboPrice,
   comboOptions,
 } from "@/lib/pricing";
-import { applyStock } from "@/lib/stockStore";
-import { cartConsume } from "@/lib/webInventory";
 import { saveWebOrder } from "@/lib/webOrders";
-import { addDashboardOrder } from "@/lib/dashboardOrders";
-import { findLink, markUsed } from "@/lib/attribution";
 import { normalizePhone } from "@/lib/phone";
 import { IconTrash, IconPlus, IconMoon, IconLotus, IconStar, IconCheck, IconCopyDoc, IconCart } from "@/components/icons";
 
@@ -156,7 +152,6 @@ export default function OrderFlow({
   };
 
   // khách Messenger đã map từ token ?ref (nếu có)
-  const refLink = ref ? findLink(ref) : undefined;
 
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
@@ -497,65 +492,13 @@ export default function OrderFlow({
       // Kho do MÁY CHỦ trừ lúc tạo đơn (lib/products/stock.ts). Trước đây trừ ở
       // đây — tức là trong trình duyệt của khách — nên số tồn của chủ shop không
       // bao giờ nhúc nhích, mà mỗi khách lại trừ vào bản sao của riêng mình.
-      // định danh từ token Messenger (§10.1): map token → khách, đánh dấu đã dùng
-      const link = ref ? findLink(ref) : undefined;
-      if (ref && link) markUsed(ref, data.order.code);
-      // đưa đơn web vào Dashboard → Đơn hàng (đã trừ kho ở web nên stockApplied=true)
-      const r0 = recipients[0];
-      const st = new Date();
-      const p2 = (x: number) => String(x).padStart(2, "0");
-      try {
-        // MỖI NGƯỜI NHẬN = 1 DÒNG ĐƠN (1 kiện, 1 địa chỉ, 1 kho, 1 vận đơn riêng).
-        // Tiền chia theo từng người → cộng lại đúng bằng tổng đơn, không đếm trùng doanh thu.
-        const parcels = recipients.filter((r) => cart.some((it) => it.recipientUids.includes(r.uid)));
-        const createdAt = `${p2(st.getDate())}/${p2(st.getMonth() + 1)}/${st.getFullYear()} ${p2(st.getHours())}:${p2(st.getMinutes())}`;
-        parcels.forEach((r, i) => {
-          const items = cart.filter((it) => it.recipientUids.includes(r.uid));
-          const sub = items.reduce((s, it) => s + it.unitPrice * qtyForRecipient(it, r.uid), 0);
-          const parcelQty = items.reduce((n, it) => n + qtyForRecipient(it, r.uid), 0);
-          const fee = shipFeeForRegion(r.region, buyerRegion, warehouses, fx, parcelQty);
-          // Dashboard hiểu `region` là kho VÀ là tiền tệ của số tiền trên dòng.
-          // Đơn tính theo tiền người đặt, nên kiện giao khác vùng phải quy đổi lại
-          // về tiền tệ của kho đó, không thì Thu chi/Khách hàng đọc sai.
-          const amount = Math.round(
-            convertToBuyerCurrency(sub + fee.shipping + fee.handling, currencyOf(buyerRegion), r.region, fx),
-          );
-          addDashboardOrder({
-            source: ref ? "facebook" : "web",
-            vc: "",
-            tags: ref ? ["Messenger"] : ["Web"],
-            note:
-              `Web ${data.order.code} · CK ${data.order.transferCode}` +
-              (parcels.length > 1 ? ` · Kiện ${i + 1}/${parcels.length}` : "") +
-              (link ? ` · Messenger: ${link.customerName}` : "") +
-              (r.note?.trim() ? ` · 📝 ${r.note.trim()}` : ""),
-            customer: buyerName.trim(),
-            recipient: r.name || buyerName.trim(),
-            phone: buyerPhone.trim(),
-            carrier: "",
-            address: r.address || "",
-            region: r.region, // kho theo người nhận, không phải vùng người đặt
-            cod: 0,
-            prepaid: amount,
-            cuoc_vc: 0,
-            phi_vc_thu_khach: 0,
-            status: "Mới",
-            created: createdAt,
-            assignee: "Web",
-            product: items
-              .map((it) => {
-                const q = qtyForRecipient(it, r.uid);
-                return `${it.name}${q > 1 ? ` ×${q}` : ""}`;
-              })
-              .join(", "),
-            expected: r.desiredDate || undefined,
-            consume: cartConsume(expandedLines.filter((l) => l.recipientUid === r.uid)),
-            stockApplied: true,
-          });
-        });
-      } catch {
-        /* ignore */
-      }
+      // Token Messenger do MÁY CHỦ tra và gắn vào đơn (lib/orders/links.ts).
+      // Bản cũ tra trong localStorage của chính khách — nơi không bao giờ có
+      // link vì link được tạo trên máy shop, nên chưa bao giờ gắn đúng khách.
+      //
+      // Cũng bỏ luôn addDashboardOrder(): nó ghi một bản sao đơn vào
+      // localStorage CỦA KHÁCH mà bảng điều hành không hề đọc (đọc từ Supabase).
+
       // lưu đơn để trang Tra cứu tìm theo SĐT
       saveWebOrder({
         code: data.order.code,
@@ -569,7 +512,6 @@ export default function OrderFlow({
         status: "Chờ thanh toán",
         createdAt: Date.now(),
         ref: ref || undefined,
-        refCustomer: link?.customerName,
       });
       try { localStorage.removeItem(CART_KEY); } catch { /* ignore */ }
       // nhớ thông tin cho lần đặt sau (sống qua khi xoá giỏ)
@@ -1227,7 +1169,7 @@ export default function OrderFlow({
                 <div className="flex justify-between"><span className="opacity-60">Người đặt</span><span className="font-medium">{buyerName || "—"}</span></div>
                 <div className="flex justify-between"><span className="opacity-60">SĐT</span><span className="font-medium">{buyerPhone || "—"}</span></div>
                 {ref && (
-                  <div className="flex justify-between"><span className="opacity-60">Nguồn</span><span className="font-medium text-blue-600">Messenger{refLink ? ` · ${refLink.customerName}` : ""}</span></div>
+                  <div className="flex justify-between"><span className="opacity-60">Nguồn</span><span className="font-medium text-blue-600">Messenger</span></div>
                 )}
               </div>
 

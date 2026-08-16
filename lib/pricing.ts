@@ -98,6 +98,69 @@ export function validateBoxFill(
   return { ok: true };
 }
 
+// ---- danh sách món BÁN ĐƯỢC, dùng chung cho trang bán và form tạo đơn tay ---
+/**
+ * Một dòng khách có thể mua: set (tách theo từng lựa chọn nhân) và vị bán lẻ.
+ *
+ * `consumeKey` dùng đúng quy ước của `parseKey()` (`combo:<id>` / `flavor:<id>`)
+ * nên chỗ nào dựng đơn cũng trừ kho được mà không phải tự chế khoá riêng —
+ * form tạo đơn tay trước đây tự chế nên khoá không khớp và kho không hề nhúc nhích.
+ */
+export interface SellItem {
+  key: string;
+  label: string;
+  price: number;
+  consumeKey: string;
+  comboId?: string;
+  variantName?: string;
+  flavorId?: string;
+}
+
+export function sellableItems(
+  combos: Combo[],
+  boxes: Box[],
+  flavors: Flavor[],
+  buyer: Region,
+): SellItem[] {
+  const out: SellItem[] = [];
+
+  for (const c of combos) {
+    if (!c.active || c.removed) continue;
+    const opts = comboOptions(c, buyer);
+    if (opts.length) {
+      for (const o of opts)
+        out.push({
+          key: `${c.id}::${o.name}`,
+          label: `${c.name} · ${o.name}`,
+          price: o.price,
+          consumeKey: `combo:${c.id}`,
+          comboId: c.id,
+          variantName: o.name,
+        });
+    } else {
+      const p = comboPrice(c, boxes, flavors, buyer);
+      if (p !== null)
+        out.push({ key: c.id, label: c.name, price: p, consumeKey: `combo:${c.id}`, comboId: c.id });
+    }
+  }
+
+  // Vị bán lẻ — chỉ tính vị có giá. Vị giá 0 là thành phần của set, không bán rời.
+  for (const f of flavors) {
+    if (!f.active || f.removed) continue;
+    const p = buyer === "vn" ? f.price_vn : f.price_kr;
+    if (!p) continue;
+    out.push({
+      key: `flavor-${f.id}`,
+      label: `${f.name} (lẻ)`,
+      price: p,
+      consumeKey: `flavor:${f.id}`,
+      flavorId: f.id,
+    });
+  }
+
+  return out;
+}
+
 // ---- phí ship + handling theo kho, quy về tiền tệ người đặt (§6) -----------
 export interface ShipFee {
   shipping: number;

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getLinks, addLink, removeLink, LINKS_KEY, type OrderLink } from "@/lib/attribution";
+import { useCallback, useEffect, useState } from "react";
+import type { OrderLink } from "@/lib/orders/links";
+
+// Link nằm trong DATABASE, không phải localStorage. Bản cũ lưu ở trình duyệt
+// máy shop nên khách bấm link từ máy họ là mất dấu — tính năng không chạy.
+const API = "/api/dashboard/links";
 import { IconFacebook, IconCopyDoc, IconCheck, IconTrash } from "@/components/icons";
 
 export default function MessengerLinks() {
@@ -13,32 +17,69 @@ export default function MessengerLinks() {
   const [bulk, setBulk] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
 
-  useEffect(() => {
-    setLinks(getLinks());
-    setOrigin(window.location.origin);
-    const onChange = (e: StorageEvent) => {
-      if (!e.key || e.key === LINKS_KEY) setLinks(getLinks());
-    };
-    window.addEventListener("storage", onChange);
-    return () => window.removeEventListener("storage", onChange);
+  const [pageId, setPageId] = useState("");
+  const [pageSaved, setPageSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch(API);
+      const data = (await res.json()) as {
+        ok: boolean;
+        links?: OrderLink[];
+        pageId?: string;
+        error?: string;
+      };
+      if (!data.ok) throw new Error(data.error ?? "Không đọc được link.");
+      setLinks(data.links ?? []);
+      setPageId(data.pageId ?? "");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không đọc được link.");
+    }
   }, []);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    void reload();
+  }, [reload]);
+
+  const send = async (body: unknown, method: "POST" | "DELETE") => {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(API, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!data.ok) throw new Error(data.error ?? "Không lưu được.");
+      await reload();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Không lưu được.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const linkFor = (token: string) => `${origin}/dat-hang?ref=${token}`;
 
-  const create = () => {
+  const create = async () => {
     if (!name.trim()) return;
-    addLink({ customerName: name, psid, phone });
-    setLinks(getLinks());
-    setName("");
-    setPsid("");
-    setPhone("");
+    if (await send({ customerName: name, psid, phone }, "POST")) {
+      setName("");
+      setPsid("");
+      setPhone("");
+    }
   };
 
-  const createBulk = () => {
+  const createBulk = async () => {
     const names = bulk.split("\n").map((s) => s.trim()).filter(Boolean);
     if (!names.length) return;
-    for (const n of names) addLink({ customerName: n });
-    setLinks(getLinks());
+    for (const n of names) await send({ customerName: n }, "POST");
     setBulk("");
   };
 
@@ -55,12 +96,16 @@ export default function MessengerLinks() {
   };
   const copy = (token: string) => copyText(linkFor(token), token);
 
-  const del = (token: string) => {
-    removeLink(token);
-    setLinks(getLinks());
+  const del = (token: string) => void send({ token }, "DELETE");
+
+  const savePageId = async () => {
+    if (await send({ pageId }, "POST")) setPageSaved(true);
   };
 
   const inp = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
+  const banner = error ? (
+    <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">{error}</div>
+  ) : null;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -70,9 +115,50 @@ export default function MessengerLinks() {
       </header>
 
       <div className="mx-auto max-w-[900px] space-y-5 p-5">
+        {banner}
+
+        {/* ID Trang — không có thì từ đơn không bấm sang cuộc chat được */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-[14px] font-semibold text-slate-800">ID Trang Facebook</h2>
+          <p className="mb-2 text-[12.5px] text-slate-500">
+            PSID của khách chỉ có nghĩa trong hộp thư của <b>đúng Trang này</b>. Điền vào đây thì ở
+            màn hình đơn hàng mới bấm được sang đúng cuộc chat của người đặt. Lấy ID ở{" "}
+            <a
+              href="https://business.facebook.com/settings/pages"
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              Meta Business Suite → Trang
+            </a>
+            .
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={pageId}
+              onChange={(e) => {
+                setPageId(e.target.value);
+                setPageSaved(false);
+              }}
+              placeholder="VD: 1234567890"
+              className={`${inp} max-w-xs`}
+            />
+            <button
+              onClick={() => void savePageId()}
+              disabled={busy}
+              className="rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              Lưu
+            </button>
+            {pageSaved && (
+              <span className="self-center text-[12.5px] font-medium text-emerald-600">Đã lưu</span>
+            )}
+          </div>
+        </section>
         <p className="text-[13px] text-slate-500">
-          Mô phỏng luồng <b>§10.1</b>: tạo link đặt hàng gắn <b>token</b> cho một khách trong Messenger → gửi khách →
-          khi khách đặt, đơn tự gắn đúng khách (PSID / Pancake). Demo lưu ở trình duyệt này.
+          Tạo link đặt hàng gắn <b>token</b> cho một khách trong Messenger → gửi khách → khi khách
+          đặt, máy chủ tra token và gắn đúng khách vào đơn. Link lưu trong cơ sở dữ liệu nên mở ở
+          máy nào cũng dùng được.
         </p>
 
         {/* CÁCH NHANH — link mẫu dán 1 lần */}
@@ -108,7 +194,8 @@ export default function MessengerLinks() {
             className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400"
           />
           <button
-            onClick={createBulk}
+            onClick={() => void createBulk()}
+            disabled={busy}
             className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
           >
             + Tạo hàng loạt
@@ -133,7 +220,8 @@ export default function MessengerLinks() {
             </label>
           </div>
           <button
-            onClick={create}
+            onClick={() => void create()}
+            disabled={busy}
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
           >
             + Tạo link có token

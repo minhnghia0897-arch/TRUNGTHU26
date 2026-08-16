@@ -59,6 +59,9 @@ export interface OrderRow {
   shipFee?: number;
   /** Tiền hàng của kiện theo giá niêm yết lúc đặt. Mốc để tính tổng phải thu. */
   goodsAmount?: number;
+  /** Tên khách trên Messenger + PSID — để mở đúng cuộc chat từ đơn. */
+  messengerName?: string;
+  psid?: string;
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;

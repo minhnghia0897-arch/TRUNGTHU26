@@ -201,6 +201,10 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
         tags: p.tags ?? [],
         note: p.note ?? "",
         assignee: p.assignee ?? null,
+        // Tiền hàng và phí ship tách riêng (§0013) — không có thì popup chi tiết
+        // phải suy ngược từ cách chia tiền, đúng cái lỗi đã sửa ở đó.
+        goods_amount: p.goodsAmount ?? null,
+        shipping_fee: p.shipFee ?? 0,
         consume: p.consume ?? null,
         stock_applied: false, // để syncStockForStatus bên dưới trừ, mới ghi đúng cờ
       })

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { OrderRow, Status } from "@/lib/ordersMock";
 import { STATUS_COLOR, PIPELINE } from "@/lib/ordersMock";
+import { messengerInboxUrl } from "@/lib/messenger";
 import {
   IconFacebook,
   IconGlobe,
@@ -22,6 +23,51 @@ const CARRIERS = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile
 const nat = (v: number, region: "vn" | "kr") =>
   region === "kr" ? "₩" + v.toLocaleString("en-US") : v.toLocaleString("vi-VN") + "đ";
 
+/**
+ * Ai đặt đơn Facebook này.
+ *
+ * Trước đây đơn Facebook chỉ có mỗi cái thẻ "Facebook" — không cách nào biết
+ * khách nào, cũng không bấm sang cuộc chat được. Tên lấy từ link truy vết
+ * (§0015/0016); mở cuộc chat cần thêm Page ID vì PSID chỉ có nghĩa trong hộp
+ * thư của đúng Trang đó.
+ */
+function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
+  const url = messengerInboxUrl(pageId, order.psid);
+  const name = order.messengerName;
+
+  if (!name && !order.psid)
+    return (
+      <span
+        className="text-[11.5px] text-slate-400"
+        title="Đơn không đến từ link truy vết nên không biết khách Messenger nào."
+      >
+        chưa gắn khách Messenger
+      </span>
+    );
+
+  if (url)
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[12px] font-medium text-blue-700 hover:bg-blue-100"
+        title="Mở cuộc chat trong hộp thư Trang"
+      >
+        {name ?? "Khách Messenger"} ↗
+      </a>
+    );
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-600"
+      title="Vào trang Link Messenger điền ID Trang Facebook để bấm mở được cuộc chat."
+    >
+      {name ?? "Khách Messenger"}
+    </span>
+  );
+}
+
 function SrcBadge({ s }: { s: OrderRow["source"] }) {
   const map = {
     facebook: { Icon: IconFacebook, label: "Facebook", cls: "text-[#1877F2]" },
@@ -39,11 +85,14 @@ function SrcBadge({ s }: { s: OrderRow["source"] }) {
 export default function OrderDetailModal({
   order,
   history,
+  fbPageId,
   onSave,
   onClose,
 }: {
   order: OrderRow;
   history: HistoryEntry[];
+  /** ID Trang Facebook — không có thì không mở được cuộc chat, chỉ hiện tên. */
+  fbPageId?: string;
   onSave: (updated: OrderRow, changes: string[]) => void;
   onClose: () => void;
 }) {
@@ -124,6 +173,7 @@ export default function OrderDetailModal({
         <div className="flex flex-wrap items-center gap-3 rounded-t-2xl border-b border-slate-200 bg-white px-5 py-3">
           <span className="text-[17px] font-bold text-slate-800">#{d.id}</span>
           <SrcBadge s={d.source} />
+          {d.source === "facebook" && <MessengerTag order={d} pageId={fbPageId} />}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] text-slate-600">
             🏬 {d.region === "kr" ? "Kho Hàn" : "Kho VN"}
           </span>
