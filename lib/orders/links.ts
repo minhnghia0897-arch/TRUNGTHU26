@@ -117,6 +117,29 @@ export async function removeLink(token: string) {
 export const isOwnToken = (ref: string) => ref.startsWith("fb-");
 
 /**
+ * Chuẩn hoá `?ref` trước khi dùng. Trả chuỗi rỗng nếu không dùng được.
+ *
+ * BÓC DẤU `{{ }}`. Link mẫu ghi `?ref={{customer_id}}` để Botcake tự thay; làm
+ * tay thì người ta thay chữ `customer_id` bằng con số mà GIỮ LẠI cặp ngoặc.
+ * Giá trị `{{100004694974216}}` chui thẳng vào database, rồi link mở chat thành
+ * `selected_item_id=%7B%7B…%7D%7D` — Facebook không đọc được nên mở hộp thư
+ * chung. Đúng lỗi đã gặp.
+ *
+ * LOẠI BIẾN CHƯA THAY. Botcake không thay thì ref là chữ `customer_id`. Nhận
+ * bừa thì sinh ra một "khách" tên customer_id dùng chung cho mọi người — tệ hơn
+ * là không nhận. Nên ngoài token `fb-…` của mình, chỉ nhận chuỗi toàn chữ số.
+ */
+export function normalizeRef(raw?: string): string {
+  let v = (raw ?? "").trim();
+  while (v.startsWith("{")) v = v.slice(1);
+  while (v.endsWith("}")) v = v.slice(0, -1);
+  v = v.trim();
+  if (!v) return "";
+  if (isOwnToken(v)) return v;
+  return /^\d+$/.test(v) ? v : "";
+}
+
+/**
  * Tra `?ref` lúc khách đặt hàng.
  *
  * Nhận CẢ HAI đường vào, vì trang Messenger khuyên dùng link mẫu để Pancake tự
@@ -127,7 +150,8 @@ export const isOwnToken = (ref: string) => ref.startsWith("fb-");
  *
  * Trả `null` khi không khớp gì — đơn vẫn chạy bình thường.
  */
-export async function findLink(ref?: string): Promise<OrderLink | null> {
+export async function findLink(rawRef?: string): Promise<OrderLink | null> {
+  const ref = normalizeRef(rawRef);
   if (!ref || !isServiceRoleConfigured) return null;
   const sb = getServiceClient();
   const { data } = await sb
@@ -149,7 +173,8 @@ export async function findLink(ref?: string): Promise<OrderLink | null> {
  * Mã Pancake điền vào thường chính là PSID nên lưu vào cả `psid` để dựng được
  * đường dẫn mở cuộc chat; sai thì shop sửa lại ở trang Messenger.
  */
-export async function registerRefIfNew(ref: string, buyerName: string): Promise<OrderLink | null> {
+export async function registerRefIfNew(rawRef: string, buyerName: string): Promise<OrderLink | null> {
+  const ref = normalizeRef(rawRef);
   if (!ref || !isServiceRoleConfigured || isOwnToken(ref)) return null;
   const sb = getServiceClient();
   const { data, error } = await sb
@@ -173,8 +198,9 @@ export async function registerRefIfNew(ref: string, buyerName: string): Promise<
  * Lỗi ở đây KHÔNG được làm hỏng đơn — đơn đã ghi xong rồi, ném lỗi chỉ khiến
  * khách tưởng đặt thất bại và đặt lại lần nữa.
  */
-export async function markLinkUsed(token: string, orderCode: string) {
-  if (!isServiceRoleConfigured) return;
+export async function markLinkUsed(rawToken: string, orderCode: string) {
+  const token = normalizeRef(rawToken);
+  if (!token || !isServiceRoleConfigured) return;
   try {
     const sb = getServiceClient();
     await sb

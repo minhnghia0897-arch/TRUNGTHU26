@@ -1,7 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { adjustStock, type StockMove } from "@/lib/products/stock";
-import { findLink, markLinkUsed, registerRefIfNew } from "@/lib/orders/links";
+import { findLink, markLinkUsed, normalizeRef, registerRefIfNew } from "@/lib/orders/links";
 
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
@@ -289,7 +289,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     // bao giờ gắn được vào đơn, chỉ có mỗi cái thẻ "Messenger".
     // Chưa biết khách này thì ghi nhận luôn, để lần sau tra ra và để shop đặt
     // tên lại được ở trang Messenger.
-    const ref = buyer.refToken;
+    // Bóc {{ }} và loại biến chưa thay TRƯỚC KHI lưu, không thì rác chui vào
+    // database rồi link mở chat dựng từ đó là hỏng.
+    const ref = normalizeRef(buyer.refToken);
     const link =
       (await findLink(ref)) ?? (ref ? await registerRefIfNew(ref, buyer.name) : null);
 
