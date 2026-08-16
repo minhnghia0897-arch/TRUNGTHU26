@@ -334,10 +334,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     // Mã thật chỉ có SAU khi database sinh. Nội dung chuyển khoản dùng luôn mã
     // đó — DK0001 không có gạch nối nên khỏi phải cắt gọt gì.
+    //
+    // `transfer_code` cũng là cột sinh tự động (§0021) nên không ghi ở đây nữa.
+    // Bản trước UPDATE nó SAU khi insert, mà cột lúc đó còn NOT NULL không có
+    // default — insert chết trước khi tới được dòng UPDATE, và cả đường đặt hàng
+    // của khách đứng im.
     const code = (order as { code: string }).code;
     summary.code = code;
     summary.transferCode = code;
-    await sb.from("web_order").update({ transfer_code: code }).eq("id", order.id);
 
     // recipients → map uid → id
     const recipIdByUid: Record<string, string> = {};

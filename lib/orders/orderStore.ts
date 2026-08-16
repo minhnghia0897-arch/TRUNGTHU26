@@ -99,10 +99,23 @@ async function listHistory(rows: StoredOrder[]): Promise<HistoryRow[]> {
 }
 
 // ---------------------------------------------------------------- appendOrders
-/** Dữ liệu tối thiểu để dựng một kiện (đơn tạo tay ở bảng điều hành). */
+/**
+ * Dữ liệu tối thiểu để dựng một kiện (đơn tạo tay ở bảng điều hành).
+ *
+ * `orderCode`/`transferCode` bỏ ra ngoài: mã do DATABASE sinh (§0020/§0021), nên
+ * client gửi lên cũng không ai dùng — để lại trong kiểu chỉ mời người sau tưởng
+ * là mình đặt được mã.
+ */
 export type NewParcel = Omit<
   StoredOrder,
-  "id" | "rowKey" | "created" | "createdAtIso" | "updatedAtIso" | "voided"
+  | "id"
+  | "rowKey"
+  | "created"
+  | "createdAtIso"
+  | "updatedAtIso"
+  | "voided"
+  | "orderCode"
+  | "transferCode"
 >;
 
 /**
@@ -130,9 +143,12 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
   if (whErr) fail(whErr, "Không đọc được kho");
   if (!wh) throw new Error(`Vùng "${first.region}" chưa có kho đang hoạt động.`);
 
-  // Khách: gộp theo SĐT. Không có SĐT thì dựng khoá tạm để không đụng
-  // ràng buộc unique của cột phone.
-  const phone = first.phone?.trim() || `tay-${first.orderCode}`;
+  // Khách: gộp theo SĐT. Không có SĐT thì dựng khoá tạm để không đụng ràng buộc
+  // unique của cột phone. Khoá này chỉ cần KHÁC NHAU; không dùng mã đơn được vì
+  // mã do database sinh, mà khách phải có trước khi tạo đơn.
+  const phone =
+    first.phone?.trim() ||
+    `tay-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const { data: cust, error: cErr } = await sb
     .from("customer")
     .upsert(
@@ -144,10 +160,12 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
   if (cErr || !cust) fail(cErr, "Không tạo được khách");
 
   const total = parcels.reduce((s, p) => s + p.prepaid + p.cod, 0);
+  // `code` và `transfer_code` là cột SINH TỰ ĐỘNG (§0020/§0021) — ghi tay vào là
+  // Postgres từ chối cả câu INSERT. Đơn tạo tay vì thế cũng chạy chung dãy
+  // DK0001 với đơn khách đặt, đúng yêu cầu "cùng một mã số".
   const { data: order, error: oErr } = await sb
     .from("web_order")
     .insert({
-      code: first.orderCode,
       customer_id: cust!.id,
       buyer_region: first.region,
       currency: first.currency,
@@ -156,11 +174,12 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
       grand_total: total,
       payment_status: "pending",
       fulfillment_status: "draft",
-      transfer_code: first.transferCode || first.orderCode,
     })
-    .select("id")
+    .select("id, code")
     .single();
   if (oErr || !order) fail(oErr, "Không tạo được đơn");
+
+  const orderCode = (order as unknown as { code: string }).code;
 
   const rowKeys: string[] = [];
   for (const p of parcels) {
@@ -186,7 +205,7 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
         fulfillment_region: p.region,
         warehouse_id: wh!.id,
         shipping_mode: wh!.shipping_mode,
-        idempotency_key: `${p.orderCode}-ship-${p.parcelIndex}`,
+        idempotency_key: `${orderCode}-ship-${p.parcelIndex}`,
         parcel_index: p.parcelIndex,
         parcel_count: p.parcelCount,
         status: p.status,
@@ -226,21 +245,13 @@ export async function appendOrders(parcels: NewParcel[]): Promise<{ rowKeys: str
   await appendHistory(
     rowKeys.map((k) => ({
       rowKey: k,
-      orderCode: first.orderCode,
+      orderCode,
       by: "Bạn",
       changes: ["Tạo đơn mới"],
     })),
   );
 
   return { rowKeys };
-}
-
-/** Đơn đã có trong DB chưa? Dùng để chống ghi trùng khi client bấm 2 lần. */
-export async function orderCodeExists(orderCode: string): Promise<boolean> {
-  if (!isOrderStoreConfigured() || !orderCode) return false;
-  const sb = getServiceClient();
-  const { data } = await sb.from("web_order").select("id").eq("code", orderCode).maybeSingle();
-  return Boolean(data);
 }
 
 // ---------------------------------------------------------------- updateOrder

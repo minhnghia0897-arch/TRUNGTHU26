@@ -220,13 +220,13 @@ export function useOrders(): UseOrders {
         return order;
       }
 
-      const code = `TAY-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+      // Mã đơn do MÁY CHỦ cấp. Trước đây chỗ này tự chế `TAY-XXXXXX` ở trình
+      // duyệt: đơn tạo tay mang mã khác hẳn đơn khách đặt, và từ §0020 thì ghi
+      // tay vào cột sinh tự động là Postgres từ chối cả câu INSERT.
       const parcel = {
         ...payload,
-        orderCode: code,
         parcelIndex: 1,
         parcelCount: 1,
-        transferCode: code.replace(/-/g, ""),
         currency: payload.region === "vn" ? "vnd" : "krw",
         fx: 18.5,
         recipientPhone: payload.phone,
