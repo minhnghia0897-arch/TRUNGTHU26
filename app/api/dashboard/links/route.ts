@@ -32,7 +32,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   if (!isServiceRoleConfigured) return notConfigured();
 
-  let body: { customerName?: string; psid?: string; phone?: string; pageId?: string };
+  let body: {
+    customerName?: string;
+    psid?: string;
+    phone?: string;
+    pageId?: string;
+    conversationLink?: string;
+  };
   try {
     body = await req.json();
   } catch {
