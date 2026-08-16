@@ -27,6 +27,10 @@ export function messengerInboxUrl(pageId?: string, psid?: string): string | null
   const s = psid?.trim();
   if (!p || !s) return null;
 
+  // Cả hai phải là số trần. Dữ liệu cũ còn dính `{{…}}`; dựng link từ đó thì
+  // Facebook bỏ qua và mở hộp thư chung — thà không có nút còn hơn nút sai chỗ.
+  if (!/^\d+$/.test(p) || !/^\d+$/.test(s)) return null;
+
   const q = new URLSearchParams({
     asset_id: p,
     mailbox_id: p, // hộp thư của chính Trang đó

@@ -67,6 +67,15 @@ export default function MessengerLinks() {
 
   const linkFor = (token: string) => `${origin}/dat-hang?ref=${token}`;
 
+  /**
+   * Bóc `{{ }}` và mọi ký tự không phải số ngay khi gõ.
+   *
+   * Link mẫu ghi `?ref={{customer_id}}`; làm tay thì hay thay chữ customer_id
+   * bằng con số mà GIỮ LẠI cặp ngoặc. Giá trị `{{123}}` vào database rồi link
+   * mở chat hỏng — Facebook không đọc được nên mở hộp thư chung.
+   */
+  const cleanId = (v: string) => v.replace(/\D/g, "");
+
   const create = async () => {
     if (!name.trim()) return;
     if (await send({ customerName: name, psid, phone }, "POST")) {
@@ -168,7 +177,11 @@ export default function MessengerLinks() {
             <span className="text-[14px] font-semibold text-slate-800">Link mẫu — dán 1 lần cho mọi khách</span>
           </div>
           <p className="mt-1 text-[12px] text-slate-500">
-            Dán link này vào kịch bản trả lời tự động Pancake/Botcake. Hệ thống <b>tự điền mã khách</b> (<code className="rounded bg-white px-1">{"{{customer_id}}"}</code>) cho từng người → 1000 khách vẫn <b>không phải tạo tay link nào</b>.
+            Chỉ dán vào <b>kịch bản trả lời tự động</b> Pancake/Botcake — hệ thống tự thay{" "}
+            <code className="rounded bg-white px-1">{"{{customer_id}}"}</code> bằng mã từng khách,
+            1000 khách không phải tạo link nào. <b>Đừng tự thay bằng tay</b>: thay số mà giữ lại
+            cặp <code className="rounded bg-white px-1">{"{{ }}"}</code> là link mở chat hỏng.
+            Làm tay thì dùng ô "Tạo link có token" bên dưới.
           </p>
           <div className="mt-2.5 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg border border-blue-200 bg-white px-3 py-2 text-[12px] text-slate-700">{templateLink}</code>
@@ -211,8 +224,15 @@ export default function MessengerLinks() {
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="VD: Chị Lan FB" className={inp} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-slate-500">PSID (tuỳ chọn)</span>
-              <input value={psid} onChange={(e) => setPsid(e.target.value)} placeholder="tự sinh nếu để trống" className={inp} />
+              <span className="mb-1 block text-[12px] font-medium text-slate-500">
+                ID khách (<code className="rounded bg-slate-100 px-1">selected_item_id</code>)
+              </span>
+              <input
+                value={psid}
+                onChange={(e) => setPsid(cleanId(e.target.value))}
+                placeholder="dán số từ thanh địa chỉ hộp thư"
+                className={inp}
+              />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-slate-500">SĐT (tuỳ chọn)</span>
@@ -226,6 +246,11 @@ export default function MessengerLinks() {
           >
             + Tạo link có token
           </button>
+          <p className="mt-2 text-[11.5px] text-slate-400">
+            Lấy ID khách: mở cuộc chat trong hộp thư Trang, nhìn thanh địa chỉ, copy số ở{" "}
+            <code className="rounded bg-slate-100 px-1">selected_item_id</code>. Ô trên tự bỏ
+            ngoặc và ký tự thừa, chỉ giữ lại số.
+          </p>
         </section>
 
         {/* danh sách link */}
