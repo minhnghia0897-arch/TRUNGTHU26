@@ -5,7 +5,7 @@ import { RELEASED_STATUS, STATUS_COLOR, type OrderRow } from "@/lib/ordersMock";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders } from "@/components/useOrders";
-import { rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
+import { displayCode, rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn huỷ/trả/hoàn không tính vào tổng chi tiêu
@@ -16,7 +16,7 @@ const digits = (s: string) => s.replace(/\D/g, "");
  * Sheet nên đọc thẳng, gom đơn theo khách mới chính xác.
  */
 const codeOf = (r: OrderRow) =>
-  (r as StoredOrder).orderCode || r.note?.match(/TR-[\dA-Z-]+/)?.[0] || `#${r.id}`;
+  displayCode(r as StoredOrder & { id: number });
 
 type Group = {
   key: string;
@@ -144,10 +144,6 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
                                     <span className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2">
                                       {codeOf(r)}
                                     </span>
-                                    {/* đơn web có mã TR- riêng → kèm số dòng; đơn cũ chỉ có số dòng */}
-                                    {codeOf(r) !== `#${r.id}` && (
-                                      <span className="ml-1.5 text-[10.5px] text-slate-400">#{r.id}</span>
-                                    )}
                                     {r.note?.match(/Kiện \d+\/\d+/) && (
                                       <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
                                         {r.note.match(/Kiện \d+\/\d+/)![0]}

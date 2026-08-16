@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { OrderRow, Status } from "@/lib/ordersMock";
 import { STATUS_COLOR, PIPELINE } from "@/lib/ordersMock";
 import { messengerInboxUrl } from "@/lib/messenger";
+import { displayCode } from "@/lib/orders/orderSchema";
 import {
   IconFacebook,
   IconGlobe,
@@ -192,8 +193,16 @@ export default function OrderDetailModal({
       <div className="my-4 w-full max-w-5xl rounded-2xl bg-slate-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {/* header */}
         <div className="flex flex-wrap items-center gap-3 rounded-t-2xl border-b border-slate-200 bg-white px-5 py-3">
-          <span className="text-[17px] font-bold text-slate-800">#{d.id}</span>
+          <span className="text-[17px] font-bold text-slate-800">{displayCode(d)}</span>
           <SrcBadge s={d.source} />
+          {d.customerCode && (
+            <span
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-[11.5px] text-slate-500"
+              title="Mã khách hàng"
+            >
+              {d.customerCode}
+            </span>
+          )}
           {d.source === "facebook" && <MessengerTag order={d} pageId={fbPageId} />}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] text-slate-600">
             🏬 {d.region === "kr" ? "Kho Hàn" : "Kho VN"}
@@ -216,7 +225,7 @@ export default function OrderDetailModal({
               <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
                 <div className="grid h-14 w-14 flex-none place-items-center rounded-lg bg-cream-soft text-2xl text-gold/50">❋</div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-emerald-600">{d.vc || `TR-${d.id}`}</div>
+                  <div className="text-[11px] font-medium text-emerald-600">{d.vc || displayCode(d)}</div>
                   <div className="truncate text-[14px] font-medium text-slate-800">{d.product ?? "Set bánh Trung Thu (6 vị)"}</div>
                   <div className="mt-0.5 text-[12px] text-slate-400">Thuế 0% · KM {money(0)}</div>
                 </div>

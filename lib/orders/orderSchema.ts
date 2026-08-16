@@ -56,6 +56,25 @@ export const fxOfRow = (r: OrderRow): number => (r as StoredOrder).fx || 18.5;
 export const rowKrw = (v: number, r: OrderRow): number =>
   currencyOfRow(r) === "krw" ? v : v / fxOfRow(r);
 
+/**
+ * Mã hiển thị của MỘT KIỆN.
+ *
+ * Một đơn gửi nhiều người thì có nhiều kiện; hiện trần mã đơn là hai dòng trùng
+ * hệt nhau, không phân biệt được kiện nào. Thêm đuôi số kiện khi đơn có từ 2
+ * kiện trở lên.
+ *
+ * Đơn cũ chưa có mã (chế độ xem thử) thì lùi về `#id` như trước.
+ */
+export const displayCode = (r: {
+  orderCode?: string;
+  parcelIndex?: number;
+  parcelCount?: number;
+  id: number;
+}): string => {
+  if (!r.orderCode) return `#${r.id}`;
+  return (r.parcelCount ?? 1) > 1 ? `${r.orderCode}-${r.parcelIndex ?? 1}` : r.orderCode;
+};
+
 /** ISO → chuỗi hiển thị DD/MM/YYYY HH:mm mà bảng đơn đang dùng. */
 export function displayTime(iso: string): string {
   if (!iso) return "";
@@ -118,7 +137,14 @@ export interface ShipmentRow {
     fx_rate_snapshot: Cell;
     created_at: Cell;
     ref_token: Cell;
-    customer: { name: Cell; phone: Cell; messenger_name: Cell; psid: Cell; conversation_link: Cell } | null;
+    customer: {
+      name: Cell;
+      phone: Cell;
+      messenger_name: Cell;
+      psid: Cell;
+      conversation_link: Cell;
+      customer_no: Cell;
+    } | null;
   } | null;
   recipient: {
     name: Cell;
@@ -159,6 +185,11 @@ export function rowToOrder(s: ShipmentRow): StoredOrder {
     messengerName: str(wo?.customer?.messenger_name) || undefined,
     psid: str(wo?.customer?.psid) || undefined,
     conversationLink: str(wo?.customer?.conversation_link) || undefined,
+    // Mã khách KH0001 (§0019). Dãy riêng với mã đơn: một khách mua nhiều lần
+    // vẫn là một người, gộp hai dãy thì khách thứ hai trở đi mang mã của đơn.
+    customerCode: num(wo?.customer?.customer_no)
+      ? `KH${String(num(wo?.customer?.customer_no)).padStart(4, "0")}`
+      : undefined,
     // Nguyên văn ?ref — luôn có nếu đơn đến từ link, kể cả khi chưa biết tên khách.
     refToken: str(wo?.ref_token) || undefined,
     recipient: str(rc?.name),
@@ -203,6 +234,6 @@ export const SHIPMENT_SELECT = `
   phi_vc_thu_khach, tags, note, source, assignee, product_summary, consume,
   stock_applied, voided, parcel_index, parcel_count, updated_at,
   web_order ( code, transfer_code, currency, fx_rate_snapshot, created_at, ref_token,
-              customer ( name, phone, messenger_name, psid, conversation_link ) ),
+              customer ( name, phone, messenger_name, psid, conversation_link, customer_no ) ),
   recipient ( name, phone, address, desired_date )
 `;
