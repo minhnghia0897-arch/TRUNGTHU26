@@ -1,7 +1,7 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { getBoxes, getCombos, getFlavors, getWarehouses, getFxRate } from "@/lib/catalog";
 import { adjustStock, type StockMove } from "@/lib/products/stock";
-import { findLink, markLinkUsed } from "@/lib/orders/links";
+import { findLink, markLinkUsed, registerRefIfNew } from "@/lib/orders/links";
 
 import { normalizePhone } from "@/lib/phone";
 import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
@@ -287,7 +287,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     // Bản cũ tra trong localStorage của TRÌNH DUYỆT KHÁCH — nơi không bao giờ
     // có link vì link được tạo trên máy của shop. Nên tên khách Facebook chưa
     // bao giờ gắn được vào đơn, chỉ có mỗi cái thẻ "Messenger".
-    const link = await findLink(buyer.refToken);
+    // Chưa biết khách này thì ghi nhận luôn, để lần sau tra ra và để shop đặt
+    // tên lại được ở trang Messenger.
+    const ref = buyer.refToken;
+    const link =
+      (await findLink(ref)) ?? (ref ? await registerRefIfNew(ref, buyer.name) : null);
 
     // upsert customer theo phone chuẩn hoá
     const { data: cust, error: cErr } = await sb
@@ -297,9 +301,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           name: buyer.name,
           phone: buyerPhone,
           region,
-          // Giữ tên khách tự nhập làm chính; tên Messenger đi kèm để tra lại.
-          messenger_name: link?.customerName ?? null,
-          psid: link?.psid ?? null,
+          // Chỉ ghi đè khi LẦN NÀY tra ra danh tính. Để `null` vào đây thì đơn
+          // sau đặt không qua link sẽ xoá mất tên Messenger đã biết từ trước.
+          ...(link ? { messenger_name: link.customerName, psid: link.psid || null } : {}),
         },
         { onConflict: "phone" },
       )
@@ -315,6 +319,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         buyer_region: region,
         currency,
         fx_rate_snapshot: fx,
+        ref_token: ref ?? null,
         subtotal,
         shipping_total: shippingTotal,
         handling_total: handlingTotal,

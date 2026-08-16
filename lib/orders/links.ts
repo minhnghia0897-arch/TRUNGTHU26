@@ -111,14 +111,60 @@ export async function removeLink(token: string) {
 }
 
 /**
- * Tra token lúc khách đặt hàng. Trả `null` nếu token không có thật — đơn vẫn
- * chạy bình thường, chỉ là không gắn được khách.
+ * Token do shop tạo tay có dạng `fb-…`. Mọi giá trị khác là mã khách do
+ * Pancake/Botcake điền vào link mẫu `?ref={{customer_id}}`.
  */
-export async function findLink(token?: string): Promise<OrderLink | null> {
-  if (!token || !isServiceRoleConfigured) return null;
+export const isOwnToken = (ref: string) => ref.startsWith("fb-");
+
+/**
+ * Tra `?ref` lúc khách đặt hàng.
+ *
+ * Nhận CẢ HAI đường vào, vì trang Messenger khuyên dùng link mẫu để Pancake tự
+ * điền mã — bản đầu chỉ tra theo token do shop tạo tay nên đơn đặt qua link mẫu
+ * mất sạch dấu vết:
+ *   1. token `fb-…` do shop tạo
+ *   2. mã khách Pancake, hoặc PSID
+ *
+ * Trả `null` khi không khớp gì — đơn vẫn chạy bình thường.
+ */
+export async function findLink(ref?: string): Promise<OrderLink | null> {
+  if (!ref || !isServiceRoleConfigured) return null;
   const sb = getServiceClient();
-  const { data } = await sb.from("order_links").select(COLS).eq("token", token).maybeSingle();
+  const { data } = await sb
+    .from("order_links")
+    .select(COLS)
+    .or(`token.eq.${ref},psid.eq.${ref},pancake_customer_id.eq.${ref}`)
+    .limit(1)
+    .maybeSingle();
   return data ? toLink(data as unknown as LinkRow) : null;
+}
+
+/**
+ * Ghi nhận một khách CHƯA TỪNG BIẾT đến từ link mẫu.
+ *
+ * Với link mẫu thì shop không tạo link trước, nên lần đầu khách đặt là lần đầu
+ * mình thấy mã của họ. Tạo sẵn một dòng để khách hiện ra ở trang Messenger và
+ * shop đặt tên lại được — không thì mã đó trôi đi, lần sau vẫn không biết ai.
+ *
+ * Mã Pancake điền vào thường chính là PSID nên lưu vào cả `psid` để dựng được
+ * đường dẫn mở cuộc chat; sai thì shop sửa lại ở trang Messenger.
+ */
+export async function registerRefIfNew(ref: string, buyerName: string): Promise<OrderLink | null> {
+  if (!ref || !isServiceRoleConfigured || isOwnToken(ref)) return null;
+  const sb = getServiceClient();
+  const { data, error } = await sb
+    .from("order_links")
+    .insert({
+      token: ref,
+      customer_name: buyerName.trim() || "Khách Messenger",
+      psid: ref,
+      pancake_customer_id: ref,
+      used: true,
+    })
+    .select(COLS)
+    .single();
+  if (error) return null; // trùng khoá = đã có, không sao
+  return toLink(data as unknown as LinkRow);
 }
 
 /**

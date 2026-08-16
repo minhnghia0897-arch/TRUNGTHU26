@@ -32,10 +32,13 @@ const nat = (v: number, region: "vn" | "kr") =>
  * thư của đúng Trang đó.
  */
 function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
-  const url = messengerInboxUrl(pageId, order.psid);
+  // Chưa tra ra danh tính thì vẫn còn nguyên văn ?ref — với link mẫu Pancake,
+  // chính mã đó là PSID nên mở được cuộc chat.
+  const psid = order.psid || order.refToken;
+  const url = messengerInboxUrl(pageId, psid);
   const name = order.messengerName;
 
-  if (!name && !order.psid)
+  if (!name && !psid)
     return (
       <span
         className="text-[11.5px] text-slate-400"
@@ -54,7 +57,7 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
         className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[12px] font-medium text-blue-700 hover:bg-blue-100"
         title="Mở cuộc chat trong hộp thư Trang"
       >
-        {name ?? "Khách Messenger"} ↗
+        {name ?? `Khách ${psid}`} ↗
       </a>
     );
 
@@ -63,7 +66,7 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
       className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-600"
       title="Vào trang Link Messenger điền ID Trang Facebook để bấm mở được cuộc chat."
     >
-      {name ?? "Khách Messenger"}
+      {name ?? `Khách ${psid}`}
     </span>
   );
 }
