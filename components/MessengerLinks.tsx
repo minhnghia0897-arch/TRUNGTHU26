@@ -78,6 +78,14 @@ export default function MessengerLinks() {
 
   const create = async () => {
     if (!name.trim()) return;
+    // ID Trang và ID khách nằm cạnh nhau trong cùng đường dẫn hộp thư nên rất
+    // dễ copy nhầm — mà nhầm thì link mở chat không bao giờ đúng ai.
+    if (psid && psid === pageId) {
+      setError(
+        "Số vừa dán là ID Trang, không phải ID khách. Mở cuộc chat của khách trong hộp thư rồi copy selected_item_id.",
+      );
+      return;
+    }
     if (await send({ customerName: name, psid, phone }, "POST")) {
       setName("");
       setPsid("");
@@ -248,8 +256,10 @@ export default function MessengerLinks() {
           </button>
           <p className="mt-2 text-[11.5px] text-slate-400">
             Lấy ID khách: mở cuộc chat trong hộp thư Trang, nhìn thanh địa chỉ, copy số ở{" "}
-            <code className="rounded bg-slate-100 px-1">selected_item_id</code>. Ô trên tự bỏ
-            ngoặc và ký tự thừa, chỉ giữ lại số.
+            <code className="rounded bg-slate-100 px-1">selected_item_id</code> — <b>không phải</b>{" "}
+            <code className="rounded bg-slate-100 px-1">asset_id</code> hay{" "}
+            <code className="rounded bg-slate-100 px-1">mailbox_id</code> (hai số đó là ID Trang).
+            Ô trên tự bỏ ngoặc và ký tự thừa, chỉ giữ lại số.
           </p>
         </section>
 

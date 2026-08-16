@@ -35,8 +35,13 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
   // Chưa tra ra danh tính thì vẫn còn nguyên văn ?ref — với link mẫu Pancake,
   // chính mã đó là PSID nên mở được cuộc chat.
   const psid = order.psid || order.refToken;
-  const url = messengerInboxUrl(pageId, psid);
   const name = order.messengerName;
+
+  // Dán nhầm ID TRANG vào ô ID khách là lỗi hay gặp — hai số nằm cạnh nhau
+  // trong cùng một đường dẫn hộp thư. Số đó không mở được chat của ai, nên nói
+  // thẳng thay vì dựng một nút bấm vào rồi lạc.
+  const nhamPage = Boolean(pageId && psid && pageId === psid);
+  const url = nhamPage ? null : messengerInboxUrl(pageId, psid);
 
   if (!name && !psid)
     return (
@@ -45,6 +50,16 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
         title="Đơn không đến từ link truy vết nên không biết khách Messenger nào."
       >
         chưa gắn khách Messenger
+      </span>
+    );
+
+  if (nhamPage)
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[12px] font-medium text-amber-700"
+        title="Số đang lưu là ID Trang, không phải ID khách. Mở cuộc chat của khách trong hộp thư rồi copy selected_item_id — đó mới là ID khách."
+      >
+        {name ?? "Khách"} · đang lưu nhầm ID Trang
       </span>
     );
 

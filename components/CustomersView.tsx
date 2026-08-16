@@ -27,7 +27,7 @@ type Group = {
   spentKrw: number;
 };
 
-export default function CustomersView() {
+export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
   // Cùng nguồn với trang Đơn hàng. Trước đây trang này chỉ ghi vào bản "đã sửa"
   // mà không ghi lại kho đơn, nên sửa ở đây xong hai trang hiển thị lệch nhau.
   const store = useOrders();
@@ -209,6 +209,7 @@ export default function CustomersView() {
           <OrderDetailModal
             order={order}
             history={history[order.id] ?? []}
+            fbPageId={fbPageId}
             onSave={saveOrder}
             onClose={() => setDetailId(null)}
           />
