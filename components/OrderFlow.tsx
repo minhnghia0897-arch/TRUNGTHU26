@@ -57,6 +57,11 @@ function midAutumnMinusWeek(): string {
   return isoLocal(d);
 }
 
+// Chú thích dưới ô tên, dùng chung cho cả ba bố cục form. Ô tên là TÊN FACEBOOK
+// chứ không phải tên trên giấy tờ: shop bán qua Messenger nên nick mới là thứ
+// nhận ra khách. Tên trên nhãn gửi hàng thì sửa lại trong bảng điều hành.
+const NAME_HINT = "Để shop nhận ra bạn trong tin nhắn. SĐT dùng để tra cứu đơn về sau.";
+
 // Kênh chat của brand — khách gửi đơn sang đây nếu không đặt tiếp trên web.
 const FANPAGE_MESSENGER = "https://m.me/doranking88";
 const ZALO_LINK = "https://zalo.me/0982576263";
@@ -96,13 +101,13 @@ export default function OrderFlow({
   const [copied, setCopied] = useState(false);
   const [buyerRegion, setBuyerRegion] = useState<Region>(initial?.region === "vn" ? "vn" : "kr");
   const [ref, setRef] = useState<string>(initial?.ref ?? ""); // token định danh từ Messenger
+  // MỘT cái tên duy nhất cho cả luồng, và nó là TÊN FACEBOOK.
+  //
+  // Bản trước có thêm ô "Họ tên" riêng để bưu kiện mang tên thật. Anh chủ chọn
+  // gộp: shop bán qua Messenger nên nick mới là cái nhận ra khách, còn tên trên
+  // nhãn gửi hàng thì sửa lại trong dashboard trước khi đi giao.
   const [buyerName, setBuyerName] = useState("");
   const [buyerPhone, setBuyerPhone] = useState("");
-  // Tên Facebook của người đặt. TÁCH RIÊNG khỏi tên người nhận: shop cần biết
-  // nick nào đặt, còn bưu kiện phải mang tên thật — in "okkkk" lên nhãn thì
-  // shipper không giao được. Không bắt buộc; khách đặt qua link Messenger thì
-  // máy chủ đã tự tra ra tên nên bỏ trống cũng không mất dấu.
-  const [fbName, setFbName] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string>(boxes[0]?.id);
@@ -245,7 +250,6 @@ export default function OrderFlow({
         if (s.buyerRegion) setBuyerRegion(s.buyerRegion);
         if (typeof s.buyerName === "string") setBuyerName(s.buyerName);
         if (typeof s.buyerPhone === "string") setBuyerPhone(s.buyerPhone);
-        if (typeof s.fbName === "string") setFbName(s.fbName);
         if (Array.isArray(s.recipients)) setRecipients(s.recipients);
         if (!initial?.ref && typeof s.ref === "string") setRef(s.ref); // giữ token qua F5
         const maxU = [...(s.cart ?? []), ...(s.recipients ?? [])].reduce(
@@ -278,7 +282,6 @@ export default function OrderFlow({
         if (rb.region === "vn" || rb.region === "kr") setBuyerRegion(rb.region);
         if (typeof rb.name === "string" && rb.name) setBuyerName((v) => v || rb.name);
         if (typeof rb.phone === "string" && rb.phone) setBuyerPhone((v) => v || rb.phone);
-        if (typeof rb.fbName === "string" && rb.fbName) setFbName((v) => v || rb.fbName);
       }
     } catch {
       /* ignore */
@@ -297,12 +300,12 @@ export default function OrderFlow({
     try {
       localStorage.setItem(
         CART_KEY,
-        JSON.stringify({ cart, buyerRegion, buyerName, buyerPhone, fbName, recipients, ref }),
+        JSON.stringify({ cart, buyerRegion, buyerName, buyerPhone, recipients, ref }),
       );
     } catch {
       /* ignore */
     }
-  }, [cart, buyerRegion, buyerName, buyerPhone, fbName, recipients, ref]);
+  }, [cart, buyerRegion, buyerName, buyerPhone, recipients, ref]);
 
   // EXPRESS (1 địa chỉ): luôn có đúng 1 người nhận & gán mọi món cho người đó.
   // Khi bật "nhiều người nhận" (multi) thì không tự gán nữa — khách tự chia quà.
@@ -485,7 +488,10 @@ export default function OrderFlow({
             name: buyerName,
             phone: buyerPhone,
             region: buyerRegion,
-            fbName: fbName.trim() || undefined,
+            // Cùng một cái tên, gửi vào cả hai chỗ: `fbName` là đường duy nhất
+            // đổ nick vào customer.messenger_name — cột mà popup đơn và trang
+            // Khách hàng đọc để hiện danh tính Facebook.
+            fbName: buyerName.trim() || undefined,
             refToken: ref || undefined,
           },
           recipients: recipients.map((r) => ({
@@ -535,7 +541,6 @@ export default function OrderFlow({
         localStorage.setItem("tr_buyer", JSON.stringify({
           name: buyerName.trim(),
           phone: buyerPhone.trim(),
-          fbName: fbName.trim(),
           address: recipients[0]?.address ?? "",
           region: buyerRegion,
         }));
@@ -556,7 +561,7 @@ export default function OrderFlow({
   // Đặt nhanh: bấm "Đặt hàng" → kiểm tra thông tin rồi sang màn XEM BILL & XÁC NHẬN
   function expressReview() {
     if (!cart.length) return alert("Chưa có món nào.");
-    if (!buyerName.trim()) return alert(multi ? "Nhập tên người đặt." : "Nhập tên người nhận.");
+    if (!buyerName.trim()) return alert("Nhập tên Facebook.");
     if (!buyerPhone.trim()) return alert("SĐT là bắt buộc.");
     if (multi) {
       if (cart.some((it) => it.recipientUids.length === 0)) return alert("Còn món chưa gán người nhận.");
@@ -598,7 +603,6 @@ export default function OrderFlow({
     return (
       `🌕 ĐƠN ĐẶT BÁNH — TRĂNG RẰM\n` +
       `👤 Người đặt: ${buyerName || "—"} · 📞 ${buyerPhone || "—"}\n` +
-      (fbName.trim() ? `💬 Facebook: ${fbName.trim()}\n` : "") +
       `💳 Thanh toán: ${buyerRegion === "vn" ? "đ VND" : "₩ KRW"}\n\n` +
       `${blocks}\n\n` +
       `────────────\n` +
@@ -648,7 +652,7 @@ export default function OrderFlow({
       return setStep(2);
     }
     if (step === 2) {
-      if (!buyerName.trim()) return alert("Nhập tên người đặt.");
+      if (!buyerName.trim()) return alert("Nhập tên Facebook.");
       if (!buyerPhone.trim()) return alert("SĐT người đặt là bắt buộc.");
       if (cart.some((it) => it.recipientUids.length === 0))
         return alert("Còn món chưa gán người nhận.");
@@ -907,13 +911,10 @@ export default function OrderFlow({
                   <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
                 </select>
                 <div className="grid grid-cols-2 gap-2.5">
-                  <div><Label>Tên người nhận</Label><Input value={exName} onChange={setExName} placeholder="Nguyễn Văn A" /></div>
+                  <div><Label>Tên Facebook</Label><Input value={exName} onChange={setExName} placeholder="Nick đang nhắn với shop" /></div>
                   <div><Label>SĐT · bắt buộc</Label><Input value={exPhone} onChange={setExPhone} placeholder="010-xxxx-xxxx" /></div>
                 </div>
-                {/* Ở form 1 địa chỉ, ô trên vừa là người đặt vừa là người nhận —
-                    tên đó in lên bưu kiện nên phải là tên thật. Nick Facebook
-                    tách ra ô riêng để shop vẫn biết ai đặt. */}
-                <FbNameField value={fbName} onChange={setFbName} />
+                <p className="mt-1.5 text-[11px] opacity-65">{NAME_HINT}</p>
                 <Label>Địa chỉ nhận</Label>
                 <Input value={exAddress} onChange={(v) => r0 && setR(r0.uid, "address", v)} placeholder="Số nhà, đường, quận, thành phố" />
                 <Label>Ngày muốn nhận</Label>
@@ -954,10 +955,10 @@ export default function OrderFlow({
                     <option value="vn">🇻🇳 Ở Việt Nam → thanh toán đ VND</option>
                   </select>
                   <div className="grid grid-cols-2 gap-2.5">
-                    <div><Label>Họ tên</Label><Input value={buyerName} onChange={setBuyerName} placeholder="Nguyễn Văn A" /></div>
+                    <div><Label>Tên Facebook</Label><Input value={buyerName} onChange={setBuyerName} placeholder="Nick đang nhắn với shop" /></div>
                     <div><Label>SĐT · bắt buộc</Label><Input value={buyerPhone} onChange={setBuyerPhone} placeholder="010-xxxx-xxxx" /></div>
                   </div>
-                  <FbNameField value={fbName} onChange={setFbName} />
+                  <p className="mt-1.5 text-[11px] opacity-65">{NAME_HINT}</p>
                 </div>
 
                 {/* người nhận & chia quà */}
@@ -1027,16 +1028,15 @@ export default function OrderFlow({
               </select>
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <Label>Họ tên</Label>
-                  <Input value={buyerName} onChange={setBuyerName} placeholder="Nguyễn Văn A" />
+                  <Label>Tên Facebook</Label>
+                  <Input value={buyerName} onChange={setBuyerName} placeholder="Nick đang nhắn với shop" />
                 </div>
                 <div>
                   <Label>SĐT · bắt buộc</Label>
                   <Input value={buyerPhone} onChange={setBuyerPhone} placeholder="010-xxxx-xxxx" />
                 </div>
               </div>
-              <FbNameField value={fbName} onChange={setFbName} />
-              <p className="mt-1.5 text-[11px] opacity-65">SĐT dùng để tra cứu đơn về sau.</p>
+              <p className="mt-1.5 text-[11px] opacity-65">{NAME_HINT}</p>
             </div>
 
             {/* người nhận & chia quà — ngay dưới, cùng một màn */}
@@ -1401,29 +1401,6 @@ function Input({
     />
   );
 }
-/**
- * Ô "Tên Facebook" của người đặt.
- *
- * Shop bán chủ yếu qua Messenger nên cần biết nick nào đặt đơn. Không gộp vào ô
- * họ tên: ở form 1 địa chỉ, tên đó chính là tên in lên bưu kiện — để nick vào
- * đấy là shipper cầm gói hàng ghi "okkkk" đi giao.
- *
- * Không bắt buộc. Khách bấm từ link Messenger thì máy chủ đã tra ra tên rồi
- * (lib/orders/links.ts), ô này chỉ để bắt nốt những người vào thẳng website.
- */
-function FbNameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <>
-      <Label>
-        Tên Facebook{" "}
-        <span className="font-normal normal-case tracking-normal opacity-55">(không bắt buộc)</span>
-      </Label>
-      <Input value={value} onChange={onChange} placeholder="Nick đang nhắn với shop" />
-      <p className="mt-1.5 text-[11px] opacity-65">Để shop nhận ra bạn là ai trong tin nhắn.</p>
-    </>
-  );
-}
-
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between border-b border-dashed border-line py-2 text-[13px]">
