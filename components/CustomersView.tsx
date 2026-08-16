@@ -144,10 +144,6 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
                                     <span className="font-medium text-blue-600 underline decoration-blue-200 underline-offset-2">
                                       {codeOf(r)}
                                     </span>
-                                    {/* đơn web có mã TR- riêng → kèm số dòng; đơn cũ chỉ có số dòng */}
-                                    {codeOf(r) !== `#${r.id}` && (
-                                      <span className="ml-1.5 text-[10.5px] text-slate-400">#{r.id}</span>
-                                    )}
                                     {r.note?.match(/Kiện \d+\/\d+/) && (
                                       <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
                                         {r.note.match(/Kiện \d+\/\d+/)![0]}
