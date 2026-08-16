@@ -5,7 +5,7 @@ import { RELEASED_STATUS, STATUS_COLOR, type OrderRow } from "@/lib/ordersMock";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders } from "@/components/useOrders";
-import { rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
+import { displayCode, rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn huỷ/trả/hoàn không tính vào tổng chi tiêu
@@ -16,7 +16,7 @@ const digits = (s: string) => s.replace(/\D/g, "");
  * Sheet nên đọc thẳng, gom đơn theo khách mới chính xác.
  */
 const codeOf = (r: OrderRow) =>
-  (r as StoredOrder).orderCode || r.note?.match(/TR-[\dA-Z-]+/)?.[0] || `#${r.id}`;
+  displayCode(r as StoredOrder & { id: number });
 
 type Group = {
   key: string;

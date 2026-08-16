@@ -30,7 +30,7 @@ import ExportButton from "@/components/ExportButton";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders, stamp } from "@/components/useOrders";
 import { ordersToSheets, exportFileName } from "@/lib/ordersExport";
-import { rowKrw } from "@/lib/orders/orderSchema";
+import { displayCode, rowKrw } from "@/lib/orders/orderSchema";
 import type { Box, Combo, Flavor } from "@/lib/types";
 
 const FX = 18.5;
@@ -106,7 +106,7 @@ export default function OrdersTable({
       const okW = warehouse === "all" || r.region === warehouse;
       const okQ =
         !query ||
-        [r.id, r.vc, r.customer, r.recipient, r.phone, r.address, r.note, ...r.tags]
+        [displayCode(r), r.vc, r.customer, r.recipient, r.phone, r.address, r.note, ...r.tags]
           .join(" ")
           .toLowerCase()
           .includes(query);
@@ -385,7 +385,7 @@ export default function OrdersTable({
                     onClick={() => setDetailId(r.id)}
                     className="inline-flex items-center gap-1.5 font-semibold text-blue-600 hover:underline"
                   >
-                    <SourceIcon s={r.source} /> {r.id}
+                    <SourceIcon s={r.source} /> {displayCode(r)}
                   </button>
                 </Td>
                 <Td className="whitespace-nowrap text-slate-500">{r.vc || "—"}</Td>

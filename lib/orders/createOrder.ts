@@ -93,29 +93,10 @@ export interface CreateOrderResult {
   };
 }
 
-// Bỏ các ký tự khách dễ chép nhầm khi ghi nội dung chuyển khoản: B/8, I/1, O/0, S/5, Z/2
-const CODE_CHARS = "ACDEFGHJKLMNPQRTUVWXY34679";
-const randChars = (n: number) => {
-  let s = "";
-  for (let i = 0; i < n; i += 1) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return s;
-};
-
 /**
- * Mã đơn dạng TR-260814-KQF7.
- * Bản cũ `"TR-" + rand(9000)` trùng nhau tới 50% chỉ sau ~112 đơn — mà mã này là
- * mã tra cứu của khách, trùng mã là đơn của hai khách nhập vào nhau. Có phần
- * ngày nên đơn khác ngày không bao giờ đụng; phần đuôi cho 26^4 ≈ 457.000 khả
- * năng mỗi ngày.
+ * Mã kiện dùng chống ghi trùng. Dựng từ mã đơn do DATABASE sinh (§0020) nên tự
+ * đúng theo; ứng dụng không còn tự chế mã nữa.
  */
-const genCode = () => {
-  const d = new Date();
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `TR-${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${randChars(4)}`;
-};
-
-/** Nội dung CK = mã đơn bỏ gạch nối → nhìn sao kê ngân hàng là ra đúng đơn. */
-const genTransfer = (code: string) => code.replace(/-/g, "");
 const genIdem = (code: string, i: number) => `${code}-ship-${i}`;
 
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
@@ -257,13 +238,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     .filter((x): x is OrderParcel => x !== null);
 
   const grandTotal = subtotal + shippingTotal + handlingTotal;
-  const code = genCode();
-  const transferCode = genTransfer(code);
   const currency = currencyOf(region);
 
+  // Mã đơn do DATABASE sinh (cột `code` sinh từ order_no, §0019/0020) — ứng dụng
+  // tự chế mã thì hai đơn cùng lúc có thể trùng, và mã dễ lệch khỏi số thứ tự.
+  // Chế độ xem thử chưa có database nên dùng mã tạm, chỉ để nhìn giao diện.
   const summary = {
-    code,
-    transferCode,
+    code: "DK----",
+    transferCode: "DK----",
     currency,
     subtotal,
     shippingTotal,
@@ -322,7 +304,6 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const { data: order, error: oErr } = await sb
       .from("web_order")
       .insert({
-        code,
         customer_id: cust.id,
         buyer_region: region,
         currency,
@@ -334,11 +315,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         grand_total: grandTotal,
         payment_status: "pending",
         fulfillment_status: "pending_payment",
-        transfer_code: transferCode,
       })
-      .select("id")
+      .select("id, code")
       .single();
     if (oErr || !order) throw oErr ?? new Error("Không tạo được đơn.");
+
+    // Mã thật chỉ có SAU khi database sinh. Nội dung chuyển khoản dùng luôn mã
+    // đó — DK0001 không có gạch nối nên khỏi phải cắt gọt gì.
+    const code = (order as { code: string }).code;
+    summary.code = code;
+    summary.transferCode = code;
+    await sb.from("web_order").update({ transfer_code: code }).eq("id", order.id);
 
     // recipients → map uid → id
     const recipIdByUid: Record<string, string> = {};

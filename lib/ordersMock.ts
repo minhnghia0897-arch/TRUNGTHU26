@@ -64,6 +64,8 @@ export interface OrderRow {
   psid?: string;
   /** Link mở thẳng cuộc chat (Pancake). Ưu tiên hơn link tự dựng. */
   conversationLink?: string;
+  /** Mã khách dạng KH0001. */
+  customerCode?: string;
   /** Nguyên văn ?ref của link khách bấm vào. */
   refToken?: string;
   cuoc_vc: number;
