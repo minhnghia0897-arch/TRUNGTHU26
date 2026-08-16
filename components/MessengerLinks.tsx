@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { OrderLink } from "@/lib/orders/links";
+import { parseCustomerId, parsePageId } from "@/lib/messenger";
 
 // Link nằm trong DATABASE, không phải localStorage. Bản cũ lưu ở trình duyệt
 // máy shop nên khách bấm link từ máy họ là mất dấu — tính năng không chạy.
@@ -74,7 +75,7 @@ export default function MessengerLinks() {
    * bằng con số mà GIỮ LẠI cặp ngoặc. Giá trị `{{123}}` vào database rồi link
    * mở chat hỏng — Facebook không đọc được nên mở hộp thư chung.
    */
-  const cleanId = (v: string) => v.replace(/\D/g, "");
+  const cleanId = parseCustomerId;
 
   const create = async () => {
     if (!name.trim()) return;
@@ -138,8 +139,8 @@ export default function MessengerLinks() {
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="mb-1 text-[14px] font-semibold text-slate-800">ID Trang Facebook</h2>
           <p className="mb-2 text-[12.5px] text-slate-500">
-            PSID của khách chỉ có nghĩa trong hộp thư của <b>đúng Trang này</b>. Điền vào đây thì ở
-            màn hình đơn hàng mới bấm được sang đúng cuộc chat của người đặt. Lấy ID ở{" "}
+            <b>Dán cả đường dẫn hộp thư vào đây cũng được</b> — ô này tự moi ID Trang ra. Có ID
+            Trang thì màn hình đơn hàng mới bấm được sang đúng cuộc chat. Hoặc lấy ID ở{" "}
             <a
               href="https://business.facebook.com/settings/pages"
               target="_blank"
@@ -238,7 +239,7 @@ export default function MessengerLinks() {
               <input
                 value={psid}
                 onChange={(e) => setPsid(cleanId(e.target.value))}
-                placeholder="dán số từ thanh địa chỉ hộp thư"
+                placeholder="dán cả đường dẫn cuộc chat, hoặc chỉ số"
                 className={inp}
               />
             </label>
@@ -255,11 +256,9 @@ export default function MessengerLinks() {
             + Tạo link có token
           </button>
           <p className="mt-2 text-[11.5px] text-slate-400">
-            Lấy ID khách: mở cuộc chat trong hộp thư Trang, nhìn thanh địa chỉ, copy số ở{" "}
-            <code className="rounded bg-slate-100 px-1">selected_item_id</code> — <b>không phải</b>{" "}
-            <code className="rounded bg-slate-100 px-1">asset_id</code> hay{" "}
-            <code className="rounded bg-slate-100 px-1">mailbox_id</code> (hai số đó là ID Trang).
-            Ô trên tự bỏ ngoặc và ký tự thừa, chỉ giữ lại số.
+            Cách nhanh nhất: mở cuộc chat của khách trong hộp thư Trang, <b>copy cả thanh địa chỉ
+            dán vào ô trên</b> — ô tự lấy đúng <code className="rounded bg-slate-100 px-1">selected_item_id</code>{" "}
+            và bỏ qua hai số ID Trang nằm cạnh. Dán số trần cũng được.
           </p>
         </section>
 
