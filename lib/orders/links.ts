@@ -14,6 +14,8 @@ export interface OrderLink {
   token: string;
   customerName: string;
   psid: string;
+  /** Link mở thẳng cuộc chat (Pancake). Ưu tiên hơn link tự dựng. */
+  conversationLink?: string;
   phone?: string;
   pancakeCustomerId?: string;
   createdAt: string;
@@ -26,6 +28,7 @@ interface LinkRow {
   psid: string | null;
   phone: string | null;
   pancake_customer_id: string | null;
+  conversation_link: string | null;
   created_at: string;
   used_by_order: string | null;
 }
@@ -34,13 +37,15 @@ const toLink = (r: LinkRow): OrderLink => ({
   token: r.token,
   customerName: r.customer_name ?? "Khách Messenger",
   psid: r.psid ?? "",
+  conversationLink: r.conversation_link ?? undefined,
   phone: r.phone ?? undefined,
   pancakeCustomerId: r.pancake_customer_id ?? undefined,
   createdAt: r.created_at,
   usedByOrder: r.used_by_order ?? undefined,
 });
 
-const COLS = "token, customer_name, psid, phone, pancake_customer_id, created_at, used_by_order";
+const COLS =
+  "token, customer_name, psid, phone, pancake_customer_id, conversation_link, created_at, used_by_order";
 
 // ---------------------------------------------------------- Page Facebook
 /**
@@ -91,6 +96,7 @@ export async function addLink(input: {
   customerName: string;
   psid?: string;
   phone?: string;
+  conversationLink?: string;
 }): Promise<OrderLink> {
   if (!isServiceRoleConfigured) throw new Error("Chưa nối cơ sở dữ liệu.");
   const sb = getServiceClient();
@@ -98,6 +104,7 @@ export async function addLink(input: {
     token: genToken(),
     customer_name: input.customerName.trim() || "Khách Messenger",
     psid: input.psid?.trim() || null,
+    conversation_link: input.conversationLink?.trim() || null,
     phone: input.phone?.trim() || null,
     used: false,
   };
@@ -130,8 +137,15 @@ export const isOwnToken = (ref: string) => ref.startsWith("fb-");
  *
  * LOẠI BIẾN CHƯA THAY. Botcake không thay thì ref là chữ `customer_id`. Nhận
  * bừa thì sinh ra một "khách" tên customer_id dùng chung cho mọi người — tệ hơn
- * là không nhận. Nên ngoài token `fb-…` của mình, chỉ nhận chuỗi toàn chữ số.
+ * là không nhận.
+ *
+ * NHẬN CẢ UUID. `customer_id` của Pancake là UUID chứ không phải số
+ * (`96a8e283-3fba-492e-a35a-970f72a30a02`). Bản đầu chỉ nhận chữ số — vì lúc đó
+ * shop gõ tay số vào — nên khi Botcake thay biến thật thì ref bị vứt đi và
+ * đường tự động hỏng y như cũ, chỉ khác nguyên nhân.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function normalizeRef(raw?: string): string {
   let v = (raw ?? "").trim();
   while (v.startsWith("{")) v = v.slice(1);
@@ -139,7 +153,7 @@ export function normalizeRef(raw?: string): string {
   v = v.trim();
   if (!v) return "";
   if (isOwnToken(v)) return v;
-  return /^\d+$/.test(v) ? v : "";
+  return /^\d+$/.test(v) || UUID.test(v) ? v : "";
 }
 
 /**

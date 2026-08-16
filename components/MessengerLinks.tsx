@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { OrderLink } from "@/lib/orders/links";
-import { parseCustomerId, parsePageId } from "@/lib/messenger";
+import { parseConversationLink, parseCustomerId, parsePageId } from "@/lib/messenger";
 
 // Link nằm trong DATABASE, không phải localStorage. Bản cũ lưu ở trình duyệt
 // máy shop nên khách bấm link từ máy họ là mất dấu — tính năng không chạy.
@@ -13,7 +13,7 @@ export default function MessengerLinks() {
   const [links, setLinks] = useState<OrderLink[]>([]);
   const [origin, setOrigin] = useState("");
   const [name, setName] = useState("");
-  const [psid, setPsid] = useState("");
+  const [psid, setPsid] = useState(""); // ID khách HOẶC link hội thoại
   const [phone, setPhone] = useState("");
   const [bulk, setBulk] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
@@ -75,13 +75,19 @@ export default function MessengerLinks() {
    * bằng con số mà GIỮ LẠI cặp ngoặc. Giá trị `{{123}}` vào database rồi link
    * mở chat hỏng — Facebook không đọc được nên mở hộp thư chung.
    */
-  const cleanId = parseCustomerId;
+  /**
+   * Ô này nhận BẤT KỲ thứ gì copy được: link hội thoại Pancake, đường dẫn hộp
+   * thư Business Suite, số trần, hay UUID. Bắt người ta tự chọn đúng loại là
+   * chỗ đã hỏng bốn lượt liên tiếp.
+   */
+  const cleanId = (v: string) => (parseConversationLink(v) ? v.trim() : parseCustomerId(v));
+  const convLink = parseConversationLink(psid);
 
   const create = async () => {
     if (!name.trim()) return;
     // ID Trang và ID khách nằm cạnh nhau trong cùng đường dẫn hộp thư nên rất
     // dễ copy nhầm — mà nhầm thì link mở chat không bao giờ đúng ai.
-    if (psid && psid === pageId) {
+    if (!convLink && psid && psid === pageId) {
       setError(
         "Số vừa dán là ID Trang, không phải ID khách. Mở cuộc chat của khách trong hộp thư rồi copy selected_item_id.",
       );
@@ -239,7 +245,7 @@ export default function MessengerLinks() {
               <input
                 value={psid}
                 onChange={(e) => setPsid(cleanId(e.target.value))}
-                placeholder="dán cả đường dẫn cuộc chat, hoặc chỉ số"
+                placeholder="dán link hội thoại Pancake, đường dẫn hộp thư, hoặc mã khách"
                 className={inp}
               />
             </label>
@@ -256,9 +262,10 @@ export default function MessengerLinks() {
             + Tạo link có token
           </button>
           <p className="mt-2 text-[11.5px] text-slate-400">
-            Cách nhanh nhất: mở cuộc chat của khách trong hộp thư Trang, <b>copy cả thanh địa chỉ
-            dán vào ô trên</b> — ô tự lấy đúng <code className="rounded bg-slate-100 px-1">selected_item_id</code>{" "}
-            và bỏ qua hai số ID Trang nằm cạnh. Dán số trần cũng được.
+            Ô trên nhận mọi thứ anh copy được: <b>link hội thoại Pancake</b> (tốt nhất — dùng
+            thẳng, khỏi cần ID Trang), đường dẫn hộp thư Business Suite (tự lấy đúng{" "}
+            <code className="rounded bg-slate-100 px-1">selected_item_id</code>, bỏ qua hai số ID
+            Trang nằm cạnh), hoặc mã khách dạng số / UUID.
           </p>
         </section>
 

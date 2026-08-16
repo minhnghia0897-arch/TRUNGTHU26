@@ -23,6 +23,18 @@ function fromUrl(input: string, keys: string[]): string {
   return "";
 }
 
+/**
+ * Link hội thoại Pancake, nếu người dùng dán thẳng nó vào.
+ *
+ * Pancake trả sẵn `conversation_link` cho từng khách. Dùng thẳng thì khỏi phải
+ * tự chế link từ Page ID + PSID — chính chỗ tự chế đó đã hỏng bốn lượt liên
+ * tiếp vì bắt người ta copy tay đúng một con số giữa ba số na ná nhau.
+ */
+export function parseConversationLink(input: string): string {
+  const v = (input ?? "").trim();
+  return /^https?:\/\/(www\.)?pancake\.vn\//i.test(v) ? v : "";
+}
+
 /** Ô "ID Trang": nhận cả URL hộp thư lẫn số trần. */
 export function parsePageId(input: string): string {
   const v = (input ?? "").trim();
@@ -41,6 +53,8 @@ export function parseCustomerId(input: string): string {
   const v = (input ?? "").trim();
   if (!v) return "";
   if (/^https?:\/\//i.test(v) || v.includes("=")) return fromUrl(v, ["selected_item_id"]);
+  // UUID để nguyên — mã khách Pancake là UUID, bóc hết chữ là mất sạch.
+  if (/^[0-9a-f-]{20,}$/i.test(v)) return v;
   return v.replace(/\D/g, "");
 }
 

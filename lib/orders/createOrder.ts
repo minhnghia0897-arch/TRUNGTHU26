@@ -305,7 +305,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           region,
           // Chỉ ghi đè khi LẦN NÀY tra ra danh tính. Để `null` vào đây thì đơn
           // sau đặt không qua link sẽ xoá mất tên Messenger đã biết từ trước.
-          ...(link ? { messenger_name: link.customerName, psid: link.psid || null } : {}),
+          ...(link
+            ? {
+                messenger_name: link.customerName,
+                psid: link.psid || null,
+                conversation_link: link.conversationLink || null,
+              }
+            : {}),
         },
         { onConflict: "phone" },
       )

@@ -41,9 +41,12 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
   // trong cùng một đường dẫn hộp thư. Số đó không mở được chat của ai, nên nói
   // thẳng thay vì dựng một nút bấm vào rồi lạc.
   const nhamPage = Boolean(pageId && psid && pageId === psid);
-  const url = nhamPage ? null : messengerInboxUrl(pageId, psid);
 
-  if (!name && !psid)
+  // Link Pancake đứng trước: đó là link CHÍNH CHỦ trả về, còn link Business
+  // Suite là mình tự chế từ hai mã rời — chỗ tự chế đã hỏng bốn lượt liên tiếp.
+  const url = order.conversationLink || (nhamPage ? null : messengerInboxUrl(pageId, psid));
+
+  if (!name && !psid && !order.conversationLink)
     return (
       <span
         className="text-[11.5px] text-slate-400"
@@ -53,7 +56,7 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
       </span>
     );
 
-  if (nhamPage)
+  if (nhamPage && !order.conversationLink)
     return (
       <span
         className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[12px] font-medium text-amber-700"
