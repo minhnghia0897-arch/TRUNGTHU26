@@ -22,6 +22,8 @@ type Group = {
   key: string;
   name: string;
   phone: string;
+  /** Nick Facebook — để biết người này là ai trong hộp thư, không chỉ tên trên bưu kiện. */
+  fbName?: string;
   rows: OrderRow[];
   orders: string[];
   spentKrw: number;
@@ -52,6 +54,8 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
       const g =
         m.get(key) ?? { key, name: r.customer, phone: r.phone, rows: [], orders: [], spentKrw: 0 };
       g.rows.push(r);
+      // Đơn nào biết nick thì lấy — đơn cũ đặt trước khi có ô này không có.
+      if (!g.fbName && r.messengerName) g.fbName = r.messengerName;
       const code = codeOf(r);
       if (!g.orders.includes(code)) g.orders.push(code);
       // Tiền khách đã THỰC TRẢ: COD chỉ tính khi đơn đã đánh dấu "Đã thu tiền",
@@ -64,7 +68,12 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
     const list = [...m.values()];
     const kw = q.trim().toLowerCase();
     const filtered = kw
-      ? list.filter((c) => c.name.toLowerCase().includes(kw) || digits(c.phone).includes(digits(kw)))
+      ? list.filter(
+          (c) =>
+            c.name.toLowerCase().includes(kw) ||
+            (c.fbName ?? "").toLowerCase().includes(kw) ||
+            digits(c.phone).includes(digits(kw)),
+        )
       : list;
     return filtered.sort((a, b) => b.spentKrw - a.spentKrw);
   }, [rows, q]);
@@ -77,7 +86,7 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Tìm tên hoặc SĐT…"
+          placeholder="Tìm tên, nick Facebook hoặc SĐT…"
           className="ml-auto w-56 rounded-lg border border-slate-200 px-3 py-1.5 text-[13px]"
         />
       </header>
@@ -106,7 +115,14 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
                     onClick={() => setOpen(isOpen ? null : c.key)}
                     className={`cursor-pointer ${isOpen ? "bg-blue-50/60" : "hover:bg-slate-50"}`}
                   >
-                    <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      {c.name}
+                      {c.fbName && c.fbName !== c.name && (
+                        <span className="ml-1.5 text-[11.5px] font-normal text-blue-600" title="Tên Facebook">
+                          · {c.fbName}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium text-blue-600">{c.phone}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{c.orders.length}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{c.rows.length}</td>

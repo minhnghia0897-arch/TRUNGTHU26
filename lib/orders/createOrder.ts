@@ -29,7 +29,14 @@ function linesToConsume(lines: { kind: string; comboId?: string; boxId?: string;
 // ============================================================================
 
 export interface CreateOrderInput {
-  buyer: { name: string; phone: string; region: Region; refToken?: string };
+  buyer: {
+    name: string;
+    phone: string;
+    region: Region;
+    /** Tên Facebook khách tự khai. Không bắt buộc; link Messenger được ưu tiên hơn. */
+    fbName?: string;
+    refToken?: string;
+  };
   recipients: {
     uid: string;
     name: string;
@@ -277,6 +284,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const link =
       (await findLink(ref)) ?? (ref ? await registerRefIfNew(ref, buyer.name) : null);
 
+    // Tên Facebook: link truy vết ĐỨNG TRƯỚC tên khách tự gõ. Tên từ link là do
+    // Pancake/shop gắn với đúng cuộc chat; khách gõ tay thì hay sai chính tả hoặc
+    // ghi biệt danh khác, đè lên là mất mối nối đã chắc chắn.
+    const messengerName = link?.customerName || buyer.fbName?.trim() || "";
+
     // upsert customer theo phone chuẩn hoá
     const { data: cust, error: cErr } = await sb
       .from("customer")
@@ -285,11 +297,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           name: buyer.name,
           phone: buyerPhone,
           region,
-          // Chỉ ghi đè khi LẦN NÀY tra ra danh tính. Để `null` vào đây thì đơn
-          // sau đặt không qua link sẽ xoá mất tên Messenger đã biết từ trước.
+          // Chỉ ghi đè khi LẦN NÀY biết được. Để `null` vào đây thì đơn sau đặt
+          // không qua link sẽ xoá mất tên Messenger đã biết từ trước.
+          ...(messengerName ? { messenger_name: messengerName } : {}),
           ...(link
             ? {
-                messenger_name: link.customerName,
                 psid: link.psid || null,
                 conversation_link: link.conversationLink || null,
               }

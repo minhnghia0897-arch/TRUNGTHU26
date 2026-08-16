@@ -83,7 +83,11 @@ function MessengerTag({ order, pageId }: { order: OrderRow; pageId?: string }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-600"
-      title="Vào trang Link Messenger điền ID Trang Facebook để bấm mở được cuộc chat."
+      title={
+        psid
+          ? "Vào trang Link Messenger điền ID Trang Facebook để bấm mở được cuộc chat."
+          : "Tên Facebook khách tự khai lúc đặt. Chưa có mã khách nên chưa mở thẳng cuộc chat được."
+      }
     >
       {name ?? `Khách ${psid}`}
     </span>
@@ -203,7 +207,11 @@ export default function OrderDetailModal({
               {d.customerCode}
             </span>
           )}
-          {d.source === "facebook" && <MessengerTag order={d} pageId={fbPageId} />}
+          {/* Khách vào thẳng website vẫn khai được tên Facebook ở form đặt hàng,
+              nên không chỉ đơn nguồn Facebook mới có tên để hiện. */}
+          {(d.source === "facebook" || d.messengerName) && (
+            <MessengerTag order={d} pageId={fbPageId} />
+          )}
           <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[12px] text-slate-600">
             🏬 {d.region === "kr" ? "Kho Hàn" : "Kho VN"}
           </span>
