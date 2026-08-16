@@ -62,6 +62,8 @@ export interface OrderRow {
   /** Tên khách trên Messenger + PSID — để mở đúng cuộc chat từ đơn. */
   messengerName?: string;
   psid?: string;
+  /** Nguyên văn ?ref của link khách bấm vào. */
+  refToken?: string;
   cuoc_vc: number;
   phi_vc_thu_khach: number;
   status: Status;
