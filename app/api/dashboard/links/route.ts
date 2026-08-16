@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { addLink, listLinks, removeLink } from "@/lib/orders/links";
+import { addLink, getFacebookPageId, listLinks, removeLink, setFacebookPageId } from "@/lib/orders/links";
 import { isServiceRoleConfigured } from "@/lib/supabase/server";
 
 // Link truy vết khách Messenger. Middleware đã chặn ai chưa đăng nhập
@@ -22,7 +22,8 @@ const failed = (e: unknown, fallback: string) =>
 export async function GET() {
   if (!isServiceRoleConfigured) return NextResponse.json({ ok: true, links: [] });
   try {
-    return NextResponse.json({ ok: true, links: await listLinks() });
+    const [links, pageId] = await Promise.all([listLinks(), getFacebookPageId()]);
+    return NextResponse.json({ ok: true, links, pageId });
   } catch (e) {
     return failed(e, "Không đọc được link.");
   }
@@ -31,12 +32,22 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   if (!isServiceRoleConfigured) return notConfigured();
 
-  let body: { customerName?: string; psid?: string; phone?: string };
+  let body: { customerName?: string; psid?: string; phone?: string; pageId?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: "Dữ liệu không hợp lệ." }, { status: 400 });
   }
+  // Cùng route cho tiện: gửi mỗi pageId thì là lưu cấu hình Trang.
+  if (body.pageId !== undefined && !body.customerName) {
+    try {
+      await setFacebookPageId(body.pageId);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return failed(e, "Không lưu được Page ID.");
+    }
+  }
+
   if (!body.customerName?.trim())
     return NextResponse.json({ ok: false, error: "Thiếu tên khách." }, { status: 400 });
 

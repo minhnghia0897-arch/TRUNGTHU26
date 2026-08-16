@@ -62,10 +62,12 @@ export default function OrdersTable({
   boxes,
   flavors,
   combos,
+  fbPageId,
 }: {
   boxes: Box[];
   flavors: Flavor[];
   combos: Combo[];
+  fbPageId?: string;
 }) {
   // Nguồn đơn dùng chung với trang Khách hàng / Thu chi. Đã nối cơ sở dữ liệu thì
   // mọi thao tác đi thẳng vào database; chưa nối thì chạy đơn mẫu để xem thử.
@@ -535,6 +537,7 @@ export default function OrdersTable({
           <OrderDetailModal
             order={order}
             history={history[detailId] ?? []}
+            fbPageId={fbPageId}
             onSave={saveOrder}
             onClose={() => setDetailId(null)}
           />

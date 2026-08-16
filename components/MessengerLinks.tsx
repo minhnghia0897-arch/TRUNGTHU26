@@ -17,15 +17,23 @@ export default function MessengerLinks() {
   const [bulk, setBulk] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
 
+  const [pageId, setPageId] = useState("");
+  const [pageSaved, setPageSaved] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
     try {
       const res = await fetch(API);
-      const data = (await res.json()) as { ok: boolean; links?: OrderLink[]; error?: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        links?: OrderLink[];
+        pageId?: string;
+        error?: string;
+      };
       if (!data.ok) throw new Error(data.error ?? "Không đọc được link.");
       setLinks(data.links ?? []);
+      setPageId(data.pageId ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không đọc được link.");
     }
@@ -90,6 +98,10 @@ export default function MessengerLinks() {
 
   const del = (token: string) => void send({ token }, "DELETE");
 
+  const savePageId = async () => {
+    if (await send({ pageId }, "POST")) setPageSaved(true);
+  };
+
   const inp = "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
   const banner = error ? (
     <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">{error}</div>
@@ -104,6 +116,45 @@ export default function MessengerLinks() {
 
       <div className="mx-auto max-w-[900px] space-y-5 p-5">
         {banner}
+
+        {/* ID Trang — không có thì từ đơn không bấm sang cuộc chat được */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-[14px] font-semibold text-slate-800">ID Trang Facebook</h2>
+          <p className="mb-2 text-[12.5px] text-slate-500">
+            PSID của khách chỉ có nghĩa trong hộp thư của <b>đúng Trang này</b>. Điền vào đây thì ở
+            màn hình đơn hàng mới bấm được sang đúng cuộc chat của người đặt. Lấy ID ở{" "}
+            <a
+              href="https://business.facebook.com/settings/pages"
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              Meta Business Suite → Trang
+            </a>
+            .
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={pageId}
+              onChange={(e) => {
+                setPageId(e.target.value);
+                setPageSaved(false);
+              }}
+              placeholder="VD: 1234567890"
+              className={`${inp} max-w-xs`}
+            />
+            <button
+              onClick={() => void savePageId()}
+              disabled={busy}
+              className="rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              Lưu
+            </button>
+            {pageSaved && (
+              <span className="self-center text-[12.5px] font-medium text-emerald-600">Đã lưu</span>
+            )}
+          </div>
+        </section>
         <p className="text-[13px] text-slate-500">
           Tạo link đặt hàng gắn <b>token</b> cho một khách trong Messenger → gửi khách → khi khách
           đặt, máy chủ tra token và gắn đúng khách vào đơn. Link lưu trong cơ sở dữ liệu nên mở ở

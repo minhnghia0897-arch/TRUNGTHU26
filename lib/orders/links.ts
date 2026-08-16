@@ -41,6 +41,33 @@ const toLink = (r: LinkRow): OrderLink => ({
 
 const COLS = "token, customer_name, psid, phone, pancake_customer_id, created_at, used_by_order";
 
+// ---------------------------------------------------------- Page Facebook
+/**
+ * ID Trang Facebook, lưu trong app_config.
+ *
+ * PSID (Page-Scoped ID) chỉ có nghĩa TRONG hộp thư của đúng Trang đó — không
+ * có Page ID thì không dựng được đường dẫn mở cuộc chat, chỉ biết tên khách.
+ */
+export async function getFacebookPageId(): Promise<string> {
+  if (!isServiceRoleConfigured) return "";
+  const sb = getServiceClient();
+  const { data } = await sb
+    .from("app_config")
+    .select("value")
+    .eq("key", "facebook_page")
+    .maybeSingle();
+  return String((data?.value as { page_id?: string } | undefined)?.page_id ?? "");
+}
+
+export async function setFacebookPageId(pageId: string) {
+  if (!isServiceRoleConfigured) throw new Error("Chưa nối cơ sở dữ liệu.");
+  const sb = getServiceClient();
+  const { error } = await sb
+    .from("app_config")
+    .upsert({ key: "facebook_page", value: { page_id: pageId.trim() } }, { onConflict: "key" });
+  if (error) throw new Error(`Không lưu được Page ID: ${error.message}`);
+}
+
 /** Token dạng fb-<mã> để nhìn là biết nguồn. */
 export const genToken = () =>
   `fb-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

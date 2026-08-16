@@ -117,7 +117,7 @@ export interface ShipmentRow {
     currency: Cell;
     fx_rate_snapshot: Cell;
     created_at: Cell;
-    customer: { name: Cell; phone: Cell } | null;
+    customer: { name: Cell; phone: Cell; messenger_name: Cell; psid: Cell } | null;
   } | null;
   recipient: {
     name: Cell;
@@ -153,6 +153,10 @@ export function rowToOrder(s: ShipmentRow): StoredOrder {
     fx: num(wo?.fx_rate_snapshot) || 18.5,
     customer: str(wo?.customer?.name),
     phone: str(wo?.customer?.phone),
+    // Danh tính Messenger, lấy từ link truy vết lúc đặt (§0015/0016). Không có
+    // thì đơn Facebook chỉ hiện mỗi cái thẻ, không biết ai đặt.
+    messengerName: str(wo?.customer?.messenger_name) || undefined,
+    psid: str(wo?.customer?.psid) || undefined,
     recipient: str(rc?.name),
     recipientPhone: str(rc?.phone),
     address: str(rc?.address),
@@ -195,6 +199,6 @@ export const SHIPMENT_SELECT = `
   phi_vc_thu_khach, tags, note, source, assignee, product_summary, consume,
   stock_applied, voided, parcel_index, parcel_count, updated_at,
   web_order ( code, transfer_code, currency, fx_rate_snapshot, created_at,
-              customer ( name, phone ) ),
+              customer ( name, phone, messenger_name, psid ) ),
   recipient ( name, phone, address, desired_date )
 `;
