@@ -9,6 +9,42 @@
 // ============================================================================
 
 /**
+ * Moi một tham số ra khỏi đường dẫn hộp thư đã dán vào.
+ *
+ * Ai cũng có sẵn đường dẫn đó trên thanh địa chỉ, nên bắt người ta tự tìm đúng
+ * con số giữa ba số na ná nhau là bắt họ làm việc của máy — và đã dẫn tới đủ
+ * kiểu dán nhầm: dán cả URL, dán ID Trang vào ô ID khách, dán kèm `{{ }}`.
+ */
+function fromUrl(input: string, keys: string[]): string {
+  for (const k of keys) {
+    const m = input.match(new RegExp(`[?&]${k}=(\\d+)`));
+    if (m) return m[1];
+  }
+  return "";
+}
+
+/** Ô "ID Trang": nhận cả URL hộp thư lẫn số trần. */
+export function parsePageId(input: string): string {
+  const v = (input ?? "").trim();
+  if (!v) return "";
+  return fromUrl(v, ["asset_id", "mailbox_id"]) || v.replace(/\D/g, "");
+}
+
+/**
+ * Ô "ID khách": nhận cả URL hộp thư lẫn số trần.
+ *
+ * Chỉ lấy `selected_item_id`. Nếu dán URL mà không có tham số đó thì trả rỗng
+ * chứ KHÔNG vơ đại số khác trong URL — vơ nhầm `asset_id` là lưu ID Trang vào
+ * chỗ khách, đúng lỗi đã gặp.
+ */
+export function parseCustomerId(input: string): string {
+  const v = (input ?? "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v) || v.includes("=")) return fromUrl(v, ["selected_item_id"]);
+  return v.replace(/\D/g, "");
+}
+
+/**
  * Mở đúng cuộc chat trong hộp thư Trang (Meta Business Suite).
  *
  * PHẢI ĐỦ CẢ BỐN THAM SỐ. Bản đầu chỉ gửi `asset_id` + `selected_item_id` nên

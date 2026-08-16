@@ -1,4 +1,5 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
+import { parsePageId } from "@/lib/messenger";
 
 // ============================================================================
 // Link truy vết khách Messenger — CHỈ CHẠY Ở SERVER.
@@ -64,7 +65,9 @@ export async function setFacebookPageId(pageId: string) {
   const sb = getServiceClient();
   const { error } = await sb
     .from("app_config")
-    .upsert({ key: "facebook_page", value: { page_id: pageId.trim() } }, { onConflict: "key" });
+    // Moi số ra kể cả khi nhận cả đường dẫn — giao diện đã lọc nhưng đây là
+    // nơi cuối cùng trước khi vào database, lọt là hỏng link của mọi đơn.
+    .upsert({ key: "facebook_page", value: { page_id: parsePageId(pageId) } }, { onConflict: "key" });
   if (error) throw new Error(`Không lưu được Page ID: ${error.message}`);
 }
 
