@@ -44,6 +44,8 @@ export interface ProductPatch {
   stock?: number;
   stockKey?: string;
   allowNegative?: boolean;
+  /** Món này có thu phí ship riêng không (§0022). */
+  chargeShip?: boolean;
   active?: boolean;
   removed?: boolean;
   flavorIds?: string[];
@@ -69,6 +71,7 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   set("stock", p.stock);
   set("stock_key", p.stockKey);
   set("allow_negative", p.allowNegative);
+  set("charge_ship", p.chargeShip);
   set("active", p.active);
   set("removed", p.removed);
   if (p.images !== undefined) c.images = p.images.slice(0, MAX_PRODUCT_IMAGES);
@@ -171,7 +174,7 @@ export async function createProduct(
  */
 const SHARED_COLS = [
   "name", "description", "images", "code", "category", "cost", "discount", "note",
-  "supply_link", "variants", "stock_key", "allow_negative", "removed", "badge",
+  "supply_link", "variants", "stock_key", "allow_negative", "charge_ship", "removed", "badge",
   "stock", "active", "price_vn", "price_kr",
 ] as const;
 

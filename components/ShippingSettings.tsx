@@ -16,6 +16,8 @@ const money = (v: number, cur: string) =>
 const inp =
   "w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[13px] text-slate-800 outline-none focus:border-blue-400";
 
+type Draft = { ship: number; handling: number; freeFromQty: number; freeFromAmount: number };
+
 export default function ShippingSettings({
   warehouses,
   connected,
@@ -24,28 +26,27 @@ export default function ShippingSettings({
   connected: boolean;
 }) {
   const router = useRouter();
-  const [draft, setDraft] = useState<Record<string, { ship: number; handling: number; freeFromQty: number }>>({});
+  const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
 
-  const valueOf = (w: Warehouse) =>
-    draft[w.region] ?? {
-      ship: w.fee_table.ship ?? 0,
-      handling: w.fee_table.handling ?? 0,
-      freeFromQty: w.fee_table.free_from_qty ?? 0,
-    };
+  const savedOf = (w: Warehouse): Draft => ({
+    ship: w.fee_table.ship ?? 0,
+    handling: w.fee_table.handling ?? 0,
+    freeFromQty: w.fee_table.free_from_qty ?? 0,
+    freeFromAmount: w.fee_table.free_from_amount ?? 0,
+  });
+
+  const valueOf = (w: Warehouse): Draft => draft[w.region] ?? savedOf(w);
 
   const dirty = (w: Warehouse) => {
     const v = valueOf(w);
-    return (
-      v.ship !== (w.fee_table.ship ?? 0) ||
-      v.handling !== (w.fee_table.handling ?? 0) ||
-      v.freeFromQty !== (w.fee_table.free_from_qty ?? 0)
-    );
+    const s = savedOf(w);
+    return (Object.keys(s) as (keyof Draft)[]).some((k) => v[k] !== s[k]);
   };
 
-  const set = (region: string, k: "ship" | "handling" | "freeFromQty", n: number, w: Warehouse) =>
+  const set = (region: string, k: keyof Draft, n: number, w: Warehouse) =>
     setDraft((d) => ({ ...d, [region]: { ...valueOf(w), [k]: Math.max(0, n || 0) } }));
 
   const save = async (w: Warehouse) => {
@@ -77,11 +78,20 @@ export default function ShippingSettings({
   return (
     <section className="px-5 pb-2 pt-4">
       <div className="rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <h2 className="text-[14px] font-semibold text-slate-800">Phí vận chuyển</h2>
-          <span className="text-[12px] text-slate-400">
-            Tính theo từng kiện — gửi 3 người là 3 kiện, mỗi kiện một lần phí.
-          </span>
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[14px] font-semibold text-slate-800">Phí vận chuyển</h2>
+            <span className="text-[12px] text-slate-400">
+              Tính theo từng kiện — gửi 3 người là 3 kiện, mỗi kiện một lần phí.
+            </span>
+          </div>
+          {/* Mức phí nằm ở đây, nhưng CÓ THU HAY KHÔNG lại do từng món quyết định. */}
+          <p className="mt-1 text-[12px] text-slate-500">
+            Đây chỉ là <b className="font-medium text-slate-700">mức</b> phí. Kiện có bị thu hay
+            không là do từng món: chỉ kiện nào chứa món đã tích{" "}
+            <b className="font-medium text-slate-700">&ldquo;Thu phí ship riêng&rdquo;</b> trong
+            Thiết lập sản phẩm mới bị thu. Món không tích thì miễn ship.
+          </p>
         </div>
 
         {error && (
@@ -110,7 +120,7 @@ export default function ShippingSettings({
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <label className="block">
                     <span className="mb-1 block text-[11.5px] font-medium text-slate-500">Phí ship / kiện</span>
                     <input
@@ -141,20 +151,47 @@ export default function ShippingSettings({
                       placeholder="0 = không miễn"
                     />
                   </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11.5px] font-medium text-slate-500">
+                      Miễn ship từ … tiền hàng
+                    </span>
+                    <input
+                      type="number"
+                      value={v.freeFromAmount}
+                      onChange={(e) => set(w.region, "freeFromAmount", Number(e.target.value), w)}
+                      className={inp}
+                      placeholder="0 = không miễn"
+                    />
+                  </label>
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <p className="text-[12px] text-slate-500">
-                    {v.freeFromQty > 0 ? (
+                    {v.ship + v.handling === 0 ? (
+                      <>Kho này không thu đồng phí nào — mọi kiện đều miễn phí ship.</>
+                    ) : v.freeFromQty > 0 || v.freeFromAmount > 0 ? (
                       <>
-                        Kiện có <b>từ {v.freeFromQty} phần</b> trở lên: miễn phí ship
+                        Kiện có{" "}
+                        {v.freeFromQty > 0 && <b>từ {v.freeFromQty} phần</b>}
+                        {v.freeFromQty > 0 && v.freeFromAmount > 0 && " hoặc "}
+                        {v.freeFromAmount > 0 && (
+                          <b>tiền hàng từ {money(v.freeFromAmount, cur)}</b>
+                        )}{" "}
+                        trở lên: miễn phí ship
                         {v.handling > 0 && <> (vẫn thu phí xử lý {money(v.handling, cur)})</>}. Dưới đó thu{" "}
                         {money(v.ship + v.handling, cur)}.
+                        {v.freeFromAmount > 0 && (
+                          <>
+                            {" "}
+                            Tiền hàng tính riêng từng kiện, chưa gồm phí ship, và khách trả bằng tiền
+                            vùng khác thì quy đổi theo tỉ giá đã chốt của đơn.
+                          </>
+                        )}
                       </>
                     ) : (
                       <>
-                        Mọi kiện đều thu {money(v.ship + v.handling, cur)}. Điền số vào ô miễn ship để mở
-                        khuyến mãi.
+                        Mọi kiện đều thu {money(v.ship + v.handling, cur)}. Điền số vào một trong hai ô
+                        miễn ship để mở khuyến mãi.
                       </>
                     )}
                   </p>

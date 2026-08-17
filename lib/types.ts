@@ -38,6 +38,8 @@ export interface Box {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /** Có thu phí ship riêng không — xem `Combo.charge_ship`. */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }
@@ -68,6 +70,8 @@ export interface Flavor {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /** Có thu phí ship riêng không — xem `Combo.charge_ship`. */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }
@@ -117,6 +121,15 @@ export interface Combo {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /**
+   * Món này có thu phí ship riêng không (§0022). Thiếu/false = giá đã gồm ship.
+   *
+   * Phí ship là thuộc tính của SẢN PHẨM, không phải của kho: shop miễn ship gần
+   * hết danh mục, chỉ vài món thu riêng. Kiện nào chứa ít nhất một món `true`
+   * thì thu phí của kho ĐÚNG MỘT LẦN — một kiện đi một lần, không nhân theo số
+   * món. Kiện toàn món `false` thì không thu.
+   */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }
@@ -129,12 +142,26 @@ export interface Warehouse {
   /**
    * Phí của kho, tính bằng `local_currency`.
    *
-   * `free_from_qty`: mua từ bao nhiêu phần trở lên thì MIỄN PHÍ SHIP. Tính
-   * THEO TỪNG KIỆN vì phí ship cũng tính theo kiện — gửi 3 người là 3 kiện,
-   * kiện nào đủ số thì kiện đó được miễn. 0 hoặc bỏ trống = không miễn.
-   * Phí xử lý (`handling`) vẫn thu như thường.
+   * Hai ngưỡng miễn phí ship, ĐỘC LẬP nhau — đạt một trong hai là được miễn:
+   * - `free_from_qty`: mua từ bao nhiêu PHẦN trở lên.
+   * - `free_from_amount`: tiền hàng từ bao nhiêu trở lên, tính bằng
+   *   `local_currency` của kho (kho VN gõ đồng, kho Hàn gõ won). Đơn của khách
+   *   có thể ở tiền tệ khác nên lúc so phải quy đổi qua fx đã chốt của đơn.
+   *
+   * Cả hai đều tính THEO TỪNG KIỆN vì phí ship cũng tính theo kiện — gửi 3
+   * người là 3 kiện, kiện nào đủ thì kiện đó được miễn. 0 hoặc bỏ trống = không
+   * miễn. Phí xử lý (`handling`) vẫn thu như thường.
+   *
+   * "Tiền hàng" ở đây là tiền HÀNG của kiện, chưa gồm ship và phí xử lý — nếu
+   * tính cả phí thì đơn sát ngưỡng sẽ tự nhảy qua ngưỡng nhờ chính khoản phí
+   * sắp được miễn, một vòng luẩn quẩn.
    */
-  fee_table: { ship?: number; handling?: number; free_from_qty?: number };
+  fee_table: {
+    ship?: number;
+    handling?: number;
+    free_from_qty?: number;
+    free_from_amount?: number;
+  };
   local_currency: Currency;
   active: boolean;
 }

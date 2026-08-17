@@ -185,26 +185,61 @@ export interface ShipFee {
   shipping: number;
   handling: number;
 }
+/** Những gì một KIỆN mang theo, đủ để tính phí ship của kiện đó. */
+export interface ParcelFacts {
+  /** Số phần trong kiện — cơ sở xét ngưỡng miễn ship theo số lượng. */
+  qty?: number;
+  /** Tiền HÀNG của kiện, tiền tệ người đặt, chưa gồm ship/phí xử lý. */
+  amount?: number;
+  /**
+   * Kiện có món nào thu phí ship riêng không (§0022).
+   *
+   * Mặc định `true` để chỗ gọi thiếu thông tin vẫn thu phí như trước — quên
+   * truyền mà hoá ra miễn ship cho cả đơn là kiểu mất tiền không ai thấy.
+   */
+  chargeShip?: boolean;
+}
+
 /**
  * Phí ship + xử lý của MỘT KIỆN, quy về tiền tệ người đặt (§6).
  *
- * `parcelQty` là số phần trong kiện đó — dùng để xét ngưỡng miễn phí ship của
- * kho. Không truyền thì coi như chưa đủ ngưỡng (thu phí như thường), nên chỗ
- * gọi cũ vẫn chạy đúng.
+ * Ba cửa ải, qua hết mới thu được phí ship:
+ * 1. Kho phải tính ship riêng (`shipping_mode`), không thì giá đã gồm ship.
+ * 2. Kiện phải chứa ít nhất một món có `charge_ship` (§0022). Shop miễn ship
+ *    gần hết danh mục nên đây mới là cửa lọc chính, không phải cấu hình kho.
+ * 3. Kiện chưa chạm ngưỡng miễn phí của kho — theo số phần HOẶC theo tiền hàng,
+ *    đạt một trong hai là miễn.
+ *
+ * Ngưỡng tiền lưu bằng tiền tệ của KHO còn `amount` ở tiền tệ NGƯỜI ĐẶT, nên
+ * phải quy ngưỡng sang tiền người đặt rồi mới so. So thẳng số với số là kiểu lỗi
+ * im lặng tệ nhất: kho Hàn để ngưỡng 50.000₩, khách VN mua 60.000đ (~3.200₩)
+ * cũng lọt qua và mọi đơn VN đều được miễn ship.
+ *
+ * Phí xử lý (`handling`) đi theo kho chứ không theo món, và không bao giờ được
+ * miễn theo ngưỡng — đó là tiền công đóng gói, kiện nào cũng phải đóng.
  */
 export function shipFeeForRegion(
   recipientRegion: Region,
   buyer: Region,
   warehouses: Warehouse[],
   fxKrwVnd: number,
-  parcelQty = 0,
+  parcel: ParcelFacts = {},
 ): ShipFee {
   const wh = warehouses.find((w) => w.region === recipientRegion && w.active);
   if (!wh) return { shipping: 0, handling: 0 };
   if (wh.shipping_mode === "included") return { shipping: 0, handling: 0 };
-  const freeFrom = wh.fee_table.free_from_qty ?? 0;
-  const freeShip = freeFrom > 0 && parcelQty >= freeFrom;
-  const ship = freeShip ? 0 : (wh.fee_table.ship ?? 0);
+
+  const { qty = 0, amount = 0, chargeShip = true } = parcel;
+
+  const freeQty = wh.fee_table.free_from_qty ?? 0;
+  const freeAmt = wh.fee_table.free_from_amount ?? 0;
+  const freeAmtInBuyer = freeAmt
+    ? Math.round(convertToBuyerCurrency(freeAmt, wh.local_currency, buyer, fxKrwVnd))
+    : 0;
+  const overThreshold =
+    (freeQty > 0 && qty >= freeQty) || (freeAmtInBuyer > 0 && amount >= freeAmtInBuyer);
+
+  const ship = !chargeShip || overThreshold ? 0 : (wh.fee_table.ship ?? 0);
   const handling = wh.fee_table.handling ?? 0;
   return {
     shipping: Math.round(convertToBuyerCurrency(ship, wh.local_currency, buyer, fxKrwVnd)),
@@ -257,24 +292,67 @@ export interface Bill {
   grand: number;
   currency: string;
 }
+/** Danh mục đang bán, đủ để tra ngược một dòng giỏ về sản phẩm thật. */
+export interface Catalog {
+  boxes: Box[];
+  combos: Combo[];
+  flavors: Flavor[];
+}
+
+/**
+ * Dòng giỏ này có thu phí ship riêng không (§0022).
+ *
+ * Tra THẲNG TỪ DANH MỤC chứ không lưu cờ vào dòng giỏ, vì hai lẽ: giỏ nằm trong
+ * localStorage nên dòng thêm từ trước khi có tính năng này sẽ không có cờ; và
+ * shop bật/tắt phí ship của một món thì giỏ đang mở phải đúng theo ngay.
+ *
+ * Không tra ra sản phẩm → coi như CÓ thu phí. Món lạ mà mặc định miễn ship là
+ * kiểu mất tiền không ai thấy; thu nhầm thì khách kêu, còn máy chủ vẫn chốt lại
+ * giá lần cuối nên không có chuyện thu oan vào đơn thật.
+ */
+export function lineChargesShip(
+  l: Pick<CartLine, "kind" | "boxId" | "comboId" | "flavorIds">,
+  cat?: Catalog,
+): boolean {
+  if (!cat) return true;
+  const charges = (p?: { charge_ship?: boolean }) => (p ? !!p.charge_ship : true);
+
+  if (l.kind === "combo") return charges(cat.combos.find((c) => c.id === l.comboId));
+  if (l.kind === "la") return charges(cat.flavors.find((f) => f.id === l.flavorIds?.[0]));
+  // Hộp tự chọn: vỏ hộp thu phí, HOẶC có vị nào bên trong thu phí.
+  const box = cat.boxes.find((b) => b.id === l.boxId);
+  if (charges(box)) return true;
+  return (l.flavorIds ?? []).some((id) =>
+    charges(cat.flavors.find((f) => f.id === id)),
+  );
+}
+
 export function computeBill(
   cart: CartLine[],
   recipients: CartRecipient[],
   buyer: Region,
   warehouses: Warehouse[],
   fxKrwVnd: number,
+  catalog?: Catalog,
 ): Bill {
   // tiền = đơn giá × tổng số phần (mỗi người nhận có số lượng riêng)
   const subtotal = cart.reduce((a, l) => a + l.unitPrice * lineTotalQty(l), 0);
   let shipping = 0;
   let handling = 0;
   for (const r of recipients) {
-    // số phần trong kiện của người nhận này — cơ sở xét ngưỡng miễn phí ship
-    const parcelQty = cart
-      .filter((l) => l.recipientUids.includes(r.uid))
-      .reduce((n, l) => n + qtyForRecipient(l, r.uid), 0);
+    // Số phần + tiền hàng trong kiện của người nhận này — hai cơ sở xét ngưỡng
+    // miễn phí ship. Tiền hàng KHÔNG gồm ship/phí xử lý (xem `fee_table`).
+    const mine = cart.filter((l) => l.recipientUids.includes(r.uid));
+    const parcelQty = mine.reduce((n, l) => n + qtyForRecipient(l, r.uid), 0);
     if (!parcelQty) continue;
-    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd, parcelQty);
+    const parcelAmount = mine.reduce((s, l) => s + l.unitPrice * qtyForRecipient(l, r.uid), 0);
+    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd, {
+      qty: parcelQty,
+      amount: parcelAmount,
+      // Một kiện đi một lần: chỉ cần MỘT món thu phí là kiện đó thu, và thu
+      // đúng một lần dù kiện có bao nhiêu món.
+      chargeShip: mine.some((l) => lineChargesShip(l, catalog)),
+    });
     shipping += fee.shipping;
     handling += fee.handling;
   }

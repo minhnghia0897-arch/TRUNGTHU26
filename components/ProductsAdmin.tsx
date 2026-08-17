@@ -63,6 +63,7 @@ interface Override {
   stock?: string; // legacy: tên mặt hàng kho (chỉ còn để lọc bỏ khi gửi lên)
   stockQty?: number; // tồn kho của chính sản phẩm
   allowNegative?: boolean; // cho phép bán tồn kho âm
+  chargeShip?: boolean; // thu phí ship riêng cho món này
   note?: string; // ghi chú nội bộ
   supplyLink?: string; // link nhập hàng
   variants?: Variant[]; // mẫu mã
@@ -85,6 +86,7 @@ interface Product {
   images: string[];
   stockQty: number; // tồn kho của chính sản phẩm
   allowNegative?: boolean;
+  chargeShip?: boolean;
   note?: string;
   supplyLink?: string;
   variants?: Variant[];
@@ -145,6 +147,7 @@ export default function ProductsAdmin({
     supplyLink: r.supply_link,
     stockQty: r.stock ?? 0,
     allowNegative: r.allow_negative,
+    chargeShip: r.charge_ship,
     variants: r.variants,
     dbImages: r.images ?? [],
   });
@@ -187,6 +190,7 @@ export default function ProductsAdmin({
       discount: o.discount ?? p.discount,
       stockQty: o.stockQty ?? p.stockQty,
       allowNegative: o.allowNegative ?? p.allowNegative,
+      chargeShip: o.chargeShip ?? p.chargeShip,
       note: o.note ?? p.note,
       supplyLink: o.supplyLink ?? p.supplyLink,
       variants: o.variants ?? p.variants,
@@ -265,7 +269,7 @@ export default function ProductsAdmin({
     code: "",
     category: "",
     priceVn: 0, priceKr: 0, cost: 0, discount: 0,
-    images: [], active: true, flavorIds: [], variants: [], allowNegative: false, stockQty: 0,
+    images: [], active: true, flavorIds: [], variants: [], allowNegative: false, chargeShip: false, stockQty: 0,
   });
 
   const handleSave = (patch: Override) => {
@@ -515,6 +519,7 @@ function EditModal({
   const [discount, setDiscount] = useState(product.discount);
   const [stockQty, setStockQty] = useState(product.stockQty ?? 0);
   const [allowNegative, setAllowNegative] = useState(!!product.allowNegative);
+  const [chargeShip, setChargeShip] = useState(!!product.chargeShip);
   const [note, setNote] = useState(product.note ?? "");
   const [supplyLink, setSupplyLink] = useState(product.supplyLink ?? "");
   const [variants, setVariants] = useState<Variant[]>(product.variants ?? []);
@@ -638,6 +643,7 @@ function EditModal({
       images, image: images[0] || undefined,
       cost, priceVn, priceKr, discount,
       allowNegative,
+      chargeShip,
       note: note.trim() || undefined,
       supplyLink: supplyLink.trim() || undefined,
       variants: hasSet ? variants.filter((v) => v.name.trim()) : undefined,
@@ -879,6 +885,24 @@ function EditModal({
           <label className="flex items-center gap-2 text-[13px] text-slate-700">
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-blue-600" />
             Đang bán
+          </label>
+
+          {/* Phí ship theo MÓN, không theo kho — xem lib/pricing.ts §0022. */}
+          <label className="flex items-start gap-2 text-[13px] text-slate-700">
+            <input
+              type="checkbox"
+              checked={chargeShip}
+              onChange={(e) => setChargeShip(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-blue-600"
+            />
+            <span>
+              Thu phí ship riêng cho món này
+              <span className="mt-0.5 block text-[11.5px] text-slate-400">
+                Không tích = giá đã gồm ship, khách không phải trả thêm. Tích thì kiện nào có
+                món này sẽ chịu phí ship của kho, thu một lần cho cả kiện. Mức phí đặt ở
+                mục Phí vận chuyển.
+              </span>
+            </span>
           </label>
         </div>
 
