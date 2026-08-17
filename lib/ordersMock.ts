@@ -40,6 +40,13 @@ export const RELEASED_STATUS = new Set<Status>([
 
 export interface OrderRow {
   id: number;
+  /**
+   * Đơn đã bị xoá khỏi bảng (xoá mềm — dòng vẫn nằm trong database).
+   *
+   * Chỉ có khi đọc từ database; đơn mẫu để xem giao diện thì không có, nên luôn
+   * đọc qua `Boolean(r.voided)` chứ đừng so thẳng với `false`.
+   */
+  voided?: boolean;
   source: OrderSource;
   vc: string;
   tags: string[];

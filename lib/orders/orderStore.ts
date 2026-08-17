@@ -48,10 +48,18 @@ export async function listOrders(): Promise<OrderStoreData> {
 
   const sb = getServiceClient();
 
+  // Nạp CẢ đơn đã xoá (`voided`), không lọc bỏ ở đây nữa.
+  //
+  // Xoá đơn ở app này là xoá mềm — dòng vẫn nằm nguyên trong database, chỉ bị
+  // đánh dấu. Nhưng câu select cũ chặn luôn nên không màn hình nào đọc tới được,
+  // tức là xoá nhầm một đơn thì coi như mất, dù dữ liệu vẫn còn đó.
+  //
+  // Nay nạp hết, để tab "Đã xoá" ở bảng đơn xem lại được. Đơn đã xoá mang trạng
+  // thái "Huỷ đơn" (nằm trong RELEASED_STATUS) nên Thu chi, Khách hàng và bảng
+  // điều hành vẫn tự loại khỏi doanh thu như trước — không đụng gì tới tiền.
   const { data, error } = await sb
     .from("shipment")
     .select(SHIPMENT_SELECT)
-    .eq("voided", false)
     .limit(2000);
   if (error) fail(error, "Không đọc được đơn hàng");
 
