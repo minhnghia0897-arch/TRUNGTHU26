@@ -66,10 +66,27 @@ const NAME_HINT = "Để shop nhận ra bạn trong tin nhắn. SĐT dùng để
 const FANPAGE_MESSENGER = "https://m.me/doranking88";
 const ZALO_LINK = "https://zalo.me/0982576263";
 
-// Tài khoản nhận tiền (demo — thay bằng TK thật của anh sau).
+// Tài khoản nhận tiền THẬT của shop.
+//
+// `bin` là mã ngân hàng theo chuẩn VietQR, KHÔNG phải trang trí: ảnh QR dựng từ
+// nó. Đổi số tài khoản mà quên đổi bin là QR trỏ sang ngân hàng khác — khách
+// quét, chuyển đi, tiền không bao giờ tới. MB Bank = 970422.
 const BANKS = {
-  vn: { title: "🇻🇳 Việt Nam", bank: "Vietcombank", bin: "970436", number: "1023 456 789", holder: "CONG TY DORAN KING" },
-  kr: { title: "🇰🇷 Hàn Quốc", bank: "KB Kookmin", number: "123456-78-901234", holder: "DORAN KING" },
+  vn: {
+    title: "🇻🇳 Việt Nam",
+    bank: "MB Bank",
+    bin: "970422",
+    number: "0328671279",
+    holder: "DO MINH NGHIA",
+  },
+  kr: {
+    title: "🇰🇷 Hàn Quốc",
+    bank: "하나은행 (Hana Bank)",
+    // Để nguyên chuỗi số anh đưa, KHÔNG tự chia nhóm: chia sai một nhịp là
+    // khách gõ nhầm số tài khoản. Muốn hiện dạng 556-910473-97207 thì nói em.
+    number: "55691047397207",
+    holder: "PHAM THANH PHONG",
+  },
 };
 const vietqrUrl = (amountVnd?: number) => {
   const num = BANKS.vn.number.replace(/\s/g, "");
