@@ -11,7 +11,6 @@ import {
   computeBill,
   qtyForRecipient,
   lineTotalQty,
-  shipFeeForRegion,
   type CartLine,
   comboPrice,
   comboOptions,
@@ -146,6 +145,10 @@ export default function OrderFlow({
   // làm sập cả trang đặt hàng — khách không đặt được gì.
   const box = boxes.find((b) => b.id === selectedBoxId) ?? boxes[0] ?? null;
   const fmt = (v: number) => formatMoney(v, buyerRegion);
+  // Phí ship 0 thì viết chữ chứ không viết "₩0": phần lớn danh mục vốn đã miễn
+  // ship (§0022) nên con số 0 đứng trơ ra đọc như lỗi hiển thị, chứ không đọc ra
+  // cái tin vui rằng khách không phải trả thêm.
+  const shipFmt = (v: number) => (v === 0 ? "Miễn phí" : fmt(v));
 
   // Ảnh bìa lấy thẳng từ danh mục máy chủ truyền xuống. Bản cũ đọc localStorage
   // "tr_product_edits" nên ảnh chỉ hiện trên máy đã upload — khách thấy trống.
@@ -394,8 +397,11 @@ export default function OrderFlow({
         buyerRegion,
         warehouses,
         fx,
+        // Danh mục để biết món nào thu phí ship riêng (§0022). Thiếu nó thì mọi
+        // kiện đều bị tính phí, khách nhìn số cao hơn số máy chủ chốt.
+        { boxes, combos, flavors },
       ),
-    [cart, recipients, buyerRegion, warehouses, fx],
+    [cart, recipients, buyerRegion, warehouses, fx, boxes, combos, flavors],
   );
 
   // ---- builder ----
@@ -627,7 +633,7 @@ export default function OrderFlow({
       `${blocks}\n\n` +
       `────────────\n` +
       `Tạm tính (${parts} phần): ${fmt(bill.subtotal)}\n` +
-      `Phí ship: ${fmt(bill.shipping)}\n` +
+      `Phí ship: ${shipFmt(bill.shipping)}\n` +
       (bill.handling > 0 ? `Handling: ${fmt(bill.handling)}\n` : "") +
       `TỔNG: ${fmt(bill.grand)}`
     );
@@ -1017,7 +1023,7 @@ export default function OrderFlow({
                 }
                 v={fmt(bill.subtotal)}
               />
-              <Row k="Phí ship" v={fmt(bill.shipping)} />
+              <Row k="Phí ship" v={shipFmt(bill.shipping)} />
               {bill.handling > 0 && <Row k="Handling chéo vùng" v={fmt(bill.handling)} />}
               <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
                 <span>Tổng · {buyerRegion === "vn" ? "VND" : "KRW"}</span>
@@ -1100,7 +1106,7 @@ export default function OrderFlow({
 
             <div className="rounded border border-line bg-white p-3.5">
               <Row k={`Tạm tính (${cart.reduce((n, l) => n + lineTotalQty(l), 0)} phần)`} v={fmt(bill.subtotal)} />
-              <Row k={`Phí ship`} v={fmt(bill.shipping)} />
+              <Row k={`Phí ship`} v={shipFmt(bill.shipping)} />
               {bill.handling > 0 && <Row k="Phí handling chéo vùng" v={fmt(bill.handling)} />}
               <div className="mt-1.5 flex justify-between border-t-2 border-maroon pt-2.5 font-serif text-[17px] text-maroon">
                 <span>Tổng · {buyerRegion === "vn" ? "VND" : "KRW"}</span>
@@ -1147,7 +1153,7 @@ export default function OrderFlow({
                   <span className="opacity-60">Tạm tính ({cart.reduce((n, l) => n + lineTotalQty(l), 0)} phần)</span>
                   <span>{fmt(bill.subtotal)}</span>
                 </div>
-                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{fmt(bill.shipping)}</span></div>
+                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{shipFmt(bill.shipping)}</span></div>
                 {bill.handling > 0 && (
                   <div className="flex justify-between py-0.5"><span className="opacity-60">Handling chéo vùng</span><span>{fmt(bill.handling)}</span></div>
                 )}
@@ -1233,7 +1239,7 @@ export default function OrderFlow({
               {/* tổng */}
               <div className="pt-2.5 text-[12px]">
                 <div className="flex justify-between py-0.5"><span className="opacity-60">Tạm tính</span><span>{fmt(bill.subtotal)}</span></div>
-                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{fmt(bill.shipping)}</span></div>
+                <div className="flex justify-between py-0.5"><span className="opacity-60">Phí ship</span><span>{shipFmt(bill.shipping)}</span></div>
                 {bill.handling > 0 && <div className="flex justify-between py-0.5"><span className="opacity-60">Handling</span><span>{fmt(bill.handling)}</span></div>}
                 <div className="mt-1 flex justify-between border-t-2 border-maroon pt-1.5 font-serif text-[15px] text-maroon">
                   <span>Tổng cần CK</span><span>{fmt(done.grandTotal)}</span>

@@ -136,7 +136,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   // --- validate + tính giá server-side từng dòng ---
   let subtotal = 0;
-  type PricedLine = CreateOrderInput["lines"][number] & { unit: number };
+  // `chargeShip`: món này có thu phí ship riêng không (§0022). Chốt ở đây, lúc
+  // đã tra được sản phẩm thật trong danh mục — client không có tiếng nói.
+  type PricedLine = CreateOrderInput["lines"][number] & { unit: number; chargeShip: boolean };
   const pricedLines: PricedLine[] = [];
   // `let` vì nhánh set cố định thay boxId/flavorIds bằng giá trị từ danh mục.
   for (let l of input.lines) {
@@ -144,6 +146,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       return { ok: false, error: "Có dòng hàng chưa gán người nhận hợp lệ." };
     const qty = Math.max(1, Math.floor(l.qty || 1));
     let unit = 0;
+    let chargeShip = false;
 
     if (l.kind === "box") {
       const box = boxes.find((b) => b.id === l.boxId && b.active);
@@ -151,10 +154,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       const v = validateBoxFill(box, l.flavorIds ?? [], flavors);
       if (!v.ok) return { ok: false, error: v.error };
       unit = boxPrice(box, l.flavorIds ?? [], flavors, region);
+      // Vỏ hộp thu phí, hoặc có vị nào bên trong thu phí.
+      chargeShip =
+        !!box.charge_ship ||
+        (l.flavorIds ?? []).some((id) => flavors.find((f) => f.id === id)?.charge_ship);
     } else if (l.kind === "la") {
       const f = flavors.find((x) => x.id === l.flavorIds?.[0] && x.active);
       if (!f) return { ok: false, error: "Vị mua lẻ không hợp lệ." };
       unit = region === "vn" ? f.price_vn : f.price_kr;
+      chargeShip = !!f.charge_ship;
     } else {
       // Set cố định: tra THEO comboId trong danh mục, không tin boxId/flavorIds
       // client gửi lên. Trước đây chốt giá thẳng từ boxId nên client đổi sang
@@ -179,12 +187,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           return { ok: false, error: `Set "${combo.name}" chưa có giá — chưa bán được.` };
         unit = p;
       }
+      chargeShip = !!combo.charge_ship;
       // vị của set do danh mục quyết định, dùng luôn cho mô tả kiện
       l = { ...l, boxId: combo.box_id ?? undefined, flavorIds: combo.flavor_ids };
     }
 
     subtotal += unit * qty;
-    pricedLines.push({ ...l, qty, unit });
+    pricedLines.push({ ...l, qty, unit, chargeShip });
   }
 
   // Mô tả sản phẩm cho một dòng — dùng cho bảng đơn và tin nhắn xác nhận.
@@ -223,7 +232,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       // (§ fee_table) — `sub` phải tính trước phí, vì nó là đầu vào của phí.
       const parcelQty = mine.reduce((n, l) => n + l.qty, 0);
       const sub = mine.reduce((s, l) => s + l.unit * l.qty, 0);
-      const fee = shipFeeForRegion(r.region, region, warehouses, fx, parcelQty, sub);
+      const fee = shipFeeForRegion(r.region, region, warehouses, fx, {
+        qty: parcelQty,
+        amount: sub,
+        // Một kiện đi một lần: chỉ cần MỘT món thu phí là kiện đó thu, và thu
+        // đúng một lần dù kiện có bao nhiêu món (§0022).
+        chargeShip: mine.some((l) => l.chargeShip),
+      });
       shippingTotal += fee.shipping;
       handlingTotal += fee.handling;
       return {

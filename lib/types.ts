@@ -38,6 +38,8 @@ export interface Box {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /** Có thu phí ship riêng không — xem `Combo.charge_ship`. */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }
@@ -68,6 +70,8 @@ export interface Flavor {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /** Có thu phí ship riêng không — xem `Combo.charge_ship`. */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }
@@ -117,6 +121,15 @@ export interface Combo {
   allow_negative?: boolean;
   /** Tồn kho của chính sản phẩm (§0012). Máy chủ trừ lúc tạo đơn. */
   stock?: number;
+  /**
+   * Món này có thu phí ship riêng không (§0022). Thiếu/false = giá đã gồm ship.
+   *
+   * Phí ship là thuộc tính của SẢN PHẨM, không phải của kho: shop miễn ship gần
+   * hết danh mục, chỉ vài món thu riêng. Kiện nào chứa ít nhất một món `true`
+   * thì thu phí của kho ĐÚNG MỘT LẦN — một kiện đi một lần, không nhân theo số
+   * món. Kiện toàn món `false` thì không thu.
+   */
+  charge_ship?: boolean;
   removed?: boolean;
   active: boolean;
 }

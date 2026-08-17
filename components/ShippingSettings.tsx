@@ -78,11 +78,20 @@ export default function ShippingSettings({
   return (
     <section className="px-5 pb-2 pt-4">
       <div className="rounded-xl border border-slate-200 bg-white">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <h2 className="text-[14px] font-semibold text-slate-800">Phí vận chuyển</h2>
-          <span className="text-[12px] text-slate-400">
-            Tính theo từng kiện — gửi 3 người là 3 kiện, mỗi kiện một lần phí.
-          </span>
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[14px] font-semibold text-slate-800">Phí vận chuyển</h2>
+            <span className="text-[12px] text-slate-400">
+              Tính theo từng kiện — gửi 3 người là 3 kiện, mỗi kiện một lần phí.
+            </span>
+          </div>
+          {/* Mức phí nằm ở đây, nhưng CÓ THU HAY KHÔNG lại do từng món quyết định. */}
+          <p className="mt-1 text-[12px] text-slate-500">
+            Đây chỉ là <b className="font-medium text-slate-700">mức</b> phí. Kiện có bị thu hay
+            không là do từng món: chỉ kiện nào chứa món đã tích{" "}
+            <b className="font-medium text-slate-700">&ldquo;Thu phí ship riêng&rdquo;</b> trong
+            Thiết lập sản phẩm mới bị thu. Món không tích thì miễn ship.
+          </p>
         </div>
 
         {error && (
@@ -158,7 +167,9 @@ export default function ShippingSettings({
 
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <p className="text-[12px] text-slate-500">
-                    {v.freeFromQty > 0 || v.freeFromAmount > 0 ? (
+                    {v.ship + v.handling === 0 ? (
+                      <>Kho này không thu đồng phí nào — mọi kiện đều miễn phí ship.</>
+                    ) : v.freeFromQty > 0 || v.freeFromAmount > 0 ? (
                       <>
                         Kiện có{" "}
                         {v.freeFromQty > 0 && <b>từ {v.freeFromQty} phần</b>}
