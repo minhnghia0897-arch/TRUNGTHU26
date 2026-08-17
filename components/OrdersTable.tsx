@@ -577,6 +577,9 @@ export default function OrdersTable({
           <OrderDetailModal
             order={order}
             history={history[detailId] ?? []}
+            boxes={boxes}
+            flavors={flavors}
+            combos={combos}
             fbPageId={fbPageId}
             onSave={saveOrder}
             onClose={() => setDetailId(null)}

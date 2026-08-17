@@ -1,5 +1,6 @@
 import type { OrderRow, OrderSource, Status, Carrier } from "@/lib/ordersMock";
 import type { Region, Currency } from "@/lib/types";
+import type { OrderItem } from "./orderItems";
 
 // ============================================================================
 // Kiểu dữ liệu chung cho một KIỆN đơn hàng.
@@ -102,12 +103,26 @@ export interface StoredOrder extends OrderRow {
   createdAtIso: string;
   updatedAtIso: string;
   voided: boolean;
+  /**
+   * Hàng trong kiện, đọc từ `order_line` — có đơn giá chốt lúc khách đặt.
+   *
+   * Kiện chưa có dòng hàng nào (đơn tạo tay) thì để trống; popup chi tiết dựng
+   * tạm từ `consume` (xem `itemsFromConsume`). Gửi kèm lúc lưu là máy chủ hiểu
+   * "sửa hàng trong đơn"; không gửi thì hàng giữ nguyên.
+   */
+  items?: OrderItem[];
 }
 
 // ------------------------------------------------- bản ghi DB → StoredOrder
 /** Hình dạng một dòng `shipment` kèm quan hệ, đúng như câu select ở orderStore. */
 export interface ShipmentRow {
   id: string;
+  /**
+   * Dòng hàng của kiện nằm ở `order_line`, nối qua CẶP (đơn, người nhận) chứ
+   * không có khoá ngoại thẳng tới kiện — nên hai id này phải đọc lên cùng.
+   */
+  web_order_id: Cell;
+  recipient_id: Cell;
   fulfillment_region: string;
   vc_code: Cell;
   carrier: Cell;
@@ -229,7 +244,8 @@ export function rowToOrder(s: ShipmentRow): StoredOrder {
  * (shipment→web_order, shipment→recipient, web_order→customer), không nhập nhằng.
  */
 export const SHIPMENT_SELECT = `
-  id, fulfillment_region, vc_code, carrier, status, cod, prepaid, cuoc_vc,
+  id, web_order_id, recipient_id,
+  fulfillment_region, vc_code, carrier, status, cod, prepaid, cuoc_vc,
   shipping_fee, handling_fee, goods_amount,
   phi_vc_thu_khach, tags, note, source, assignee, product_summary, consume,
   stock_applied, voided, parcel_index, parcel_count, updated_at,
