@@ -37,6 +37,17 @@ const FX = 18.5;
 type Cur = "krw" | "vnd";
 type SourceFilter = "all" | OrderSource;
 
+/**
+ * Tab thùng rác.
+ *
+ * Cố ý KHÔNG phải một giá trị của `Status`: đơn đã xoá vẫn giữ nguyên trạng thái
+ * cũ trong database ("Huỷ đơn"), còn đây chỉ là cái tab đang mở. Nhập nó vào
+ * `Status` là mở đường cho việc lỡ tay ghi chữ này xuống database thành trạng
+ * thái thật của đơn.
+ */
+const DELETED = "__deleted__" as const;
+type StatusFilter = Status | "all" | typeof DELETED;
+
 const SOURCE_LABEL: Record<OrderSource, string> = {
   web: "Online",
   facebook: "Facebook",
@@ -77,7 +88,7 @@ export default function OrdersTable({
 
   const [source, setSource] = useState<SourceFilter>("all");
   const [warehouse, setWarehouse] = useState<"all" | "vn" | "kr">("all");
-  const [status, setStatus] = useState<Status | "all">("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
   const [q, setQ] = useState("");
   const [cur, setCur] = useState<Cur>("krw");
   const [menu, setMenu] = useState<{ id: number; x: number; y: number } | null>(null);
@@ -99,9 +110,13 @@ export default function OrdersTable({
       ? Math.round(krw * FX).toLocaleString("vi-VN") + "đ"
       : "₩" + Math.round(krw).toLocaleString("en-US");
 
+  // Đơn đã xoá KHÔNG được lẫn vào các tab thường: nó đã bị trừ khỏi doanh thu,
+  // đã hoàn kho, và anh chủ coi như nó không tồn tại. Chỉ hiện khi bấm đúng tab
+  // "Đã xoá".
   const baseRows = useMemo(() => {
     const query = q.trim().toLowerCase();
     return rows.filter((r) => {
+      if (Boolean(r.voided) !== (status === DELETED)) return false;
       const okS = source === "all" || r.source === source;
       const okW = warehouse === "all" || r.region === warehouse;
       const okQ =
@@ -112,16 +127,20 @@ export default function OrdersTable({
           .includes(query);
       return okS && okW && okQ;
     });
-  }, [rows, source, warehouse, q]);
+  }, [rows, source, warehouse, q, status]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: baseRows.length };
     for (const s of PIPELINE) c[s] = 0;
     for (const r of baseRows) c[r.status] = (c[r.status] ?? 0) + 1;
+    // Đếm thẳng trên `rows`: `baseRows` đã lọc bỏ đơn đã xoá nên đếm ở đó luôn
+    // ra 0, và con số trên tab sẽ mãi là 0 dù thùng rác có đơn.
+    c[DELETED] = rows.filter((r) => Boolean(r.voided)).length;
     return c;
-  }, [baseRows]);
+  }, [baseRows, rows]);
 
-  const list = status === "all" ? baseRows : baseRows.filter((r) => r.status === status);
+  const list =
+    status === "all" || status === DELETED ? baseRows : baseRows.filter((r) => r.status === status);
 
   // Xuất Excel: đang tick dòng nào thì xuất đúng những dòng đó, không thì xuất
   // trọn kết quả đang lọc (không chỉ trang hiện tại).
@@ -131,7 +150,7 @@ export default function OrdersTable({
       selected.size ? `Đang chọn ${selected.size} đơn` : null,
       source === "all" ? null : `Nguồn: ${SOURCE_LABEL[source]}`,
       warehouse === "all" ? null : `Kho: ${warehouse === "vn" ? "VN" : "Hàn"}`,
-      status === "all" ? null : `Trạng thái: ${status}`,
+      status === "all" ? null : status === DELETED ? "Đơn đã xoá" : `Trạng thái: ${status}`,
       q.trim() ? `Tìm: "${q.trim()}"` : null,
     ]
       .filter(Boolean)
@@ -182,7 +201,7 @@ export default function OrdersTable({
     const ok = window.confirm(
       `Xoá ${n} đơn khỏi bảng?\n\n` +
         `Đơn sẽ chuyển sang "Huỷ đơn", bị loại khỏi doanh thu và hàng được hoàn về kho. ` +
-        `Từ bảng này sẽ không mở lại được.`,
+        `Xem lại ở tab "Đơn đã xoá".`,
     );
     if (!ok) return;
     void store.removeOrders([...selected]);
@@ -198,12 +217,17 @@ export default function OrdersTable({
     .filter((r) => !RELEASED_STATUS.has(r.status))
     .reduce(
       (a, r) => ({
+        // Tổng tiền bill = tiền khách phải trả cho đơn, bất kể đã trả hay chưa.
+        // Phải cộng `prepaid + cod` chứ KHÔNG lấy riêng cột nào: hai cột đó chỉ
+        // là cách chia một số tiền thành "đã thu" và "chưa thu", nên nhìn một
+        // cột thôi là ra số khác nhau tuỳ đơn đã thu tiền hay chưa.
+        bill: a.bill + rowKrw(r.prepaid, r) + rowKrw(r.cod, r),
         cod: a.cod + rowKrw(r.cod, r),
         prepaid: a.prepaid + rowKrw(r.prepaid, r),
         cuoc: a.cuoc + rowKrw(r.cuoc_vc, r),
         phi: a.phi + rowKrw(r.phi_vc_thu_khach, r),
       }),
-      { cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
+      { bill: 0, cod: 0, prepaid: 0, cuoc: 0, phi: 0 },
     );
 
   const createOrder = async (payload: Omit<OrderRow, "id">) => {
@@ -316,18 +340,29 @@ export default function OrdersTable({
         {PIPELINE.map((s) => (
           <StatusTab key={s} label={s} count={counts[s] ?? 0} active={status === s} onClick={() => setStatus(s)} />
         ))}
+        {/* Thùng rác đứng tách hẳn ra sau vạch: nó không phải một chặng trong
+            quy trình như các tab kia, mà là chỗ đơn đã ra khỏi quy trình. */}
+        <span className="mx-1 w-px flex-none self-stretch bg-slate-200" aria-hidden />
+        <StatusTab
+          label="Đơn đã xoá"
+          count={counts[DELETED] ?? 0}
+          active={status === DELETED}
+          onClick={() => setStatus(DELETED)}
+        />
       </div>
 
       {/* bulk action bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-2.5 text-[13px]">
           <span className="font-medium text-blue-700">Đã chọn {selected.size} đơn</span>
-          <button
-            onClick={deleteSelected}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-medium text-rose-600 hover:bg-rose-50"
-          >
-            <IconTrash width={15} height={15} /> Xoá
-          </button>
+          {status !== DELETED && (
+            <button
+              onClick={deleteSelected}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 font-medium text-rose-600 hover:bg-rose-50"
+            >
+              <IconTrash width={15} height={15} /> Xoá
+            </button>
+          )}
           <button
             onClick={addTagToSelected}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-50"
@@ -453,6 +488,11 @@ export default function OrdersTable({
           </span>
         )}
         <span className="text-slate-500">COD: <b className="text-slate-800">{money(totals.cod)}</b></span>
+        {/* Đứng sát ngay trước "Trả trước" để đọc được một cặp: đơn tổng bao nhiêu
+            tiền, và khách đã trả bao nhiêu trong đó. */}
+        <span className="text-slate-500">
+          Tổng bill: <b className="text-slate-900">{money(totals.bill)}</b>
+        </span>
         <span className="text-slate-500">Trả trước: <b className="text-slate-800">{money(totals.prepaid)}</b></span>
         <span className="text-slate-500">Cước VC: <b className="text-slate-800">{money(totals.cuoc)}</b></span>
         <span className="text-slate-500">Phí VC: <b className="text-slate-800">{money(totals.phi)}</b></span>
