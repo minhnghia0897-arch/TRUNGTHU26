@@ -15,6 +15,11 @@ export interface ShippingFeePatch {
   handling?: number;
   /** Mua từ bao nhiêu phần trở lên thì miễn ship. 0 = không miễn. */
   freeFromQty?: number;
+  /**
+   * Tiền hàng từ bao nhiêu trở lên thì miễn ship, tính bằng tiền tệ của kho.
+   * 0 = không miễn. Độc lập với `freeFromQty`: đạt một trong hai là được miễn.
+   */
+  freeFromAmount?: number;
 }
 
 export async function getWarehousesForAdmin(): Promise<Warehouse[] | null> {
@@ -51,6 +56,7 @@ export async function updateShippingFees(region: Region, patch: ShippingFeePatch
     ship: num(patch.ship, old.ship ?? 0),
     handling: num(patch.handling, old.handling ?? 0),
     free_from_qty: num(patch.freeFromQty, old.free_from_qty ?? 0),
+    free_from_amount: num(patch.freeFromAmount, old.free_from_amount ?? 0),
   };
 
   const { error } = await sb

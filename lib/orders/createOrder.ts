@@ -219,12 +219,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     .map((r): OrderParcel | null => {
       const mine = pricedLines.filter((l) => l.recipientUid === r.uid);
       if (!mine.length) return null;
-      // Ngưỡng miễn phí ship xét theo số phần trong CHÍNH kiện này (§ fee_table)
+      // Ngưỡng miễn phí ship xét theo số phần VÀ tiền hàng của CHÍNH kiện này
+      // (§ fee_table) — `sub` phải tính trước phí, vì nó là đầu vào của phí.
       const parcelQty = mine.reduce((n, l) => n + l.qty, 0);
-      const fee = shipFeeForRegion(r.region, region, warehouses, fx, parcelQty);
+      const sub = mine.reduce((s, l) => s + l.unit * l.qty, 0);
+      const fee = shipFeeForRegion(r.region, region, warehouses, fx, parcelQty, sub);
       shippingTotal += fee.shipping;
       handlingTotal += fee.handling;
-      const sub = mine.reduce((s, l) => s + l.unit * l.qty, 0);
       return {
         uid: r.uid,
         recipientName: r.name,

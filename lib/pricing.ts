@@ -188,9 +188,15 @@ export interface ShipFee {
 /**
  * Phí ship + xử lý của MỘT KIỆN, quy về tiền tệ người đặt (§6).
  *
- * `parcelQty` là số phần trong kiện đó — dùng để xét ngưỡng miễn phí ship của
- * kho. Không truyền thì coi như chưa đủ ngưỡng (thu phí như thường), nên chỗ
- * gọi cũ vẫn chạy đúng.
+ * `parcelQty` là số phần trong kiện đó, `parcelAmount` là tiền HÀNG của kiện đó
+ * (chưa gồm ship/phí xử lý, đã ở tiền tệ người đặt) — hai cơ sở xét ngưỡng miễn
+ * phí ship của kho, đạt một trong hai là miễn. Không truyền thì coi như chưa đủ
+ * ngưỡng (thu phí như thường), nên chỗ gọi cũ vẫn chạy đúng.
+ *
+ * Ngưỡng tiền lưu bằng tiền tệ của KHO còn `parcelAmount` ở tiền tệ NGƯỜI ĐẶT,
+ * nên phải quy ngưỡng sang tiền người đặt rồi mới so. So thẳng số với số là
+ * kiểu lỗi im lặng tệ nhất: kho Hàn để ngưỡng 50.000₩, khách VN mua 60.000đ
+ * (~3.200₩) cũng lọt qua và mọi đơn VN đều được miễn ship.
  */
 export function shipFeeForRegion(
   recipientRegion: Region,
@@ -198,12 +204,21 @@ export function shipFeeForRegion(
   warehouses: Warehouse[],
   fxKrwVnd: number,
   parcelQty = 0,
+  parcelAmount = 0,
 ): ShipFee {
   const wh = warehouses.find((w) => w.region === recipientRegion && w.active);
   if (!wh) return { shipping: 0, handling: 0 };
   if (wh.shipping_mode === "included") return { shipping: 0, handling: 0 };
-  const freeFrom = wh.fee_table.free_from_qty ?? 0;
-  const freeShip = freeFrom > 0 && parcelQty >= freeFrom;
+
+  const freeQty = wh.fee_table.free_from_qty ?? 0;
+  const freeAmt = wh.fee_table.free_from_amount ?? 0;
+  const freeAmtInBuyer = freeAmt
+    ? Math.round(convertToBuyerCurrency(freeAmt, wh.local_currency, buyer, fxKrwVnd))
+    : 0;
+  const freeShip =
+    (freeQty > 0 && parcelQty >= freeQty) ||
+    (freeAmtInBuyer > 0 && parcelAmount >= freeAmtInBuyer);
+
   const ship = freeShip ? 0 : (wh.fee_table.ship ?? 0);
   const handling = wh.fee_table.handling ?? 0;
   return {
@@ -269,12 +284,13 @@ export function computeBill(
   let shipping = 0;
   let handling = 0;
   for (const r of recipients) {
-    // số phần trong kiện của người nhận này — cơ sở xét ngưỡng miễn phí ship
-    const parcelQty = cart
-      .filter((l) => l.recipientUids.includes(r.uid))
-      .reduce((n, l) => n + qtyForRecipient(l, r.uid), 0);
+    // Số phần + tiền hàng trong kiện của người nhận này — hai cơ sở xét ngưỡng
+    // miễn phí ship. Tiền hàng KHÔNG gồm ship/phí xử lý (xem `fee_table`).
+    const mine = cart.filter((l) => l.recipientUids.includes(r.uid));
+    const parcelQty = mine.reduce((n, l) => n + qtyForRecipient(l, r.uid), 0);
     if (!parcelQty) continue;
-    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd, parcelQty);
+    const parcelAmount = mine.reduce((s, l) => s + l.unitPrice * qtyForRecipient(l, r.uid), 0);
+    const fee = shipFeeForRegion(r.region, buyer, warehouses, fxKrwVnd, parcelQty, parcelAmount);
     shipping += fee.shipping;
     handling += fee.handling;
   }
