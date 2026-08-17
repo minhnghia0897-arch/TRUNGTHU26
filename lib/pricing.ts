@@ -47,6 +47,25 @@ export function comboOptions(combo: Combo, buyer: Region): ComboOption[] {
 }
 
 /**
+ * Dò một vị theo TÊN.
+ *
+ * `contents` của mỗi lựa chọn nhân là chuỗi chữ tự do do người nhập gõ
+ * ("Trà Xanh Đậu Đỏ Kem Cheese · Thập Cẩm Gà Quay · …"), không có khoá ngoại nào
+ * buộc nó khớp bảng vị. Muốn gắn ảnh cho từng vị thì chỉ còn đường dò ngược theo
+ * tên, nên phải rộng tay với khoảng trắng thừa và hoa thường.
+ *
+ * Dò không ra thì trả `undefined` — chỗ gọi hiện ô giữ chỗ và GIỮ NGUYÊN TÊN.
+ * Tuyệt đối không giấu dòng đó đi: gõ lệch một chữ mà mất luôn tên vị trong danh
+ * sách thì khách đọc thiếu thành phần hộp quà.
+ */
+const normName = (s: string) => s.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi");
+
+export function findFlavorByName(name: string, flavors: Flavor[]): Flavor | undefined {
+  const k = normName(name);
+  return k ? flavors.find((f) => normName(f.name) === k) : undefined;
+}
+
+/**
  * Giá một set (combo). Set có nhiều lựa chọn thì trả giá thấp nhất — con số
  * hiện ngoài thẻ sản phẩm ("từ ..."), còn giá thật chốt theo lựa chọn khách bấm.
  *
