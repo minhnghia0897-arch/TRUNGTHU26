@@ -130,6 +130,18 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 }
 
+/* Toast "vừa có người đặt" trồi lên từ đáy — dùng ở components/SalesActivity.tsx */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Chuyển bước mượt (fade + trượt nhẹ) */
 @keyframes stepIn {
   from {

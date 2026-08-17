@@ -1,5 +1,7 @@
 import { getBoxes, getFlavors, getCombos } from "@/lib/catalog";
+import { getRecentSales } from "@/lib/orders/recentActivity";
 import ProductCatalog from "@/components/ProductCatalog";
+import SalesActivity from "@/components/SalesActivity";
 
 export const metadata = { title: "Doran King — Sản phẩm" };
 
@@ -10,10 +12,19 @@ export const metadata = { title: "Doran King — Sản phẩm" };
 export const dynamic = "force-dynamic";
 
 export default async function SanPhamPage() {
-  const [boxes, flavors, combos] = await Promise.all([
+  // Đơn gần đây đọc ở MÁY CHỦ rồi truyền xuống đã lọc sạch: trang này ai cũng
+  // xem được, nên không dựng API công khai cho đơn hàng — chỉ ba trường an toàn
+  // đi ra ngoài (xem lib/orders/recentActivity.ts).
+  const [boxes, flavors, combos, sales] = await Promise.all([
     getBoxes(),
     getFlavors(),
     getCombos(),
+    getRecentSales(),
   ]);
-  return <ProductCatalog boxes={boxes} flavors={flavors} combos={combos} />;
+  return (
+    <>
+      <ProductCatalog boxes={boxes} flavors={flavors} combos={combos} />
+      <SalesActivity sales={sales} />
+    </>
+  );
 }
