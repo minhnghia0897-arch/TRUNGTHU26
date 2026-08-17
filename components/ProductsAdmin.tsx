@@ -5,10 +5,35 @@ import { useRouter } from "next/navigation";
 import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo, type Warehouse } from "@/lib/types";
 import ShippingSettings from "./ShippingSettings";
 import { boxPrice, comboPrice } from "@/lib/pricing";
+import { shrinkImage } from "@/lib/products/imageResize";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const API_PRODUCTS = "/api/dashboard/products";
 const API_UPLOAD = "/api/dashboard/upload";
+
+/**
+ * Đọc trả lời của API mà KHÔNG tin chắc đó là JSON.
+ *
+ * `res.json()` trần đã ném ra tận màn hình câu:
+ *   Unexpected token 'R', "Request En"... is not valid JSON
+ * Đó là hạ tầng Vercel trả chuỗi chữ "Request Entity Too Large" (413) khi ảnh
+ * gửi lên quá 4.5MB — chưa vào tới code của mình. Session hết hạn cũng vậy:
+ * middleware trả về HTML đăng nhập, parse JSON là vỡ y hệt.
+ *
+ * Lỗi của máy chủ phải đọc ra thành câu người hiểu được, không phải câu của
+ * trình phân tích cú pháp.
+ */
+async function readJson<T>(res: Response, fallback: string): Promise<T> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    if (res.status === 413)
+      throw new Error("Ảnh quá nặng so với giới hạn máy chủ. Chọn ảnh nhỏ hơn rồi thử lại.");
+    if (res.status === 401) throw new Error("Phiên đăng nhập đã hết. Đăng nhập lại rồi thử lại.");
+    throw new Error(`${fallback} (máy chủ trả lỗi ${res.status}).`);
+  }
+}
 
 // mặt hàng kho — liên kết theo KEY (mã SKU), tên hiển thị lấy live từ kho
 // map tên gốc → key (để nâng cấp các liên kết cũ lưu theo tên)
@@ -188,7 +213,10 @@ export default function ProductsAdmin({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ key, patch: toPatch(patch) }),
         });
-        const data = (await res.json()) as { ok: boolean; error?: string };
+        const data = await readJson<{ ok: boolean; error?: string }>(
+          res,
+          "Không lưu được sản phẩm",
+        );
         if (!data.ok) throw new Error(data.error ?? "Không lưu được sản phẩm.");
         router.refresh();
       } catch (e) {
@@ -214,7 +242,7 @@ export default function ProductsAdmin({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind, patch: toPatch(patch) }),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string };
+      const data = await readJson<{ ok: boolean; error?: string }>(res, "Không tạo được sản phẩm");
       if (!data.ok) throw new Error(data.error ?? "Không tạo được sản phẩm.");
       router.refresh();
     } catch (e) {
@@ -494,16 +522,32 @@ function EditModal({
     const room = MAX - images.length;
     if (room <= 0) return;
 
-    const form = new FormData();
-    Array.from(files).slice(0, room).forEach((f) => form.append("file", f));
+    const picked = Array.from(files).slice(0, room);
 
     setUploading(true);
     setUploadError("");
     try {
-      const res = await fetch(API_UPLOAD, { method: "POST", body: form });
-      const data = (await res.json()) as { ok: boolean; urls?: string[]; error?: string };
-      if (!data.ok) throw new Error(data.error ?? "Không tải được ảnh lên.");
-      setImages((cur) => [...cur, ...(data.urls ?? [])].slice(0, MAX));
+      // MỖI ẢNH MỘT LƯỢT GỬI. Gộp 6 ảnh vào một yêu cầu thì tổng dung lượng vượt
+      // giới hạn 4.5MB của Vercel dù từng ảnh vẫn nhỏ — và hỏng là hỏng cả mẻ.
+      // Gửi lẻ thì ảnh nào lên được cứ lên, hỏng ảnh nào báo ảnh đó.
+      const urls: string[] = [];
+      for (const raw of picked) {
+        // Thu nhỏ trước khi gửi: ảnh điện thoại 3–12MB không tài nào lọt qua
+        // giới hạn hạ tầng, mà thu xong chỉ còn vài trăm KB.
+        const file = await shrinkImage(raw);
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(API_UPLOAD, { method: "POST", body: form });
+        const data = await readJson<{ ok: boolean; urls?: string[]; error?: string }>(
+          res,
+          `Không tải được "${raw.name}"`,
+        );
+        if (!data.ok) throw new Error(data.error ?? `Không tải được "${raw.name}".`);
+        urls.push(...(data.urls ?? []));
+        // Ghi vào ngay từng ảnh: gửi 6 ảnh mà ảnh cuối hỏng thì 5 ảnh trước vẫn
+        // còn, khỏi phải chọn lại từ đầu.
+        setImages((cur) => [...cur, ...(data.urls ?? [])].slice(0, MAX));
+      }
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Không tải được ảnh lên.");
     } finally {
