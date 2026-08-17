@@ -117,7 +117,8 @@ export default function Dashboard({ data }: { data: DashboardData }) {
 
         {/* kpi */}
         <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          <Kpi lab="Đã về" val={money(k.revenueKrw)} sub="đã CK + COD đã thu" tone="up" />
+          {/* Chỉ đếm tiền đã bấm "Đã thu tiền" — đơn mới đặt là chưa thu (§createOrder). */}
+          <Kpi lab="Đã về" val={money(k.revenueKrw)} sub='đã bấm "Đã thu tiền"' tone="up" />
           <Kpi
             lab="Khách vào web hôm nay"
             val={String(v.today)}

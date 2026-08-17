@@ -417,10 +417,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         parcel_index: i,
         parcel_count: shipments.length,
         status: "Mới",
-        // Trả trước = tiền thực của kiện, ở TIỀN TỆ NGƯỜI ĐẶT (§5) — cùng đơn vị
-        // với web_order.currency, nên cộng các kiện lại đúng bằng grand_total.
-        prepaid: parcel.total,
-        cod: 0,
+        // ĐƠN MỚI LÀ CHƯA THU ĐƯỢC ĐỒNG NÀO.
+        //
+        // Khách bấm đặt xong mới đi chuyển khoản, có người chuyển ngay, có người
+        // vài hôm sau, có người không chuyển. Nên toàn bộ tiền vào `cod` (tiền
+        // còn ở ngoài), `prepaid` để 0 (tiền đã nằm trong tay).
+        //
+        // Bản cũ ghi thẳng vào `prepaid`. Mà `prepaid` được mọi nơi — Thu chi,
+        // bảng điều hành, trang khách hàng — tính là TIỀN ĐÃ VỀ. Hậu quả: khách
+        // vừa bấm đặt là doanh thu đã nhảy lên, chưa ai trả đồng nào; nút "Đã thu
+        // tiền" bấm vào cũng không đổi được gì vì tiền đã bị tính rồi. Con số
+        // doanh thu vì thế luôn là số ĐƠN ĐÃ ĐẶT, không phải số TIỀN ĐÃ NHẬN.
+        //
+        // Tiền chỉ chuyển sang "đã về" khi anh chủ tự bấm "Đã thu tiền" — người
+        // duy nhất nhìn được sổ ngân hàng.
+        //
+        // Tiền ở TIỀN TỆ NGƯỜI ĐẶT (§5), cùng đơn vị với web_order.currency, nên
+        // cộng các kiện lại vẫn đúng bằng grand_total.
+        prepaid: 0,
+        cod: parcel.total,
         product_summary: parcel.items,
         consume: parcel.consume,
         stock_applied: true,

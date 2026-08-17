@@ -49,11 +49,19 @@ export default function ThuChiView() {
     return { rg, count: rows.length, rev };
   });
 
+  // Chữ trên thẻ phải nói đúng nguồn tiền. Đơn web giờ vào hết cột "chưa thu"
+  // (khách chuyển khoản sau khi đặt), nên gọi là "COD" thì sai — COD là shipper
+  // thu hộ. Một chữ "Chưa thu" đúng cho cả hai kiểu.
   const cards = [
-    { lab: "Đã về (CK + COD đã thu)", val: krw(received), tone: "text-emerald-600" },
-    { lab: "Trả trước (đã CK)", val: krw(t.prepaid) },
     {
-      lab: "COD chờ thu",
+      lab: "Đã về",
+      val: krw(received),
+      tone: "text-emerald-600",
+      hint: 'đã bấm "Đã thu tiền"',
+    },
+    { lab: "Trả trước (đã cọc)", val: krw(t.prepaid) },
+    {
+      lab: "Chưa thu",
       val: krw(pending),
       tone: pending > 0 ? "text-amber-600" : undefined,
       hint: waitingCount > 0 ? `${waitingCount} đơn chưa đánh dấu "Đã thu tiền"` : undefined,
@@ -110,8 +118,10 @@ export default function ThuChiView() {
           </table>
         </div>
         <p className="mt-3 text-[12px] text-slate-400">
-          Đơn huỷ / khách trả lại / đã hoàn tiền không tính vào doanh thu. Số tiền quy về ₩
-          theo tỉ giá đã chốt lúc tạo từng đơn.
+          Đơn mới đặt luôn nằm ở <b className="font-medium text-slate-600">Chưa thu</b> — khách
+          chuyển khoản sau khi đặt. Tiền chỉ sang <b className="font-medium text-slate-600">Đã về</b>
+          khi anh mở đơn và bấm &ldquo;Đã thu tiền&rdquo;. Đơn huỷ / khách trả lại / đã hoàn tiền
+          không tính vào doanh thu. Số tiền quy về ₩ theo tỉ giá đã chốt lúc tạo từng đơn.
         </p>
       </div>
     </main>
