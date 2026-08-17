@@ -344,6 +344,28 @@ export default function ProductCatalog({
     setCartCount(countCart(readCart().cart));
   }, []);
 
+  /**
+   * Popup chi tiết: bấm Esc để đóng, và khoá cuộn trang nền khi đang mở.
+   *
+   * Popup xem ảnh lớn đã có cả hai từ đầu, popup này thì quên — nên khách cuộn
+   * trong popup mà chạm mép là cuộn luôn trang đằng sau, popup trôi đi đâu mất.
+   * Cùng với việc nút Đóng cuộn mất (đã sửa bên dưới), đó là lý do "thi thoảng
+   * không thoát ra được".
+   */
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetail(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [detail]);
+
   /** Thêm vào giỏ ngay tại trang: trùng món thì cộng dồn số lượng, không chuyển trang. */
   function addToCart(key: string, line: Omit<CartLine, "uid" | "qty" | "recipientUids">) {
     const blob = readCart();
@@ -658,9 +680,26 @@ export default function ProductCatalog({
           onClick={() => setDetail(null)}
         >
           <div
-            className="max-h-[92vh] w-full max-w-app overflow-y-auto rounded-t-2xl border-t border-line bg-cream pb-8"
+            // max-h 86vh chứ không phải 92vh: chừa một dải nền thật ở trên đầu để
+            // bấm ra ngoài đóng được, và ảnh không dính sát header trang.
+            // overscroll-contain: cuộn hết popup thì DỪNG, không đẩy tiếp trang nền.
+            className="max-h-[86vh] w-full max-w-app overflow-y-auto overscroll-contain rounded-t-2xl border-t border-line bg-cream pb-8"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Nút Đóng DÍNH ĐẦU POPUP.
+                Trước đây nó nằm đè lên ảnh bên trong vùng cuộn, nên cuộn xuống
+                xem nhân là nút trôi mất — đúng lỗi "nút X biến mất". Bọc trong
+                một lớp sticky cao 0 để nút luôn thấy mà ảnh vẫn sát mép trên. */}
+            <div className="sticky top-0 z-10 h-0">
+              <button
+                onClick={() => setDetail(null)}
+                aria-label="Đóng"
+                className="absolute left-2.5 top-2.5 grid h-9 w-9 place-items-center rounded-full bg-black/55 text-[17px] leading-none text-white shadow-lg backdrop-blur"
+              >
+                ✕
+              </button>
+            </div>
+
             <div className="relative">
               <ImageArea
                 badge={detail.badge}
@@ -671,13 +710,6 @@ export default function ProductCatalog({
                   setLightbox({ images: imagesOf(`combo:${detail.id}`), index: i, title: detail.name })
                 }
               />
-              <button
-                onClick={() => setDetail(null)}
-                aria-label="Đóng"
-                className="absolute left-2.5 top-2.5 grid h-8 w-8 place-items-center rounded-full bg-black/45 text-[17px] leading-none text-white backdrop-blur"
-              >
-                ✕
-              </button>
             </div>
 
             <div className="px-4 pt-4">
