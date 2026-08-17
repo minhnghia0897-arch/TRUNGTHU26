@@ -24,6 +24,15 @@ export default function Dashboard({ data }: { data: DashboardData }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
 
   const fx = data.fxKrwVnd;
+
+  // Số khách vào web hôm nay tự nó không nói lên gì — 40 là nhiều hay ít? Nên
+  // dòng phụ luôn kèm hôm qua để có cái mà so, và số lượt xem để biết mỗi khách
+  // mở mấy trang.
+  const v = data.visitors;
+  const visitorSub =
+    v.today === 0 && v.viewsToday === 0
+      ? "chưa có ai hôm nay"
+      : `${v.viewsToday} lượt xem · hôm qua ${v.yesterday}`;
   const money = (krw: number) =>
     cur === "vnd"
       ? Math.round(krw * fx).toLocaleString("vi-VN") + "đ"
@@ -107,8 +116,13 @@ export default function Dashboard({ data }: { data: DashboardData }) {
         )}
 
         {/* kpi */}
-        <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           <Kpi lab="Đã về" val={money(k.revenueKrw)} sub="đã CK + COD đã thu" tone="up" />
+          <Kpi
+            lab="Khách vào web hôm nay"
+            val={String(v.today)}
+            sub={visitorSub}
+          />
           <Kpi lab="Số đơn web" val={String(k.orders)} sub={`${k.packages} kiện`} />
           <Kpi lab="Kiện theo vùng" val={`${k.pkgKr}🇰🇷 · ${k.pkgVn}🇻🇳`} sub="tách 2 kho" />
           <Kpi lab="Đang vận chuyển" val={String(k.shipping)} sub="đã gửi hàng" />

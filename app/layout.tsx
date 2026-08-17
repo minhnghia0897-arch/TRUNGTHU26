@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
+import TrackVisit from "@/components/TrackVisit";
 
 // Font §refresh — Be Vietnam Pro, subset vietnamese, tải thông minh (display swap).
 const beVietnam = Be_Vietnam_Pro({
@@ -22,7 +23,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className={beVietnam.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Đếm khách vào web (§0023). Không vẽ gì ra màn hình, tự bỏ qua khu quản trị. */}
+        <TrackVisit />
+      </body>
     </html>
   );
 }
