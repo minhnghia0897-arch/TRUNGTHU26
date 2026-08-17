@@ -1,4 +1,5 @@
 import { getServiceClient, isServiceRoleConfigured } from "./supabase/server";
+import { getVisitorStats, type VisitorStats } from "./analytics/pageViews";
 import { RELEASED_STATUS, type Status } from "./ordersMock";
 import type { Region } from "./types";
 
@@ -46,6 +47,8 @@ export interface DashboardData {
     lowStock: number;
     pushFailed: number;
   };
+  /** Khách vào web, đếm theo ngày giờ VN (§0023). */
+  visitors: VisitorStats;
   daily: { d: string; v: number }[]; // v = KRW
   inventory: DashInventory[]; // mirror Pancake
   customers: DashCustomer[];
@@ -67,6 +70,7 @@ export function pillFor(status: string): DashShipment["pill"] {
 const SEED: DashboardData = {
   fxKrwVnd: 18.5,
   kpi: { revenueKrw: 4_820_000, orders: 63, packages: 88, pkgVn: 34, pkgKr: 54, shipping: 21, lowStock: 2, pushFailed: 1 },
+  visitors: { today: 0, yesterday: 0, viewsToday: 0 },
   daily: [
     { d: "T2", v: 410_000 }, { d: "T3", v: 520_000 }, { d: "T4", v: 690_000 },
     { d: "T5", v: 640_000 }, { d: "T6", v: 880_000 }, { d: "T7", v: 1_120_000 }, { d: "CN", v: 560_000 },
@@ -104,7 +108,7 @@ export async function getDashboard(): Promise<DashboardData> {
   if (!isServiceRoleConfigured) return SEED;
   const sb = getServiceClient();
 
-  const [ordersRes, boxRes, flavorRes, comboRes] = await Promise.all([
+  const [ordersRes, boxRes, flavorRes, comboRes, visitors] = await Promise.all([
     sb
       .from("web_order")
       .select(
@@ -118,9 +122,12 @@ export async function getDashboard(): Promise<DashboardData> {
     sb.from("box").select("name, stock, active").eq("removed", false),
     sb.from("flavor").select("name, stock, active").eq("removed", false),
     sb.from("combo").select("name, stock, active").eq("removed", false),
+    // Số truy cập nằm ở bảng riêng, không dính gì tới đơn — nạp song song để
+    // không cộng thêm một vòng chờ vào thời gian mở bảng điều hành.
+    getVisitorStats(),
   ]);
 
-  if (ordersRes.error) return SEED;
+  if (ordersRes.error) return { ...SEED, visitors };
 
   type ShipRow = {
     fulfillment_region: string;
@@ -261,6 +268,7 @@ export async function getDashboard(): Promise<DashboardData> {
       // Chưa nối Pancake nên không có gì để đếm. Trước đây hiện 1 lỗi giả.
       pushFailed: 0,
     },
+    visitors,
     daily,
     inventory,
     customers,
