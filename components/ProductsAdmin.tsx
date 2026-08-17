@@ -10,6 +10,7 @@ import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
 
 const API_PRODUCTS = "/api/dashboard/products";
 const API_UPLOAD = "/api/dashboard/upload";
+const API_CONVERT = "/api/dashboard/products/convert";
 
 /**
  * Đọc trả lời của API mà KHÔNG tin chắc đó là JSON.
@@ -431,6 +432,9 @@ export default function ProductsAdmin({
           flavors={flavors}
           onSave={handleSave}
           onDelete={!draft ? () => removeAny(editing.key) : undefined}
+          // Đổi loại xong thì khoá sản phẩm cũng đổi, bản đang mở không còn tồn
+          // tại — nạp lại danh sách để bảng hiện đúng loại mới.
+          onConverted={() => router.refresh()}
           onClose={() => { setDraft(null); setEditKey(null); }}
         />
       )}
@@ -480,6 +484,7 @@ function EditModal({
   flavors,
   onSave,
   onDelete,
+  onConverted,
   onClose,
 }: {
   product: Product;
@@ -487,6 +492,7 @@ function EditModal({
   flavors: Flavor[];
   onSave: (patch: Override) => void;
   onDelete?: () => void;
+  onConverted?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(product.name);
@@ -511,6 +517,50 @@ function EditModal({
 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+
+  // --- đổi loại sản phẩm ---
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
+
+  /**
+   * Đổi loại = DỜI SẢN PHẨM SANG BẢNG KHÁC, không phải đổi một cái nhãn. Khoá
+   * sản phẩm đổi theo, nên máy chủ từ chối nếu sản phẩm đã nằm trong đơn đã bán
+   * hoặc đang bị set nào dùng — lúc đó hiện thẳng câu máy chủ trả về.
+   */
+  const convertTo = async (t: Product["type"]) => {
+    if (t === product.type) return;
+    const toKind = t === "Hộp" ? "box" : t === "Combo" ? "combo" : "flavor";
+    if (
+      !confirm(
+        `Đổi "${product.name}" từ ${product.type} sang ${t}?\n\n` +
+          `Những mục riêng của ${product.type} sẽ mất (VD số ô trong hộp, danh sách vị của set). ` +
+          `Ảnh, giá, tồn kho và ghi chú thì giữ nguyên.`,
+      )
+    )
+      return;
+
+    setConverting(true);
+    setConvertError("");
+    try {
+      const res = await fetch(API_CONVERT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: product.key, toKind }),
+      });
+      const data = await readJson<{ ok: boolean; error?: string; dropped?: string[] }>(
+        res,
+        "Không đổi được loại sản phẩm",
+      );
+      if (!data.ok) throw new Error(data.error ?? "Không đổi được loại sản phẩm.");
+      if (data.dropped?.length) alert(`Đã đổi sang ${t}. Mục không mang theo được: ${data.dropped.join(", ")}.`);
+      onConverted?.();
+      onClose();
+    } catch (e) {
+      setConvertError(e instanceof Error ? e.message : "Không đổi được loại sản phẩm.");
+    } finally {
+      setConverting(false);
+    }
+  };
 
   /**
    * Đẩy ảnh lên Supabase Storage rồi lưu URL.
@@ -594,11 +644,33 @@ function EditModal({
       <div className="my-4 w-full max-w-2xl rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
           <h3 className="text-[15px] font-semibold text-slate-800">{create ? "Tạo sản phẩm" : "Thiết lập sản phẩm"}</h3>
-          <span className="text-[12px] text-slate-400">· {product.type}</span>
+          {create ? (
+            // Lúc tạo thì loại đã chọn ở bước trước, chưa có gì trong database để dời.
+            <span className="text-[12px] text-slate-400">· {product.type}</span>
+          ) : (
+            <select
+              value={product.type}
+              disabled={converting}
+              onChange={(e) => void convertTo(e.target.value as Product["type"])}
+              title="Đổi loại sản phẩm"
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] text-slate-600 disabled:opacity-50"
+            >
+              <option value="Hộp">Hộp</option>
+              <option value="Combo">Combo</option>
+              <option value="Vị">Vị</option>
+            </select>
+          )}
+          {converting && <span className="text-[12px] text-slate-400">Đang đổi…</span>}
           <button onClick={onClose} className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100">
             <IconXCircle width={20} height={20} />
           </button>
         </div>
+
+        {convertError && (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-2.5 text-[12.5px] text-rose-600">
+            {convertError}
+          </div>
+        )}
 
         <div className="max-h-[74vh] space-y-4 overflow-y-auto p-5">
           {/* ảnh sản phẩm */}
