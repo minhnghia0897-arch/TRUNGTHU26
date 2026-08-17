@@ -166,7 +166,15 @@ export async function createProduct(
 // ------------------------------------------------------------------ ảnh
 const BUCKET = "product-images";
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]);
-const MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * PHẢI THẤP HƠN giới hạn thân yêu cầu của Vercel (4.5MB).
+ *
+ * Trước đây để 5MB — tức là CAO HƠN — nên với ảnh 4.5–5MB thì hạ tầng chặn
+ * trước, trả chuỗi chữ "Request Entity Too Large", và câu báo lỗi tử tế bằng
+ * tiếng Việt ngay dưới đây không bao giờ chạy tới. Chốt chặn nằm cao hơn chốt
+ * chặn thật thì chỉ là trang trí.
+ */
+const MAX_BYTES = 4 * 1024 * 1024;
 
 const EXT: Record<string, string> = {
   "image/jpeg": "jpg",
