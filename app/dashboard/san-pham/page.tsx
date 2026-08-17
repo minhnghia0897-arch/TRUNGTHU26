@@ -1,6 +1,7 @@
 import { getBoxes, getFlavors, getCombos, getWarehouses } from "@/lib/catalog";
 import { getAllProducts } from "@/lib/products/productStore";
 import { getWarehousesForAdmin } from "@/lib/products/shipping";
+import { getBankQrVn } from "@/lib/products/bankQr";
 import ProductsAdmin from "@/components/ProductsAdmin";
 
 export const metadata = { title: "Doran King — Sản phẩm" };
@@ -15,6 +16,7 @@ export default async function SanPhamAdmin() {
     ? [all.boxes, all.flavors, all.combos]
     : await Promise.all([getBoxes(), getFlavors(), getCombos()]);
   const warehouses = (await getWarehousesForAdmin()) ?? (await getWarehouses());
+  const bankQrVn = await getBankQrVn();
 
   return (
     <ProductsAdmin
@@ -23,6 +25,7 @@ export default async function SanPhamAdmin() {
       combos={combos}
       warehouses={warehouses}
       connected={Boolean(all)}
+      bankQrVn={bankQrVn}
     />
   );
 }
