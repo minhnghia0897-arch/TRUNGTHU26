@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_PRODUCT_IMAGES, type Box, type Flavor, type Combo, type Warehouse } from "@/lib/types";
 import ShippingSettings from "./ShippingSettings";
+import BankQrSettings from "./BankQrSettings";
 import { boxPrice, comboPrice } from "@/lib/pricing";
 import { shrinkImage } from "@/lib/products/imageResize";
 import { IconXCircle, IconShirt, IconGift, IconCart } from "@/components/icons";
@@ -110,6 +111,7 @@ export default function ProductsAdmin({
   combos,
   warehouses,
   connected = false,
+  bankQrVn = "",
 }: {
   boxes: Box[];
   flavors: Flavor[];
@@ -117,6 +119,8 @@ export default function ProductsAdmin({
   warehouses: Warehouse[];
   /** Đã nối cơ sở dữ liệu chưa. Chưa nối thì mọi thay đổi không lưu được. */
   connected?: boolean;
+  /** Ảnh QR ngân hàng VN đang dùng ở trang thanh toán. */
+  bankQrVn?: string;
 }) {
   const router = useRouter();
   // Lớp phủ tạm để màn hình phản hồi ngay khi bấm lưu; nguồn thật là database,
@@ -323,7 +327,12 @@ export default function ProductsAdmin({
           {saveError}
         </div>
       )}
-      {!showTrash && <ShippingSettings warehouses={warehouses} connected={connected} />}
+      {!showTrash && (
+        <>
+          <ShippingSettings warehouses={warehouses} connected={connected} />
+          <BankQrSettings initialUrl={bankQrVn} />
+        </>
+      )}
       {saving && (
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-2 text-[12px] text-slate-500">
           Đang lưu…

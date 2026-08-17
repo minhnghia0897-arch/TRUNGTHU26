@@ -100,6 +100,7 @@ export default function OrderFlow({
   combos,
   warehouses,
   fx,
+  bankQrVn,
   initial,
 }: {
   boxes: Box[];
@@ -107,6 +108,8 @@ export default function OrderFlow({
   combos: Combo[];
   warehouses: Warehouse[];
   fx: number;
+  /** Ảnh QR ngân hàng shop tự tải. Rỗng → dùng QR VietQR tự dựng (có sẵn số tiền). */
+  bankQrVn?: string;
   initial?: InitialSelection;
 }) {
   const [step, setStep] = useState<number>(1);
@@ -1104,8 +1107,10 @@ export default function OrderFlow({
                 <span>{fmt(bill.grand)}</span>
               </div>
             </div>
+            {/* Không hiện con số tỉ giá: khách chỉ cần biết mình trả bao nhiêu ở
+                tiền tệ của mình. Tỉ giá vẫn dùng để tính, chỉ là không trưng ra. */}
             <p className="mt-2 text-[11px] opacity-65">
-              Một bill · một tiền tệ theo người đặt · tách kho theo người nhận. Tỉ giá chốt 1₩ = {fx}đ.
+              Một bill · một tiền tệ theo người đặt · tách kho theo người nhận.
             </p>
 
             <MessengerShareBox onShare={shareToMessenger} />
@@ -1188,10 +1193,17 @@ export default function OrderFlow({
                 </span>
               </div>
               <p className="mt-2 text-[11px] text-[#b8862f]">Chuyển tới <b>một trong hai</b> tài khoản dưới · ghi đúng nội dung CK ở trên.</p>
+              {/* TK Hàn ĐỨNG TRƯỚC: khách trả tiền Hàn là chủ yếu, nên cái hay
+                  dùng phải nằm trên, không bắt cuộn qua cái ít dùng. */}
               <div className="mt-3">
-                <BankCard data={BANKS.vn} primary={buyerRegion === "vn"} qrUrl={vietqrUrl(buyerRegion === "vn" ? done.grandTotal : undefined)} />
-                <div className="h-3" />
                 <BankCard data={BANKS.kr} primary={buyerRegion === "kr"} />
+                <div className="h-3" />
+                <BankCard
+                  data={BANKS.vn}
+                  primary={buyerRegion === "vn"}
+                  qrUrl={bankQrVn || vietqrUrl(buyerRegion === "vn" ? done.grandTotal : undefined)}
+                  qrHasAmount={!bankQrVn && buyerRegion === "vn"}
+                />
               </div>
             </div>
 
@@ -1454,10 +1466,13 @@ function BankCard({
   data,
   primary,
   qrUrl,
+  qrHasAmount,
 }: {
   data: { title: string; bank: string; number: string; holder: string };
   primary?: boolean;
   qrUrl?: string;
+  /** QR tự dựng đã kèm số tiền; ảnh shop tải lên thì không — phải nói cho khách biết. */
+  qrHasAmount?: boolean;
 }) {
   return (
     <div className={`rounded-lg border p-4 ${primary ? "border-gold bg-[#fffdf7]" : "border-line bg-white"}`}>
@@ -1483,7 +1498,11 @@ function BankCard({
               ⤓ Tải mã QR
             </a>
           </div>
-          <p className="mt-1 text-[10.5px] opacity-55">Quét bằng app ngân hàng · hoặc chụp màn hình lại</p>
+          <p className="mt-1 text-[10.5px] opacity-55">
+            {qrHasAmount
+              ? "Quét bằng app ngân hàng · đã điền sẵn số tiền"
+              : "Quét bằng app ngân hàng · nhớ tự nhập số tiền và nội dung CK"}
+          </p>
         </div>
       )}
 

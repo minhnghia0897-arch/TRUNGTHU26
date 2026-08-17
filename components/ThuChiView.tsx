@@ -5,7 +5,6 @@ import { rowKrw } from "@/lib/orders/orderSchema";
 import { useOrders } from "@/components/useOrders";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 
-const FX = 18.5;
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 
 export default function ThuChiView() {
@@ -66,7 +65,7 @@ export default function ThuChiView() {
     <main className="min-h-screen bg-slate-50">
       <header className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-5">
         <h1 className="text-[15px] font-semibold text-slate-800">Thu chi</h1>
-        <span className="text-[13px] text-slate-400">Hợp nhất theo ₩ (fx {FX})</span>
+        <span className="text-[13px] text-slate-400">Hợp nhất theo ₩</span>
         {webCount > 0 && (
           <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
             gồm {webCount} đơn web/tạo tay
