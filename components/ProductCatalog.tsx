@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MAX_PRODUCT_IMAGES, type Badge, type Box, type Combo, type Flavor, type Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
-import { boxPrice, flavorRetailPrice, flavorSurcharge, type CartLine, comboPrice, comboOptions } from "@/lib/pricing";
+import {
+  boxPrice,
+  flavorRetailPrice,
+  flavorSurcharge,
+  findFlavorByName,
+  type CartLine,
+  comboPrice,
+  comboOptions,
+} from "@/lib/pricing";
 import {
   IconLotus,
   IconCrown,
@@ -67,6 +75,47 @@ function Price({ v, region }: { v: number; region: Region }) {
     <span className="price-lg text-lg">
       {s} <span className="unit">/ hộp</span>
     </span>
+  );
+}
+
+/**
+ * Một dòng vị bánh trong popup chi tiết: ảnh vuông 48px + tên.
+ *
+ * Dùng chung cho CẢ HAI danh sách vị — "Gồm N vị" (set một giá, có sẵn id vị) và
+ * "Chọn loại nhân" (set nhiều lựa chọn, chỉ có tên dạng chữ). Hai chỗ đó trước
+ * đây lặp cùng một khối dấu chấm đầu dòng; gom về một chỗ để sau này đổi cỡ ảnh
+ * là đổi một lần.
+ *
+ * CHƯA CÓ ẢNH LÀ TRẠNG THÁI THƯỜNG GẶP, không phải ngoại lệ: hiện cả 14 vị trong
+ * danh mục đều chưa có ảnh nào. Nên ô giữ chỗ phải cùng cỡ, cùng bo góc với ảnh
+ * thật — trộn vị có ảnh với vị chưa có thì hàng vẫn thẳng — và trông ra dáng chứ
+ * không phải ô xám: hoa văn khuôn bánh chìm + chữ cái đầu của vị.
+ */
+function FlavorRow({ name, img }: { name: string; img?: string }) {
+  return (
+    <li className="flex items-center gap-3 text-[12.5px] text-ink/75">
+      {img ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={img}
+          alt={name}
+          className="h-12 w-12 flex-none rounded-lg border border-line object-cover"
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="grid h-12 w-12 flex-none place-items-center rounded-lg border border-line bg-cream-soft font-serif text-[17px] font-bold text-gold"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 50% 50%, rgba(198,162,76,0.18) 0 38%, transparent 39%)," +
+              "repeating-conic-gradient(from 0deg at 50% 50%, rgba(198,162,76,0.14) 0deg 14deg, transparent 14deg 28deg)",
+          }}
+        >
+          {name.trim().charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className="min-w-0">{name}</span>
+    </li>
   );
 }
 
@@ -644,22 +693,20 @@ export default function ProductCatalog({
                 // Set một giá (VD Sắc Đỏ): liệt kê thẳng các vị trong hộp.
                 if (!opts.length) {
                   const price = comboPrice(detail, boxes, flavors, region);
-                  const names = detail.flavor_ids
-                    .map((fid) => flavors.find((x) => x.id === fid)?.name)
-                    .filter(Boolean) as string[];
+                  // Danh sách này có sẵn id vị nên lấy ảnh thẳng, không phải dò tên.
+                  const picked = detail.flavor_ids
+                    .map((fid) => flavors.find((x) => x.id === fid))
+                    .filter(Boolean) as Flavor[];
                   return (
                     <>
-                      {names.length > 0 && (
+                      {picked.length > 0 && (
                         <div className="mt-4">
                           <div className="text-[11px] font-semibold uppercase tracking-wide text-navy/50">
-                            Gồm {names.length} vị
+                            Gồm {picked.length} vị
                           </div>
-                          <ul className="mt-1.5 space-y-1">
-                            {names.map((n) => (
-                              <li key={n} className="flex gap-2 text-[12.5px] text-ink/75">
-                                <span className="text-gold">•</span>
-                                {n}
-                              </li>
+                          <ul className="mt-2 space-y-2">
+                            {picked.map((f) => (
+                              <FlavorRow key={f.id} name={f.name} img={imagesOf(`flavor:${f.id}`)[0]} />
                             ))}
                           </ul>
                         </div>
@@ -716,12 +763,17 @@ export default function ProductCatalog({
                               <span className="price-lg text-[15px]">{formatMoney(o.price, region)}</span>
                             </div>
                             {vi.length > 0 && (
-                              <ul className="mt-2 space-y-1">
+                              <ul className="mt-2.5 space-y-2">
                                 {vi.map((n) => (
-                                  <li key={n} className="flex gap-2 text-[12px] text-ink/70">
-                                    <span className="text-gold">•</span>
-                                    {n}
-                                  </li>
+                                  <FlavorRow
+                                    key={n}
+                                    name={n}
+                                    // `contents` chỉ là chữ nên phải dò ngược ra vị mới có
+                                    // ảnh. Dò trượt → `undefined` → ô giữ chỗ, tên vẫn còn.
+                                    img={
+                                      imagesOf(`flavor:${findFlavorByName(n, flavors)?.id ?? ""}`)[0]
+                                    }
+                                  />
                                 ))}
                               </ul>
                             )}
