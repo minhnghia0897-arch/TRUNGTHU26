@@ -1,15 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { OrderRow, Status } from "@/lib/ordersMock";
 import { STATUS_COLOR, PIPELINE } from "@/lib/ordersMock";
 import { messengerInboxUrl } from "@/lib/messenger";
-import { displayCode } from "@/lib/orders/orderSchema";
+import { currencyOfRow, displayCode, type StoredOrder } from "@/lib/orders/orderSchema";
+import {
+  describeItems,
+  itemName,
+  itemsGoods,
+  itemsFromConsume,
+  type OrderItem,
+} from "@/lib/orders/orderItems";
+import { sellableItems } from "@/lib/pricing";
+import type { Box, Combo, Currency, Flavor, Region } from "@/lib/types";
 import {
   IconFacebook,
   IconGlobe,
   IconStore,
   IconXCircle,
+  IconPlus,
+  IconTrash,
 } from "@/components/icons";
 
 export interface HistoryEntry {
@@ -21,8 +32,14 @@ export interface HistoryEntry {
 const ALL_STATUS: Status[] = [...PIPELINE, "Khách trả lại", "Đã hoàn toàn bộ", "Huỷ đơn"];
 const CARRIERS = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile"];
 
-const nat = (v: number, region: "vn" | "kr") =>
-  region === "kr" ? "₩" + v.toLocaleString("en-US") : v.toLocaleString("vi-VN") + "đ";
+/**
+ * Tiền theo TIỀN TỆ CỦA ĐƠN, không theo kho giao.
+ *
+ * Người ở Hàn đặt quà gửi về Việt Nam thì kho là VN nhưng đơn tính bằng ₩ (§5).
+ * Format theo kho như trước là mọi con số trong popup đổi mặt tiền tệ.
+ */
+const nat = (v: number, cur: Currency) =>
+  cur === "krw" ? "₩" + Math.round(v).toLocaleString("en-US") : Math.round(v).toLocaleString("vi-VN") + "đ";
 
 /**
  * Ai đặt đơn Facebook này.
@@ -108,15 +125,25 @@ function SrcBadge({ s }: { s: OrderRow["source"] }) {
   );
 }
 
+/** Bản nháp đang sửa trong popup — có thêm hàng trong kiện so với dòng bảng. */
+type Draft = OrderRow & { items?: OrderItem[] };
+
 export default function OrderDetailModal({
   order,
   history,
+  boxes,
+  flavors,
+  combos,
   fbPageId,
   onSave,
   onClose,
 }: {
   order: OrderRow;
   history: HistoryEntry[];
+  /** Danh mục ĐẦY ĐỦ (kể cả hàng đã tắt bán) — để gọi đúng tên món trong đơn cũ. */
+  boxes: Box[];
+  flavors: Flavor[];
+  combos: Combo[];
   /** ID Trang Facebook — không có thì không mở được cuộc chat, chỉ hiện tên. */
   fbPageId?: string;
   onSave: (updated: OrderRow, changes: string[]) => void;
@@ -124,19 +151,130 @@ export default function OrderDetailModal({
 }) {
   // Chuẩn hoá ngay lúc mở: COD = tổng − đã cọc, theo đúng định nghĩa.
   // Đơn dính lỗi cũ (COD gõ tay làm đơn dày thêm) tự về đúng, bấm Lưu là xong.
-  const [d, setD] = useState<OrderRow>(() => {
+  const [d, setD] = useState<Draft>(() => {
     const ship = order.shipFee ?? 0;
     const goodsAmt = order.goodsAmount ?? Math.max(0, order.prepaid + order.cod - ship);
     const tong = goodsAmt + ship;
     const daCoc = Math.min(Math.max(0, order.prepaid), tong);
-    return { ...order, prepaid: daCoc, cod: tong - daCoc };
+    // `items` cố ý BỎ RA KHỎI bản nháp: có mặt trong gói gửi đi là máy chủ hiểu
+    // "sửa hàng" và viết lại toàn bộ dòng hàng của kiện — kể cả khi anh chỉ gõ
+    // một chữ vào ô ghi chú. Nó chỉ được gắn lại lúc lưu, và chỉ khi đã sửa.
+    return { ...order, items: undefined, prepaid: daCoc, cod: tong - daCoc };
   });
   const [saved, setSaved] = useState(false);
-  const money = (v: number) => nat(v, d.region);
+
+  const cur = currencyOfRow(order);
+  const money = (v: number) => nat(v, cur);
   const set = <K extends keyof OrderRow>(k: K, v: OrderRow[K]) => {
     setD((o) => ({ ...o, [k]: v }));
     setSaved(false);
   };
+
+  // ---- hàng trong kiện ----
+  // Giá theo vùng NGƯỜI ĐẶT, suy từ tiền tệ của đơn — không phải kho giao.
+  const buyer: Region = cur === "krw" ? "kr" : "vn";
+  const cat = useMemo(() => ({ boxes, combos, flavors }), [boxes, combos, flavors]);
+  const shipFee = d.shipFee ?? 0;
+  // Mốc CỦA ĐƠN ĐANG LƯU, không phải của bản nháp — có nó mới hiện được "cũ →
+  // mới" và biết tiền hàng đã đổi bao nhiêu.
+  const storedGoods = order.goodsAmount ?? Math.max(0, order.prepaid + order.cod - shipFee);
+
+  /**
+   * Dòng hàng đọc từ `order_line`; đơn tạo tay chưa có dòng nào thì dựng tạm từ
+   * tiêu hao kho.
+   */
+  const readItems = (o: OrderRow): OrderItem[] =>
+    (o as StoredOrder).items?.length
+      ? (o as StoredOrder).items!
+      : itemsFromConsume(o.consume, o.goodsAmount ?? storedGoods, cat, buyer);
+
+  const [items, setItems] = useState<OrderItem[]>(() => readItems(order));
+  /** Bản gốc để so ra "đã sửa những gì" khi ghi vào lịch sử. */
+  const [base, setBase] = useState<OrderItem[]>(items);
+  /**
+   * Đã đụng vào hàng chưa.
+   *
+   * Chưa đụng thì TIỀN HÀNG GIỮ NGUYÊN con số đã chốt lúc đặt, kể cả khi bảng
+   * giá hôm nay khác. Mở popup ra xem mà đơn tự đổi tiền là đúng cái lỗi từng
+   * làm đơn dày thêm mỗi lần bấm vào.
+   */
+  const [itemsDirty, setItemsDirty] = useState(false);
+
+  /**
+   * Lưu xong, đơn tải lại về thì lấy lại dòng hàng THẬT của database.
+   *
+   * Món vừa thêm lúc này mới có `lineId`; không nhận lại thì lần sửa tiếp theo
+   * trong cùng phiên coi nó là món mới lần nữa — dòng cũ bị xoá, dòng mới chèn
+   * vào và ăn theo bảng giá hiện tại thay vì giá vừa chốt.
+   */
+  useEffect(() => {
+    if (!saved) return;
+    const fresh = (order as StoredOrder).items;
+    if (!fresh?.length) return;
+    setItems(fresh);
+    setBase(fresh);
+    setItemsDirty(false);
+  }, [order, saved]);
+
+  // Món bán được để chọn thêm. Món trong đơn cũ đã ngừng bán không nằm trong
+  // danh sách này — chỗ dựng <select> tự chèn thêm để không nhảy sang món khác.
+  const picker = useMemo(
+    () => sellableItems(combos, boxes, flavors, buyer),
+    [combos, boxes, flavors, buyer],
+  );
+  const optValue = (it: Pick<OrderItem, "key" | "variant">) => `${it.key}|${it.variant ?? ""}`;
+  const options = useMemo(
+    () =>
+      picker.map((s) => ({
+        value: `${s.consumeKey}|${s.variantName ?? ""}`,
+        label: `${s.label} — ${nat(s.price, cur)}`,
+        key: s.consumeKey,
+        variant: s.variantName,
+        price: s.price,
+      })),
+    [picker, cur],
+  );
+
+  /** Sửa hàng thì tiền hàng, tóm tắt và cách chia tiền phải đi theo ngay. */
+  const commitItems = (next: OrderItem[]) => {
+    const goods = itemsGoods(next);
+    const tong = goods + shipFee;
+    setItems(next);
+    setItemsDirty(true);
+    setD((o) => {
+      const daCoc = Math.min(Math.max(0, o.prepaid), tong);
+      return {
+        ...o,
+        goodsAmount: goods,
+        product: describeItems(next, cat),
+        prepaid: daCoc,
+        cod: tong - daCoc,
+      };
+    });
+    setSaved(false);
+  };
+
+  const setQty = (i: number, qty: number) =>
+    commitItems(items.map((it, j) => (j === i ? { ...it, qty: Math.max(1, Math.floor(qty) || 1) } : it)));
+
+  /** Đổi món của một dòng = bỏ dòng cũ, thêm dòng mới → giá lấy từ bảng giá. */
+  const setProduct = (i: number, value: string) => {
+    const opt = options.find((o) => o.value === value);
+    if (!opt) return;
+    commitItems(
+      items.map((it, j) =>
+        j === i ? { key: opt.key, variant: opt.variant, qty: it.qty, unitPrice: opt.price } : it,
+      ),
+    );
+  };
+
+  const addItem = () => {
+    const opt = options[0];
+    if (!opt) return;
+    commitItems([...items, { key: opt.key, variant: opt.variant, qty: 1, unitPrice: opt.price }]);
+  };
+
+  const removeItem = (i: number) => commitItems(items.filter((_, j) => j !== i));
 
   // TỔNG PHẢI THU LẤY TỪ GIÁ NIÊM YẾT LÚC ĐẶT, không suy từ cách chia tiền.
   //
@@ -146,8 +284,10 @@ export default function OrderDetailModal({
   // hai đều chốt lúc tạo đơn theo bảng giá (§0013).
   //
   // Đơn cũ chưa có goods_amount thì lùi về prepaid + cod như trước.
-  const shipFee = d.shipFee ?? 0;
-  const goods = d.goodsAmount ?? Math.max(0, order.prepaid + order.cod - shipFee);
+  //
+  // Sửa hàng xong thì mốc là tổng tiền của các dòng hàng — máy chủ cũng tính lại
+  // đúng như vậy từ danh mục, nên hai bên không lệch nhau.
+  const goods = itemsDirty ? itemsGoods(items) : storedGoods;
   const total = goods + shipFee;
 
 
@@ -179,6 +319,10 @@ export default function OrderDetailModal({
     cmp("NV chăm sóc", order.assignee, d.assignee);
     cmp("Trả trước", order.prepaid, d.prepaid, (x: number) => money(x));
     cmp("COD", order.cod, d.cod, (x: number) => money(x));
+    if (itemsDirty) {
+      cmp("Hàng", describeItems(base, cat) || order.product || "—", describeItems(items, cat));
+      cmp("Tiền hàng", storedGoods, goods, (x: number) => money(x));
+    }
     return out;
   }
 
@@ -188,7 +332,9 @@ export default function OrderDetailModal({
       setSaved(true);
       return;
     }
-    onSave(d, changes);
+    // `items` chỉ gửi kèm khi anh thật sự sửa hàng — gửi luôn thì mỗi lần lưu
+    // ghi chú cũng viết lại toàn bộ dòng hàng của đơn.
+    onSave(itemsDirty ? { ...d, items } : d, changes);
     setSaved(true);
   }
 
@@ -230,20 +376,95 @@ export default function OrderDetailModal({
           {/* LEFT */}
           <div className="space-y-4">
             <Card title="Sản phẩm">
-              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
-                <div className="grid h-14 w-14 flex-none place-items-center rounded-lg bg-cream-soft text-2xl text-gold/50">❋</div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-emerald-600">{d.vc || displayCode(d)}</div>
-                  <div className="truncate text-[14px] font-medium text-slate-800">{d.product ?? "Set bánh Trung Thu (6 vị)"}</div>
-                  <div className="mt-0.5 text-[12px] text-slate-400">Thuế 0% · KM {money(0)}</div>
+              {items.length === 0 ? (
+                <p className="mb-2 rounded-lg border border-dashed border-slate-200 px-3 py-3 text-[13px] text-slate-400">
+                  Đơn này chưa ghi món nào. Bấm <b>Thêm món</b> để ghi hàng vào đơn.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {items.map((it, i) => {
+                    const known = options.some((o) => o.value === optValue(it));
+                    return (
+                      <div key={it.lineId ?? `${it.key}-${i}`} className="rounded-lg border border-slate-200 p-2">
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={optValue(it)}
+                            onChange={(e) => setProduct(i, e.target.value)}
+                            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-800 outline-none focus:border-blue-400"
+                          >
+                            {/* Món đã ngừng bán vẫn phải có mặt, không thì <select>
+                                tự nhảy sang món đầu danh sách và đơn đổi hàng. */}
+                            {!known && (
+                              <option value={optValue(it)}>{itemName(it, cat)} (ngừng bán)</option>
+                            )}
+                            {options.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min={1}
+                            value={it.qty}
+                            onChange={(e) => setQty(i, Number(e.target.value))}
+                            title="Số lượng"
+                            className="w-16 flex-none rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-center text-[13px] font-medium text-slate-800 outline-none focus:border-blue-400"
+                          />
+                          {/* Đơn trống thì máy chủ từ chối lưu, nên chặn ngay ở
+                              đây thay vì để bấm rồi mới báo lỗi. */}
+                          <button
+                            onClick={() => removeItem(i)}
+                            disabled={items.length < 2}
+                            title={
+                              items.length < 2
+                                ? "Đơn phải còn ít nhất một món — muốn bỏ hẳn thì xoá đơn."
+                                : "Bỏ món này khỏi đơn"
+                            }
+                            className="grid h-8 w-8 flex-none place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-200 disabled:hover:bg-transparent"
+                          >
+                            <IconTrash width={16} height={16} />
+                          </button>
+                        </div>
+                        <div className="mt-1 flex justify-between px-0.5 text-[12px] text-slate-400">
+                          <span>{money(it.unitPrice)} × {it.qty}</span>
+                          <span className="font-medium text-slate-600">{money(it.unitPrice * it.qty)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-right">
-                  <div className="text-[15px] font-semibold text-slate-800">{money(goods)}</div>
-                  {shipFee > 0 && (
-                    <div className="mt-0.5 text-[11.5px] text-slate-400">+ ship {money(shipFee)}</div>
+              )}
+
+              {options.length > 0 ? (
+                <button
+                  onClick={addItem}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  <IconPlus width={14} height={14} /> Thêm món
+                </button>
+              ) : (
+                <p className="mt-2 text-[12px] text-amber-700">
+                  Danh mục chưa có món nào bán được ở vùng này — vào trang Sản phẩm đặt giá trước.
+                </p>
+              )}
+
+              <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[13px]">
+                <span className="text-slate-500">
+                  Tiền hàng
+                  {itemsDirty && storedGoods !== goods && (
+                    <span className="ml-1 text-[12px] text-slate-400 line-through">{money(storedGoods)}</span>
                   )}
-                </div>
+                </span>
+                <span className="text-[15px] font-semibold text-slate-800">{money(goods)}</span>
               </div>
+              {itemsDirty && (
+                <p className="mt-1 text-[11.5px] text-amber-700">
+                  Bấm <b>Lưu thay đổi</b> mới ghi vào đơn — kho tự trừ/hoàn đúng phần chênh.
+                </p>
+              )}
+              <p className="mt-1 text-[11.5px] text-slate-400">
+                Món đã có giữ đơn giá chốt lúc đặt; món mới thêm lấy giá hiện tại trong bảng giá.
+                {d.vc ? ` · Mã VC ${d.vc}` : ""}
+              </p>
             </Card>
 
             <Card title="Thanh toán">

@@ -6,6 +6,7 @@ import OrderDetailModal from "@/components/OrderDetailModal";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders } from "@/components/useOrders";
 import { displayCode, rowKrw, type StoredOrder } from "@/lib/orders/orderSchema";
+import type { Box, Combo, Flavor } from "@/lib/types";
 
 const krw = (v: number) => "₩" + Math.round(v).toLocaleString("en-US");
 // đơn huỷ/trả/hoàn không tính vào tổng chi tiêu
@@ -29,7 +30,18 @@ type Group = {
   spentKrw: number;
 };
 
-export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
+export default function CustomersView({
+  boxes,
+  flavors,
+  combos,
+  fbPageId,
+}: {
+  /** Danh mục cho popup chi tiết — sửa hàng trong đơn cần đúng tên và giá món. */
+  boxes: Box[];
+  flavors: Flavor[];
+  combos: Combo[];
+  fbPageId?: string;
+}) {
   // Cùng nguồn với trang Đơn hàng. Trước đây trang này chỉ ghi vào bản "đã sửa"
   // mà không ghi lại kho đơn, nên sửa ở đây xong hai trang hiển thị lệch nhau.
   const store = useOrders();
@@ -221,6 +233,9 @@ export default function CustomersView({ fbPageId }: { fbPageId?: string }) {
           <OrderDetailModal
             order={order}
             history={history[order.id] ?? []}
+            boxes={boxes}
+            flavors={flavors}
+            combos={combos}
             fbPageId={fbPageId}
             onSave={saveOrder}
             onClose={() => setDetailId(null)}

@@ -400,6 +400,7 @@ export default function OrdersTable({
               <Th>Người nhận</Th>
               <Th>SĐT</Th>
               <Th>Nhận hàng</Th>
+              <Th className="text-right">Tổng bill</Th>
               <Th className="text-right">Trả trước</Th>
               <Th>Trạng thái</Th>
             </tr>
@@ -450,6 +451,13 @@ export default function OrdersTable({
                 <Td className="max-w-[190px] truncate text-slate-600" title={r.address}>
                   <span className="mr-1">{r.region === "kr" ? "🇰🇷" : "🇻🇳"}</span>
                   {r.address}
+                </Td>
+                {/* Tổng tiền của CHÍNH đơn này = trả trước + COD. Hai cột đó chỉ là
+                    cách chia một số tiền thành "đã thu" và "chưa thu", nên nhìn
+                    riêng cột nào cũng ra số khác nhau tuỳ đơn đã thu hay chưa —
+                    cùng cách tính với dòng tổng ở chân bảng. */}
+                <Td className="whitespace-nowrap text-right font-semibold text-slate-900">
+                  {money(rowKrw(r.prepaid, r) + rowKrw(r.cod, r))}
                 </Td>
                 <Td className="whitespace-nowrap text-right font-medium text-slate-700">
                   {money(rowKrw(r.prepaid, r))}
@@ -577,6 +585,9 @@ export default function OrdersTable({
           <OrderDetailModal
             order={order}
             history={history[detailId] ?? []}
+            boxes={boxes}
+            flavors={flavors}
+            combos={combos}
             fbPageId={fbPageId}
             onSave={saveOrder}
             onClose={() => setDetailId(null)}
