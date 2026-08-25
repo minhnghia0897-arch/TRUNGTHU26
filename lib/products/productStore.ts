@@ -49,6 +49,8 @@ export interface ProductPatch {
   active?: boolean;
   removed?: boolean;
   flavorIds?: string[];
+  /** Số vị khách tự chọn trong `flavorIds` — chỉ set (§0025). 0 = bán bộ cố định. */
+  pickCount?: number;
   description?: string;
 }
 
@@ -81,6 +83,10 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   set("price_vn", p.priceVn);
   set("price_kr", p.priceKr);
   if (kind === "combo" && p.flavorIds !== undefined) c.flavor_ids = p.flavorIds;
+  // Số vị khách tự chọn (§0025). Chỉ set mới có cột này — gửi vào bảng hộp hay
+  // bảng vị là Postgres từ chối cả câu UPDATE.
+  if (kind === "combo" && p.pickCount !== undefined)
+    c.pick_count = Math.max(0, Math.trunc(p.pickCount));
 
   return c;
 }
@@ -181,7 +187,7 @@ const SHARED_COLS = [
 /** Cột riêng của từng loại — dùng để báo "đổi sang loại kia thì mất những gì". */
 const OWN_COLS: Record<ProductKind, string[]> = {
   box: ["slots", "weight", "allowed_flavor_weight", "specs"],
-  combo: ["box_id", "flavor_ids"],
+  combo: ["box_id", "flavor_ids", "pick_count"],
   flavor: ["weight", "premium", "premium_surcharge_vn", "premium_surcharge_kr", "sort"],
 };
 

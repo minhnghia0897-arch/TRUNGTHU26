@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MAX_PRODUCT_IMAGES, type Badge, type Box, type Combo, type Flavor, type Region } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 import {
@@ -11,6 +11,9 @@ import {
   type CartLine,
   comboPrice,
   comboOptions,
+  comboPickCount,
+  comboPickPool,
+  describePickedFlavors,
 } from "@/lib/pricing";
 import {
   IconLotus,
@@ -91,7 +94,7 @@ function Price({ v, region }: { v: number; region: Region }) {
  * thật — trộn vị có ảnh với vị chưa có thì hàng vẫn thẳng — và trông ra dáng chứ
  * không phải ô xám: hoa văn khuôn bánh chìm + chữ cái đầu của vị.
  */
-function FlavorRow({ name, img }: { name: string; img?: string }) {
+function FlavorRow({ name, img, right }: { name: string; img?: string; right?: ReactNode }) {
   return (
     <li className="flex items-center gap-3 text-[12.5px] text-ink/75">
       {img ? (
@@ -114,8 +117,56 @@ function FlavorRow({ name, img }: { name: string; img?: string }) {
           {name.trim().charAt(0).toUpperCase()}
         </span>
       )}
-      <span className="min-w-0">{name}</span>
+      <span className="min-w-0 flex-1">{name}</span>
+      {right}
     </li>
+  );
+}
+
+/**
+ * Nút − số + cho một vị trong set khách tự chọn.
+ *
+ * Cố ý KHÔNG dùng ô gõ số: khách gõ 9 vào hộp 4 bánh rồi mới bị chặn là bực.
+ * Nút cộng tự khoá khi đã đủ số bánh, nên trên màn hình không bao giờ tồn tại
+ * một lựa chọn sai.
+ */
+function PickStepper({
+  qty,
+  canAdd,
+  onChange,
+}: {
+  qty: number;
+  canAdd: boolean;
+  onChange: (delta: number) => void;
+}) {
+  const btn =
+    "grid h-8 w-8 flex-none place-items-center rounded-full border text-[15px] font-bold leading-none transition active:scale-90 disabled:opacity-30";
+  return (
+    <div className="flex flex-none items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="Bớt một bánh"
+        disabled={qty === 0}
+        onClick={() => onChange(-1)}
+        className={`${btn} border-line bg-white text-navy`}
+      >
+        −
+      </button>
+      <span
+        className={`w-5 text-center text-[14px] font-bold tabular-nums ${qty ? "text-navy" : "text-ink/25"}`}
+      >
+        {qty}
+      </span>
+      <button
+        type="button"
+        aria-label="Thêm một bánh"
+        disabled={!canAdd}
+        onClick={() => onChange(1)}
+        className={`${btn} border-gold bg-gold/15 text-gold-deep`}
+      >
+        +
+      </button>
+    </div>
   );
 }
 
@@ -337,6 +388,15 @@ export default function ProductCatalog({
   // mô tả đầy đủ và danh sách vị của từng loại nhân nằm ở đây.
   const [detail, setDetail] = useState<Combo | null>(null);
 
+  // Set cho khách tự chọn vị (§0025): id vị → số bánh khách đã bốc.
+  // Xoá sạch mỗi lần mở set khác — không thì set sau thừa hưởng lựa chọn của
+  // set trước và khách bấm "Thêm vào giỏ" ra một hộp mình chưa hề chọn.
+  const [picks, setPicks] = useState<Record<string, number>>({});
+  useEffect(() => setPicks({}), [detail?.id]);
+  /** Danh sách vị đã bốc, dạng phẳng — trùng vị thì lặp lại đúng số lần. */
+  const pickedIds = (pool: { id: string }[]) =>
+    pool.flatMap((f) => Array.from({ length: picks[f.id] ?? 0 }, () => f.id));
+
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title: string } | null>(null);
   const imagesOf = (key: string) => imgsByKey[key] ?? [];
 
@@ -370,12 +430,17 @@ export default function ProductCatalog({
   function addToCart(key: string, line: Omit<CartLine, "uid" | "qty" | "recipientUids">) {
     const blob = readCart();
     const cart = [...(blob.cart ?? [])];
+    // So CẢ danh sách vị chứ không chỉ vị đầu: set khách tự chọn thì hai hộp
+    // "Trà Xanh ×2 + Lava ×2" và "Trà Xanh ×1 + Lava ×3" đều bắt đầu bằng trà
+    // xanh — so mỗi vị đầu là hai hộp khác nhau bị gộp làm một.
+    const sameFlavors = (a?: string[], b?: string[]) =>
+      [...(a ?? [])].sort().join("|") === [...(b ?? [])].sort().join("|");
     const same = cart.findIndex(
       (l) =>
         l.kind === line.kind &&
         l.comboId === line.comboId &&
         l.variantName === line.variantName &&
-        l.flavorIds?.[0] === line.flavorIds?.[0],
+        sameFlavors(l.flavorIds, line.flavorIds),
     );
     if (same >= 0) cart[same] = { ...cart[same], qty: cart[same].qty + 1 };
     else cart.push({ ...line, uid: nextUid(cart), qty: 1, recipientUids: [] });
@@ -496,7 +561,9 @@ export default function ProductCatalog({
               // có trong `boxes`. Không mượn hộp khác — chỉ bỏ chip khối lượng.
               const b = boxes.find((x) => x.id === c.box_id);
               const opts = comboOptions(c, region);
-              // card 2 cột hẹp → gộp tên vị thành 1 dòng thay vì chip rời
+              // card 2 cột hẹp → gộp tên vị thành 1 dòng thay vì chip rời.
+              // Set tự chọn thì đây là danh sách được chọn, không phải ruột hộp
+              // — nói rõ để khách không tưởng hộp có đủ cả 6 bánh.
               const flavorLine = c.flavor_ids
                 .map((fid) => flavors.find((x) => x.id === fid)?.name)
                 .filter(Boolean)
@@ -521,7 +588,9 @@ export default function ProductCatalog({
                       {c.name}
                     </button>
                     {(c.description || flavorLine) && (
-                      <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{c.description || flavorLine}</p>
+                      <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">
+                        {c.description || (comboPickCount(c) ? `Chọn ${comboPickCount(c)} trong: ${flavorLine}` : flavorLine)}
+                      </p>
                     )}
                     <div className="mt-auto pt-2">
                       <div className="price-lg text-[15px]">
@@ -530,7 +599,18 @@ export default function ProductCatalog({
                         <span className="unit"> / hộp</span>
                       </div>
 
-                      {opts.length ? (
+                      {comboPickCount(c) ? (
+                        // Set khách tự chọn vị: không thêm thẳng vào giỏ được
+                        // vì chưa biết khách muốn vị nào. Thẻ ngoài chỉ mời vào
+                        // trong chọn.
+                        <button
+                          onClick={() => setDetail(c)}
+                          className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep transition active:scale-95"
+                        >
+                          Chọn {comboPickCount(c)} vị
+                          <IconArrowRight width={12} height={12} />
+                        </button>
+                      ) : opts.length ? (
                         // Set nhiều lựa chọn: mỗi loại nhân một nút, kèm giá của
                         // chính nó — khách thấy ngay chênh lệch, không phải bấm vào
                         // rồi mới biết.
@@ -721,6 +801,101 @@ export default function ProductCatalog({
 
               {(() => {
                 const opts = comboOptions(detail, region);
+
+                // Set cho khách TỰ CHỌN vị (§0025): danh sách vị được phép, mỗi
+                // vị một nút − +, chọn đủ số bánh mới thêm được vào giỏ.
+                const need = comboPickCount(detail);
+                if (need) {
+                  const pool = comboPickPool(detail, flavors);
+                  const price = comboPrice(detail, boxes, flavors, region);
+                  const chosen = pool.reduce((n, f) => n + (picks[f.id] ?? 0), 0);
+                  const left = need - chosen;
+                  const chose = pickedIds(pool);
+                  const key = `combo:${detail.id}:pick`;
+                  return (
+                    <>
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-navy/50">
+                          Chọn {need} vị
+                        </div>
+                        <div
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold tabular-nums ${left === 0 ? "bg-emerald-500/15 text-emerald-700" : "bg-gold/20 text-gold-deep"}`}
+                        >
+                          {chosen}/{need}
+                        </div>
+                      </div>
+                      <p className="mt-1 text-[11.5px] text-ink/50">
+                        Thích vị nào lấy vị đó, lấy trùng cũng được — chọn nào cũng cùng một giá.
+                      </p>
+
+                      <ul className="mt-3 space-y-2">
+                        {pool.map((f) => (
+                          <FlavorRow
+                            key={f.id}
+                            name={f.name}
+                            img={imagesOf(`flavor:${f.id}`)[0]}
+                            right={
+                              <PickStepper
+                                qty={picks[f.id] ?? 0}
+                                canAdd={left > 0}
+                                onChange={(d) =>
+                                  setPicks((prev) => ({
+                                    ...prev,
+                                    [f.id]: Math.max(0, (prev[f.id] ?? 0) + d),
+                                  }))
+                                }
+                              />
+                            }
+                          />
+                        ))}
+                      </ul>
+
+                      {price !== null && (
+                        // Dính đáy vùng cuộn: danh sách 6 vị dài hơn một màn
+                        // điện thoại, không dính thì chọn xong phải cuộn ngược
+                        // lên mới thấy nút.
+                        <div className="sticky bottom-0 -mx-4 mt-5 border-t border-line bg-cream px-4 pb-1 pt-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="price-lg text-[17px]">
+                              {formatMoney(price, region)}
+                              <span className="unit"> / hộp</span>
+                            </div>
+                            <button
+                              disabled={left !== 0}
+                              onClick={() =>
+                                addToCart(key, {
+                                  kind: "combo",
+                                  boxId: detail.box_id ?? undefined,
+                                  comboId: detail.id,
+                                  flavorIds: chose,
+                                  flavorText: describePickedFlavors(chose, flavors),
+                                  unitPrice: price,
+                                  name: detail.name,
+                                })
+                              }
+                              className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink/40 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                            >
+                              {added === key ? (
+                                <>
+                                  <IconCheck width={13} height={13} /> Đã thêm
+                                </>
+                              ) : (
+                                <>
+                                  <IconCart width={13} height={13} /> Thêm vào giỏ
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <p className="mt-1.5 min-h-[16px] text-[11px] text-ink/50">
+                            {left > 0
+                              ? `Còn thiếu ${left} bánh nữa.`
+                              : describePickedFlavors(chose, flavors)}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                }
 
                 // Set một giá (VD Sắc Đỏ): liệt kê thẳng các vị trong hộp.
                 if (!opts.length) {

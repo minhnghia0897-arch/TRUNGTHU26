@@ -69,6 +69,7 @@ interface Override {
   variants?: Variant[]; // mẫu mã
   active?: boolean;
   flavorIds?: string[]; // bánh cho vào set (Hộp/Combo)
+  pickCount?: number; // số vị khách tự chọn trong flavorIds (chỉ Combo, §0025)
   removed?: boolean; // đã xoá (ẩn khỏi danh sách, còn khôi phục được)
 }
 
@@ -92,6 +93,7 @@ interface Product {
   variants?: Variant[];
   active: boolean;
   flavorIds?: string[];
+  pickCount?: number;
 }
 
 /** Override (kiểu của màn hình) → thân yêu cầu API. Bỏ 2 trường cũ image/stock. */
@@ -165,7 +167,7 @@ export default function ProductsAdmin({
       // (con số "từ ..." ngoài trang bán); giá thật nằm ở từng mẫu mã.
       priceVn: comboPrice(c, boxes, flavors, "vn") ?? 0,
       priceKr: comboPrice(c, boxes, flavors, "kr") ?? 0,
-      active: c.active, flavorIds: c.flavor_ids,
+      active: c.active, flavorIds: c.flavor_ids, pickCount: c.pick_count ?? 0,
       ...common(c),
     })),
     ...flavors.map((f) => ({
@@ -196,6 +198,7 @@ export default function ProductsAdmin({
       variants: o.variants ?? p.variants,
       active: o.active ?? p.active,
       flavorIds: o.flavorIds ?? p.flavorIds,
+      pickCount: o.pickCount ?? p.pickCount,
     };
   });
   // tách sản phẩm gốc đã xoá vào thùng rác (còn khôi phục được)
@@ -269,7 +272,7 @@ export default function ProductsAdmin({
     code: "",
     category: "",
     priceVn: 0, priceKr: 0, cost: 0, discount: 0,
-    images: [], active: true, flavorIds: [], variants: [], allowNegative: false, chargeShip: false, stockQty: 0,
+    images: [], active: true, flavorIds: [], pickCount: 0, variants: [], allowNegative: false, chargeShip: false, stockQty: 0,
   });
 
   const handleSave = (patch: Override) => {
@@ -525,6 +528,7 @@ function EditModal({
   const [variants, setVariants] = useState<Variant[]>(product.variants ?? []);
   const [active, setActive] = useState(product.active);
   const [flavorIds, setFlavorIds] = useState<string[]>(product.flavorIds ?? []);
+  const [pickCount, setPickCount] = useState(product.pickCount ?? 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const hasSet = product.type === "Hộp" || product.type === "Combo";
   const MAX = MAX_PRODUCT_IMAGES;
@@ -649,6 +653,8 @@ function EditModal({
       variants: hasSet ? variants.filter((v) => v.name.trim()) : undefined,
       active,
       flavorIds: hasSet ? flavorIds : undefined,
+      // Chỉ set mới có cột này; gửi kèm cho hộp/vị là câu UPDATE hỏng cả.
+      pickCount: product.type === "Combo" ? pickCount : undefined,
     });
   };
 
@@ -873,6 +879,35 @@ function EditModal({
                   })}
                 </div>
               </L>
+
+              {/* Set cho khách tự chọn vị (§0025) — chỉ Combo, hộp tự chọn đã
+                  có sẵn số ô riêng. */}
+              {product.type === "Combo" && (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/60 p-2.5">
+                  <label className="flex flex-wrap items-center gap-2 text-[13px] text-slate-700">
+                    Khách tự chọn
+                    <input
+                      type="number"
+                      min={0}
+                      value={pickCount}
+                      onChange={(e) => setPickCount(Math.max(0, Math.trunc(Number(e.target.value) || 0)))}
+                      className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[13px] outline-none focus:border-blue-400"
+                    />
+                    vị trong danh sách trên
+                  </label>
+                  <p className="mt-1.5 text-[11.5px] leading-relaxed text-slate-400">
+                    Để <b>0</b>: set bán bộ vị cố định như cũ. Lớn hơn 0: trang bán hiện danh sách vị
+                    kèm nút − +, khách bốc đủ chừng đó bánh mới thêm được vào giỏ (lấy trùng vị được).
+                    Bật lên thì <b>mẫu mã kèm giá ở trên ngừng hiệu lực</b> — cả set một giá, lấy giá chung
+                    phía trên. Tắt về 0 là mẫu mã sống lại nguyên vẹn.
+                  </p>
+                  {pickCount > 0 && flavorIds.length < pickCount && (
+                    <p className="mt-1 text-[11.5px] font-medium text-rose-600">
+                      Danh sách mới có {flavorIds.length} vị mà bắt khách chọn {pickCount} — không chọn đủ được.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
