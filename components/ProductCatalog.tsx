@@ -124,6 +124,79 @@ function FlavorRow({ name, img, right }: { name: string; img?: string; right?: R
 }
 
 /**
+ * Khay hộp bánh: một ngăn cho mỗi bánh khách phải chọn.
+ *
+ * Bốc bánh nào là bánh đó "nằm vào ngăn" — ảnh vị hiện trong ô, khách nhìn thấy
+ * ngay hộp của mình đang có gì và còn trống mấy ngăn, thay vì phải nhẩm từ mấy
+ * con số cạnh nút − +. Bấm vào ngăn đã có bánh là bỏ bánh đó ra (đường tắt của
+ * nút − phía dưới).
+ *
+ * Ngăn xếp theo THỨ TỰ danh sách vị chứ không theo thứ tự bấm — không phải giữ
+ * thêm lịch sử bấm, và hai người chọn cùng một bộ vị luôn thấy khay giống hệt
+ * nhau.
+ */
+function PickTray({
+  slots,
+  filled,
+  onRemove,
+}: {
+  slots: number;
+  filled: { id: string; name: string; img?: string }[];
+  onRemove: (flavorId: string) => void;
+}) {
+  return (
+    <div
+      className="mt-3 grid gap-2"
+      style={{ gridTemplateColumns: `repeat(${Math.min(slots, 4)}, minmax(0, 1fr))` }}
+    >
+      {Array.from({ length: slots }, (_, i) => {
+        const f = filled[i];
+        if (!f)
+          return (
+            <div
+              key={i}
+              className="grid aspect-square place-items-center rounded-xl border-2 border-dashed border-line bg-white/60 text-[11px] font-medium text-ink/30"
+            >
+              Ngăn {i + 1}
+            </div>
+          );
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onRemove(f.id)}
+            title={`${f.name} — bấm để bỏ ra`}
+            className="relative overflow-hidden rounded-xl border border-gold/60 bg-white shadow-sm transition active:scale-95"
+          >
+            {f.img ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={f.img} alt={f.name} className="aspect-square w-full object-cover" />
+            ) : (
+              <span
+                className="grid aspect-square w-full place-items-center bg-cream-soft font-serif text-[19px] font-bold text-gold"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 50% 50%, rgba(198,162,76,0.18) 0 38%, transparent 39%)," +
+                    "repeating-conic-gradient(from 0deg at 50% 50%, rgba(198,162,76,0.14) 0deg 14deg, transparent 14deg 28deg)",
+                }}
+              >
+                {f.name.trim().charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="absolute inset-x-0 bottom-0 truncate bg-navy/70 px-1 py-0.5 text-center text-[8.5px] font-medium leading-tight text-cream">
+              {f.name}
+            </span>
+            <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-black/45 text-[9px] leading-none text-white">
+              ✕
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * Nút − số + cho một vị trong set khách tự chọn.
  *
  * Cố ý KHÔNG dùng ô gõ số: khách gõ 9 vào hộp 4 bánh rồi mới bị chặn là bực.
@@ -827,6 +900,21 @@ export default function ProductCatalog({
                       <p className="mt-1 text-[11.5px] text-ink/50">
                         Thích vị nào lấy vị đó, lấy trùng cũng được — chọn nào cũng cùng một giá.
                       </p>
+
+                      <PickTray
+                        slots={need}
+                        filled={chose.map((id) => {
+                          const f = pool.find((x) => x.id === id);
+                          return {
+                            id,
+                            name: f?.name ?? "Vị",
+                            img: imagesOf(`flavor:${id}`)[0],
+                          };
+                        })}
+                        onRemove={(id) =>
+                          setPicks((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] ?? 0) - 1) }))
+                        }
+                      />
 
                       <ul className="mt-3 space-y-2">
                         {pool.map((f) => (
