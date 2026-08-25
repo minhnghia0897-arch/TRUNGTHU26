@@ -1,8 +1,18 @@
 import { getServiceClient, isServiceRoleConfigured } from "@/lib/supabase/server";
 import { adjustStock } from "@/lib/products/stock";
-import { parseKey } from "@/lib/products/productStore";
+import { getAllProducts, parseKey } from "@/lib/products/productStore";
 import { RELEASED_STATUS, type Status } from "@/lib/ordersMock";
 import { ORDERS } from "@/lib/ordersMock";
+import { asRegion } from "./orderSchema";
+import {
+  describeItems,
+  itemName,
+  itemPrice,
+  itemsGoods,
+  itemsToConsume,
+  splitKey,
+  type OrderItem,
+} from "./orderItems";
 import {
   SHIPMENT_SELECT,
   rowToOrder,
@@ -63,8 +73,11 @@ export async function listOrders(): Promise<OrderStoreData> {
     .limit(2000);
   if (error) fail(error, "Không đọc được đơn hàng");
 
-  const rows = ((data ?? []) as unknown as ShipmentRow[])
-    .map(rowToOrder)
+  const raw = (data ?? []) as unknown as ShipmentRow[];
+  const lines = await listParcelItems(raw);
+
+  const rows = raw
+    .map((s) => ({ ...rowToOrder(s), items: lines.get(parcelKey(s.web_order_id, s.recipient_id)) }))
     // đơn mới nhất lên đầu; cùng một đơn thì kiện 1 trước kiện 2
     .sort((a, b) =>
       a.createdAtIso === b.createdAtIso
@@ -104,6 +117,69 @@ async function listHistory(rows: StoredOrder[]): Promise<HistoryRow[]> {
       changes: Array.isArray(row.changes) ? row.changes.map(String) : [],
     };
   });
+}
+
+// ------------------------------------------------------------- hàng của kiện
+/**
+ * Khoá nối `order_line` với `shipment`.
+ *
+ * Dòng hàng không trỏ thẳng vào kiện, mà cả hai cùng trỏ vào (đơn, người nhận).
+ * Một người nhận trong một đơn = một kiện (§ createOrder), nên cặp id này xác
+ * định đúng một kiện.
+ */
+const parcelKey = (webOrderId: unknown, recipientId: unknown) =>
+  `${String(webOrderId ?? "")}|${String(recipientId ?? "")}`;
+
+interface LineRow {
+  id: string;
+  web_order_id: string;
+  recipient_id: string | null;
+  kind: string;
+  box_id: string | null;
+  combo_id: string | null;
+  flavors: unknown;
+  qty: number;
+  unit_price: number;
+}
+
+/** Dòng `order_line` → khoá món dùng chung với tồn kho. */
+function lineKey(l: LineRow): string | null {
+  if (l.kind === "combo" && l.combo_id) return `combo:${l.combo_id}`;
+  if (l.kind === "box" && l.box_id) return `box:${l.box_id}`;
+  if (l.kind === "la") {
+    const first = Array.isArray(l.flavors) ? l.flavors[0] : null;
+    if (first) return `flavor:${String(first)}`;
+  }
+  return null;
+}
+
+/** Hàng của từng kiện, gom theo (đơn, người nhận). */
+async function listParcelItems(rows: ShipmentRow[]): Promise<Map<string, OrderItem[]>> {
+  const out = new Map<string, OrderItem[]>();
+  const orderIds = [...new Set(rows.map((r) => String(r.web_order_id ?? "")).filter(Boolean))];
+  if (!orderIds.length) return out;
+
+  const sb = getServiceClient();
+  const { data, error } = await sb
+    .from("order_line")
+    .select("id, web_order_id, recipient_id, kind, box_id, combo_id, flavors, qty, unit_price")
+    .in("web_order_id", orderIds);
+  // Đọc hụt dòng hàng KHÔNG được làm sập bảng đơn: mất phần sửa hàng còn hơn
+  // mất cả bảng. Popup sẽ dựng tạm từ `consume` như đơn tạo tay.
+  if (error) {
+    console.error("ORDER_LINES_READ_FAILED", error.message);
+    return out;
+  }
+
+  for (const l of (data ?? []) as LineRow[]) {
+    const key = lineKey(l);
+    if (!key || !l.recipient_id) continue;
+    const k = parcelKey(l.web_order_id, l.recipient_id);
+    const list = out.get(k) ?? [];
+    list.push({ lineId: l.id, key, qty: Number(l.qty) || 0, unitPrice: Number(l.unit_price) || 0 });
+    out.set(k, list);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- appendOrders
@@ -287,7 +363,10 @@ export async function updateOrder(
 
   const { data: existing, error: findErr } = await sb
     .from("shipment")
-    .select("id, recipient_id, web_order_id, status, consume, stock_applied, web_order ( customer_id )")
+    .select(
+      "id, recipient_id, web_order_id, status, consume, stock_applied, prepaid, " +
+        "shipping_fee, handling_fee, web_order ( customer_id, buyer_region )",
+    )
     .eq("id", rowKey)
     .maybeSingle();
   if (findErr) fail(findErr, "Không đọc được đơn");
@@ -296,10 +375,14 @@ export async function updateOrder(
   const link = existing as unknown as {
     id: string;
     recipient_id: string;
+    web_order_id: string;
     status: string;
     consume: Record<string, number> | null;
     stock_applied: boolean;
-    web_order: { customer_id: string } | null;
+    prepaid: number | null;
+    shipping_fee: number | null;
+    handling_fee: number | null;
+    web_order: { customer_id: string; buyer_region: string } | null;
   };
 
   // ---- shipment ----
@@ -323,8 +406,37 @@ export async function updateOrder(
   // về giá trị cũ và lần lưu sau sẽ hoàn kho thêm một lần nữa.
   put("voided", patch.voided);
 
+  // ---- hàng trong kiện ----
+  // Có `items` là anh vừa sửa hàng trong popup chi tiết. Máy chủ tự tính lại
+  // tiền hàng, tóm tắt và tiêu hao kho từ danh mục — KHÔNG nhận giá trình duyệt
+  // gửi lên, đúng nếp chốt giá server-side của đường đặt hàng (§8.1).
+  if (Array.isArray(patch.items)) {
+    const applied = await applyItems(link, patch.items);
+    ship.goods_amount = applied.goods;
+    ship.product_summary = applied.summary;
+    ship.consume = applied.consume;
+    // Vừa sửa hàng vừa đổi trạng thái trong một lần lưu: phần hoàn/trừ kho theo
+    // trạng thái bên dưới phải chạy trên SỐ LƯỢNG MỚI, không thì đơn hoàn về kho
+    // đúng số cũ và tồn lệch đi phần vừa sửa.
+    link.consume = applied.consume;
+
+    // Tiền hàng đổi thì tổng phải thu đổi theo. Giữ nguyên phần ĐÃ CỌC (tiền đã
+    // nằm trong tay, sửa hàng không làm nó biến mất) và dồn phần còn lại vào
+    // COD. Cùng công thức với popup chi tiết nên hai bên ra một con số.
+    const fee = (link.shipping_fee ?? 0) + (link.handling_fee ?? 0);
+    const total = applied.goods + fee;
+    const prepaid = Math.min(Math.max(0, patch.prepaid ?? link.prepaid ?? 0), total);
+    ship.prepaid = prepaid;
+    ship.cod = total - prepaid;
+  }
+
   const { error: sErr } = await sb.from("shipment").update(ship).eq("id", rowKey);
   if (sErr) fail(sErr, "Không lưu được đơn");
+
+  // Tổng của cả đơn cộng lại từ các kiện — trang "Tra cứu đơn" của khách đọc
+  // `grand_total`, không đọc từng kiện. Không cộng lại thì khách vẫn thấy số
+  // tiền cũ sau khi shop sửa hàng.
+  if (Array.isArray(patch.items)) await syncOrderTotals(link.web_order_id);
 
   // Đổi sang huỷ/trả/hoàn thì hàng quay lại kho; đổi ngược lại thì trừ ra.
   await syncStockForStatus(rowKey, link, patch.status);
@@ -374,6 +486,161 @@ export async function updateOrder(
     ok: true,
     order: fresh ? rowToOrder(fresh as unknown as ShipmentRow) : undefined,
   };
+}
+
+// ------------------------------------------------------- sửa hàng trong kiện
+/** Kiện đang sửa, đủ thông tin để dò dòng hàng và tính lại kho. */
+interface ParcelLink {
+  recipient_id: string;
+  web_order_id: string;
+  consume: Record<string, number> | null;
+  stock_applied: boolean;
+  web_order: { buyer_region: string } | null;
+}
+
+/**
+ * Ghi lại hàng trong một kiện, trả về những gì kiện đó phải mang theo sau khi
+ * sửa: tiền hàng, tóm tắt và tiêu hao kho.
+ *
+ * Ba điều giữ chặt ở đây:
+ *  1. GIÁ KHÔNG NHẬN TỪ TRÌNH DUYỆT. Món cũ giữ đơn giá đã chốt lúc khách đặt
+ *     (dò theo `lineId`), món mới lấy giá niêm yết hiện tại từ danh mục. Nhận
+ *     giá client gửi lên thì ai mở được popup cũng đặt lại giá đơn được.
+ *  2. Món không tra ra giá thì NÉM LỖI, không lặng lẽ tính 0đ.
+ *  3. Kho cộng trừ theo PHẦN CHÊNH, và chỉ khi kiện đang thật sự giữ hàng
+ *     (`stock_applied`). Đơn đã huỷ/hoàn thì hàng đã trả về kho rồi, sửa tiếp
+ *     mà trừ nữa là kho hụt đúng một lần nữa.
+ */
+async function applyItems(
+  link: ParcelLink,
+  incoming: OrderItem[],
+): Promise<{ goods: number; summary: string; consume: Record<string, number> }> {
+  const sb = getServiceClient();
+
+  const cat = await getAllProducts();
+  if (!cat) throw new Error("Chưa đọc được danh mục sản phẩm nên chưa sửa được hàng trong đơn.");
+  const buyer = asRegion(String(link.web_order?.buyer_region ?? ""));
+
+  const { data: exData, error: exErr } = await sb
+    .from("order_line")
+    .select("id, unit_price")
+    .eq("web_order_id", link.web_order_id)
+    .eq("recipient_id", link.recipient_id);
+  if (exErr) fail(exErr, "Không đọc được hàng trong đơn");
+  const before = new Map(
+    ((exData ?? []) as { id: string; unit_price: number }[]).map((l) => [l.id, l]),
+  );
+
+  // --- chốt giá từng món ---
+  const priced: OrderItem[] = [];
+  for (const raw of incoming) {
+    if (!splitKey(raw.key ?? "")) continue;
+    const qty = Math.max(1, Math.floor(Number(raw.qty) || 0));
+    const old = raw.lineId ? before.get(raw.lineId) : undefined;
+    const unit = old ? Number(old.unit_price) || 0 : itemPrice(raw, cat, buyer);
+    if (unit === null)
+      throw new Error(
+        `Món "${itemName(raw, cat)}" chưa có giá ở vùng này — đặt giá ở trang Sản phẩm rồi sửa lại.`,
+      );
+    priced.push({ lineId: old ? raw.lineId : undefined, key: raw.key, variant: raw.variant, qty, unitPrice: unit });
+  }
+  if (!priced.length) throw new Error("Đơn phải còn ít nhất một món. Muốn bỏ hẳn thì xoá đơn.");
+
+  // --- ghi lại dòng hàng ---
+  const keep = new Set(priced.map((p) => p.lineId).filter(Boolean) as string[]);
+  const drop = [...before.keys()].filter((id) => !keep.has(id));
+  if (drop.length) {
+    const { error } = await sb.from("order_line").delete().in("id", drop);
+    if (error) fail(error, "Không xoá được món khỏi đơn");
+  }
+
+  for (const p of priced) {
+    if (p.lineId) {
+      const { error } = await sb
+        .from("order_line")
+        .update({ qty: p.qty, line_total: p.unitPrice * p.qty })
+        .eq("id", p.lineId);
+      if (error) fail(error, "Không sửa được số lượng");
+      continue;
+    }
+
+    const parsed = splitKey(p.key)!;
+    const combo = parsed.kind === "combo" ? cat.combos.find((c) => c.id === parsed.id) : undefined;
+    const { error } = await sb.from("order_line").insert({
+      web_order_id: link.web_order_id,
+      recipient_id: link.recipient_id,
+      kind: parsed.kind === "flavor" ? "la" : parsed.kind,
+      box_id: parsed.kind === "box" ? parsed.id : combo?.box_id ?? null,
+      combo_id: parsed.kind === "combo" ? parsed.id : null,
+      flavors:
+        parsed.kind === "flavor" ? [parsed.id] : parsed.kind === "combo" ? combo?.flavor_ids ?? null : null,
+      qty: p.qty,
+      unit_price: p.unitPrice,
+      line_total: p.unitPrice * p.qty,
+      // Ghi rõ dòng này do bảng điều hành thêm vào, không phải giá khách bấm
+      // lúc đặt — sau này đối soát còn biết đường lần.
+      price_source: { region: buyer, edited: "dashboard" },
+    });
+    if (error) fail(error, "Không thêm được món vào đơn");
+  }
+
+  // --- kho: chỉ cộng trừ PHẦN CHÊNH ---
+  const consume = itemsToConsume(priced);
+  if (link.stock_applied) {
+    const old = link.consume ?? {};
+    const moves = [...new Set([...Object.keys(old), ...Object.keys(consume)])]
+      .map((key) => {
+        const delta = (consume[key] ?? 0) - (old[key] ?? 0);
+        const p = delta ? parseKey(key) : null;
+        return p ? { kind: p.kind, id: p.id, qty: delta } : null;
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null);
+    // sign -1: thêm hàng vào đơn thì kho trừ đi, bớt hàng thì kho nhận lại.
+    await adjustStock(moves, -1);
+  }
+
+  return { goods: itemsGoods(priced), summary: describeItems(priced, cat), consume };
+}
+
+/**
+ * Cộng lại tổng tiền của cả đơn từ các kiện còn sống.
+ *
+ * Lỗi ở đây KHÔNG được làm hỏng thao tác sửa: kiện đã ghi xong rồi, ném lỗi chỉ
+ * khiến màn hình báo lưu hụt trong khi thực ra đã lưu.
+ */
+async function syncOrderTotals(webOrderId: string) {
+  if (!webOrderId) return;
+  try {
+    const sb = getServiceClient();
+    const { data, error } = await sb
+      .from("shipment")
+      .select("goods_amount, shipping_fee, handling_fee, voided")
+      .eq("web_order_id", webOrderId);
+    if (error) throw new Error(error.message);
+
+    const live = ((data ?? []) as {
+      goods_amount: number | null;
+      shipping_fee: number | null;
+      handling_fee: number | null;
+      voided: boolean | null;
+    }[]).filter((r) => r.voided !== true);
+
+    const subtotal = live.reduce((s, r) => s + (r.goods_amount ?? 0), 0);
+    const shipping = live.reduce((s, r) => s + (r.shipping_fee ?? 0), 0);
+    const handling = live.reduce((s, r) => s + (r.handling_fee ?? 0), 0);
+
+    await sb
+      .from("web_order")
+      .update({
+        subtotal,
+        shipping_total: shipping,
+        handling_total: handling,
+        grand_total: subtotal + shipping + handling,
+      })
+      .eq("id", webOrderId);
+  } catch (e) {
+    console.error("ORDER_TOTALS_SYNC_FAILED", e instanceof Error ? e.message : e);
+  }
 }
 
 // ------------------------------------------------------------ hoàn / trừ kho

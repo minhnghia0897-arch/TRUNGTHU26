@@ -40,10 +40,75 @@ export interface ComboOption {
  * của lựa chọn khác — thà không bán còn hơn bán sai giá.
  */
 export function comboOptions(combo: Combo, buyer: Region): ComboOption[] {
+  // Set đã bật cho khách tự chọn vị thì các lựa chọn nhân cố định NGỪNG hiệu
+  // lực — một cửa duy nhất, để trang bán, form tạo đơn tay và máy chủ chốt giá
+  // không mỗi nơi hiểu một kiểu. Dữ liệu `variants` cũ vẫn nằm nguyên trong
+  // database, tắt `pick_count` là quay lại như trước.
+  if (comboPickCount(combo)) return [];
   return (combo.variants ?? []).flatMap((v) => {
     const price = buyer === "vn" ? v.price_vn : v.price_kr;
     return price == null ? [] : [{ name: v.name, contents: v.contents, price }];
   });
+}
+
+// ---- set cho khách TỰ CHỌN vị (§0025) --------------------------------------
+/**
+ * Set này cho khách tự chọn bao nhiêu bánh? 0 = set bộ vị cố định (nếp cũ).
+ *
+ * Đòi hỏi `flavor_ids` không rỗng: bật số mà quên chọn danh sách vị thì khách
+ * mở ra chỉ thấy ô trống không bấm được gì. Thà lùi về cách bán cũ.
+ */
+export function comboPickCount(combo: Combo): number {
+  const n = Math.trunc(combo.pick_count ?? 0);
+  return n > 0 && (combo.flavor_ids?.length ?? 0) > 0 ? n : 0;
+}
+
+/** Những vị khách được bốc, đúng THỨ TỰ shop đã xếp trong `flavor_ids`. */
+export function comboPickPool(combo: Combo, flavors: Flavor[]): Flavor[] {
+  if (!comboPickCount(combo)) return [];
+  return combo.flavor_ids
+    .map((id) => flavors.find((f) => f.id === id))
+    .filter((f): f is Flavor => !!f && f.active && !f.removed);
+}
+
+/**
+ * Khách bốc đủ và bốc đúng chưa.
+ *
+ * Cho phép TRÙNG VỊ — khách thích cả 4 bánh cùng một vị là chuyện thường, không
+ * việc gì phải cấm. Nên chỉ xét đủ số lượng và mọi vị đều nằm trong danh sách.
+ */
+export function validateComboPick(
+  combo: Combo,
+  flavorIds: string[],
+  flavors: Flavor[],
+): BoxValidation {
+  const need = comboPickCount(combo);
+  if (!need) return { ok: true };
+  const picked = (flavorIds ?? []).filter(Boolean);
+  if (picked.length !== need)
+    return { ok: false, error: `Set "${combo.name}" cần chọn đúng ${need} vị (đang ${picked.length}).` };
+  const pool = comboPickPool(combo, flavors);
+  for (const id of picked)
+    if (!pool.some((f) => f.id === id))
+      return { ok: false, error: `Có vị không nằm trong danh sách của set "${combo.name}".` };
+  return { ok: true };
+}
+
+/**
+ * Gộp danh sách vị đã bốc thành một dòng chữ: "Trà Xanh ×2 · Lava Trứng Muối".
+ *
+ * Gộp trùng chứ không liệt kê lặp, vì dòng này đi thẳng vào tóm tắt đơn và tin
+ * nhắn xác nhận — đọc "Trà Xanh · Trà Xanh" thì tưởng bị lỗi.
+ */
+export function describePickedFlavors(flavorIds: string[], flavors: Flavor[]): string {
+  const count = new Map<string, number>();
+  for (const id of flavorIds ?? []) count.set(id, (count.get(id) ?? 0) + 1);
+  return [...count.entries()]
+    .map(([id, n]) => {
+      const name = flavors.find((f) => f.id === id)?.name ?? "Vị đã xoá";
+      return n > 1 ? `${name} ×${n}` : name;
+    })
+    .join(" · ");
 }
 
 /**

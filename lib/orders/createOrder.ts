@@ -4,7 +4,16 @@ import { adjustStock, type StockMove } from "@/lib/products/stock";
 import { findLink, markLinkUsed, normalizeRef, registerRefIfNew } from "@/lib/orders/links";
 
 import { normalizePhone } from "@/lib/phone";
-import { boxPrice, comboOptions, comboPrice, validateBoxFill, shipFeeForRegion } from "@/lib/pricing";
+import {
+  boxPrice,
+  comboOptions,
+  comboPrice,
+  comboPickCount,
+  describePickedFlavors,
+  validateBoxFill,
+  validateComboPick,
+  shipFeeForRegion,
+} from "@/lib/pricing";
 import { currencyOf } from "@/lib/money";
 import type { Region } from "@/lib/types";
 
@@ -170,6 +179,16 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       const combo = combos.find((c) => c.id === l.comboId && c.active);
       if (!combo) return { ok: false, error: "Set không tồn tại hoặc ngừng bán." };
 
+      // Set cho khách TỰ CHỌN vị (§0025): giá là giá của set, nhưng phải kiểm
+      // khách bốc đủ số bánh và bốc trong đúng danh sách shop cho phép — client
+      // hoàn toàn có thể gửi lên 6 vị hoặc một vị lạ.
+      const need = comboPickCount(combo);
+      const picked = (l.flavorIds ?? []).filter(Boolean);
+      if (need) {
+        const v = validateComboPick(combo, picked, flavors);
+        if (!v.ok) return { ok: false, error: v.error };
+      }
+
       // Set nhiều lựa chọn (VD hai loại nhân) thì giá theo ĐÚNG lựa chọn khách
       // bấm, tra lại trong danh mục — không nhận giá client gửi lên.
       const opts = comboOptions(combo, region);
@@ -188,8 +207,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         unit = p;
       }
       chargeShip = !!combo.charge_ship;
-      // vị của set do danh mục quyết định, dùng luôn cho mô tả kiện
-      l = { ...l, boxId: combo.box_id ?? undefined, flavorIds: combo.flavor_ids };
+      // Vị của set do danh mục quyết định, dùng luôn cho mô tả kiện — TRỪ set
+      // khách tự chọn: ở đó chính lựa chọn của khách mới là ruột hộp, còn
+      // `combo.flavor_ids` chỉ là danh sách được phép (6 vị cho hộp 4 bánh).
+      l = {
+        ...l,
+        boxId: combo.box_id ?? undefined,
+        flavorIds: need ? picked : combo.flavor_ids,
+      };
     }
 
     subtotal += unit * qty;
@@ -209,7 +234,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     if (l.kind === "combo") {
       const c = combos.find((x) => x.id === l.comboId);
       const opt = l.variantName ? ` · ${l.variantName}` : "";
-      return `${c?.name ?? "Set"}${opt}${times}`;
+      // Set khách tự chọn: phải ghi rõ khách chọn vị nào, không thì bên đóng
+      // gói cầm tờ đơn ghi mỗi tên set mà không biết nhét bánh gì vào hộp.
+      const pick =
+        c && comboPickCount(c) ? ` (${describePickedFlavors(l.flavorIds ?? [], flavors)})` : "";
+      return `${c?.name ?? "Set"}${opt}${times}${pick}`;
     }
     const box = boxes.find((b) => b.id === l.boxId);
     const vi = (l.flavorIds ?? [])

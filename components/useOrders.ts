@@ -152,8 +152,21 @@ export function useOrders(): UseOrders {
   // ------------------------------------------------------------------ sửa đơn
   const saveOrder = useCallback(
     async (order: OrderRow, changes: string[]): Promise<boolean> => {
-      // cập nhật ngay trên màn cho mượt, hỏng thì tải lại về đúng
-      setRows((rs) => rs.map((r) => (r.id === order.id ? order : r)));
+      // Cập nhật ngay trên màn cho mượt, hỏng thì tải lại về đúng.
+      //
+      // Giữ lại `items` đang có nếu lần lưu này không đụng tới hàng: popup chỉ
+      // gửi kèm hàng khi anh thật sự sửa, nên ghi đè thẳng là sửa ghi chú xong
+      // dòng hàng của đơn biến mất khỏi màn cho tới lần tải lại sau.
+      setRows((rs) =>
+        rs.map((r) =>
+          r.id === order.id
+            ? {
+                ...order,
+                items: (order as StoredOrder).items ?? (r as StoredOrder).items,
+              }
+            : r,
+        ),
+      );
       if (changes.length) {
         setHistory((h) => ({
           ...h,
@@ -194,6 +207,10 @@ export function useOrders(): UseOrders {
           void load();
           return false;
         }
+        // Sửa hàng trong đơn thì MÁY CHỦ mới là bên chốt: giá món mới, tiền hàng,
+        // tóm tắt và mã dòng hàng đều do nó tính. Tải lại để màn hình mang đúng
+        // những con số đã ghi, không phải bản đoán trước của trình duyệt.
+        if ((order as StoredOrder).items) void load();
         return true;
       } catch {
         setError("Mất kết nối khi lưu. Tải lại trang để xem trạng thái thật.");

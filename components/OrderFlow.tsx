@@ -14,6 +14,9 @@ import {
   type CartLine,
   comboPrice,
   comboOptions,
+  comboPickCount,
+  comboPickPool,
+  describePickedFlavors,
 } from "@/lib/pricing";
 import { saveWebOrder } from "@/lib/webOrders";
 import { normalizePhone } from "@/lib/phone";
@@ -175,6 +178,11 @@ export default function OrderFlow({
    * rời (Sắc Đỏ) giữ trong `flavorIds`.
    */
   const lineFlavors = (it: CartLine) => {
+    // Set khách tự chọn vị (§0025): vị nằm trong `flavorIds` và là LỰA CHỌN
+    // RIÊNG của khách — không tra ngược danh mục, vì danh mục chỉ giữ danh sách
+    // 6 vị được phép chứ không biết khách bốc 4 vị nào.
+    const c0 = combos.find((c) => c.id === it.comboId);
+    if (c0 && comboPickCount(c0)) return describePickedFlavors(it.flavorIds ?? [], flavors);
     if (it.comboId && it.variantName) {
       const v = combos
         .find((c) => c.id === it.comboId)
@@ -189,6 +197,16 @@ export default function OrderFlow({
   const addCombo = (comboId: string) => {
     const c = combos.find((x) => x.id === comboId);
     if (!c) return;
+    // Set khách tự chọn vị: vào thẳng bằng link thì chưa biết khách muốn vị
+    // nào, nên lấy tạm các vị đầu danh sách và ghi rõ vào giỏ. Không lấy cả
+    // danh sách được phép — hộp 4 bánh mà gửi 6 vị lên thì máy chủ từ chối đơn.
+    const need = comboPickCount(c);
+    const pool = comboPickPool(c, flavors);
+    if (need && !pool.length) return;
+    const prePick = need
+      ? Array.from({ length: need }, (_, i) => pool[i % pool.length].id)
+      : undefined;
+
     // Vào bằng link ?combo=<id> thì chưa biết khách muốn loại nhân nào — lấy
     // lựa chọn rẻ nhất và ghi rõ tên vào giỏ để khách thấy mà đổi.
     const opts = comboOptions(c, buyerRegion);
@@ -205,8 +223,10 @@ export default function OrderFlow({
         boxId: c.box_id ?? undefined,
         comboId: c.id,
         variantName: pick?.name,
-        flavorText: pick?.contents?.trim() || undefined,
-        flavorIds: c.flavor_ids,
+        flavorText: prePick
+          ? describePickedFlavors(prePick, flavors)
+          : pick?.contents?.trim() || undefined,
+        flavorIds: prePick ?? c.flavor_ids,
         qty: 1,
         unitPrice: unit,
         name: pick ? `${c.name} · ${pick.name}` : c.name,

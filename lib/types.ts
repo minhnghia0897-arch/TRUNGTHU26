@@ -100,7 +100,23 @@ export interface Combo {
    * vị đều nằm trên chính set, vỏ hộp không giữ thêm thông tin gì (§0011).
    */
   box_id: string | null;
+  /**
+   * Vị của set.
+   *
+   * `pick_count = 0`: đây là RUỘT HỘP — set gồm đúng những vị này.
+   * `pick_count > 0`: đây là DANH SÁCH ĐƯỢC PHÉP — khách tự bốc `pick_count` vị
+   * trong đó.
+   */
   flavor_ids: string[];
+  /**
+   * Số bánh khách TỰ CHỌN trong `flavor_ids` (§0025). 0/thiếu = set bộ vị cố
+   * định như nếp cũ.
+   *
+   * Giá không đổi theo vị khách bốc: một set một giá (`price_vn`/`price_kr`).
+   * Muốn hai mức giá thì quay lại `variants` — hai kiểu bán này loại trừ nhau,
+   * bật chọn vị là các lựa chọn nhân cố định ngừng hiệu lực (xem `comboOptions`).
+   */
+  pick_count?: number;
   /**
    * Giá bán của set. Có giá = giá đó là giá bán, hộp chỉ còn là quy cách.
    * Thiếu = suy từ hộp như nếp cũ (combo = hộp tự chọn đã điền sẵn).
