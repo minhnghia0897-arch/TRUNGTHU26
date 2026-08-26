@@ -115,7 +115,7 @@ export default function LookupFlow() {
           <button
             onClick={() => void search()}
             disabled={loading}
-            className="rounded bg-gold px-4 py-2.5 font-serif text-xs font-semibold uppercase tracking-wide text-maroon-deep disabled:opacity-60"
+            className="rounded bg-gold px-4 py-2.5 font-serif text-xs font-semibold uppercase tracking-wide text-white disabled:opacity-60"
           >
             {loading ? "Đang tra…" : "Tra"}
           </button>
@@ -156,7 +156,7 @@ export default function LookupFlow() {
                     <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">
                       Mã {o.code}
                     </div>
-                    <span className="rounded-sm border border-gold bg-[#fff8ec] px-2 py-0.5 text-[10px] font-semibold uppercase text-[#b8862f]">
+                    <span className="rounded-sm border border-gold bg-gold/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-gold-deep">
                       {PAYMENT_LABEL[o.paymentStatus] ?? o.paymentStatus}
                     </span>
                   </div>
@@ -193,7 +193,7 @@ export default function LookupFlow() {
                     <span className="opacity-70">
                       Nội dung CK <b className="font-serif text-maroon">{o.transferCode}</b>
                     </span>
-                    <b className="font-serif text-maroon-deep">
+                    <b className="font-serif text-white">
                       {formatMoney(o.grandTotal, o.currency === "vnd" ? "vn" : "kr")}
                     </b>
                   </div>

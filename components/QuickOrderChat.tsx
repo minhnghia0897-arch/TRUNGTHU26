@@ -243,7 +243,7 @@ export default function QuickOrderChat({
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={confirm}
-                  className="flex-1 rounded-full bg-gold px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-navy-deep transition active:scale-95"
+                  className="flex-1 rounded-full bg-gold px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-white transition active:scale-95"
                 >
                   Xem lại & đặt hàng →
                 </button>
@@ -270,7 +270,7 @@ export default function QuickOrderChat({
             onClick={run}
             disabled={!text.trim()}
             aria-label="Đọc tin nhắn"
-            className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gold text-[16px] text-navy-deep transition active:scale-95 disabled:opacity-40"
+            className="grid h-11 w-11 flex-none place-items-center rounded-full bg-gold text-[16px] text-white transition active:scale-95 disabled:opacity-40"
           >
             ➤
           </button>

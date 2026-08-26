@@ -127,8 +127,8 @@ function FlavorRow({ name, img, right }: { name: string; img?: string; right?: R
 
 // ---------------------------------------------------------------- kiểu TikTok
 // Mấy mảnh nhỏ học theo trang shop TikTok: giá đỏ đậm, giá cũ gạch ngang, chip
-// "-N%" và "Freeship", hàng sản phẩm nằm ngang có nút Mua đỏ. Màu đỏ #E8264C
-// pha trầm hơn đỏ TikTok gốc một chút cho hợp tông kem-vàng của trang.
+// "-N%" và "Freeship", hàng sản phẩm nằm ngang có nút Mua đỏ. Màu đỏ dùng token
+// `gold` — từ đợt đổi tông TikTok thì token đó CHÍNH LÀ đỏ #FE2C55.
 
 /**
  * Giá cũ để gạch ngang, suy từ % giảm shop gõ ở Dashboard (ô "Giảm %").
@@ -159,11 +159,11 @@ function TikPrice({
   return (
     <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
       {orig !== null && (
-        <span className="rounded bg-[#E8264C] px-1 py-[1px] text-[10px] font-bold leading-tight text-white">
+        <span className="rounded bg-gold px-1 py-[1px] text-[10px] font-bold leading-tight text-white">
           -{Math.round(discount!)}%
         </span>
       )}
-      <span className={`font-bold text-[#E8264C] ${big ? "text-[21px]" : "text-[16px]"} leading-tight`}>
+      <span className={`font-bold text-gold ${big ? "text-[21px]" : "text-[16px]"} leading-tight`}>
         {formatMoney(price, region)}
       </span>
       {orig !== null && (
@@ -179,7 +179,7 @@ function TikChips({ freeship, discount }: { freeship: boolean; discount?: number
   return (
     <div className="mt-1 flex flex-wrap gap-1">
       {discount != null && discount > 0 && (
-        <span className="rounded border border-[#E8264C]/40 bg-[#E8264C]/5 px-1.5 py-[1px] text-[9.5px] font-semibold text-[#E8264C]">
+        <span className="rounded border border-gold/40 bg-gold/5 px-1.5 py-[1px] text-[9.5px] font-semibold text-gold">
           ⚡ Flash Sale
         </span>
       )}
@@ -228,7 +228,7 @@ function TikRow({
   onAction?: () => void;
   href?: string;
 }) {
-  const btn = `rounded-lg px-4 py-1.5 text-[12px] font-semibold transition active:scale-95 ${actionDone ? "bg-emerald-500 text-white" : "bg-[#E8264C] text-white"}`;
+  const btn = `rounded-lg px-4 py-1.5 text-[12px] font-semibold transition active:scale-95 ${actionDone ? "bg-emerald-500 text-white" : "bg-gold text-white"}`;
   return (
     <article className="flex gap-3 rounded-card bg-white p-2.5 shadow-card">
       <button
@@ -283,7 +283,7 @@ function TikRow({
 type SortKey = "rec" | "hot" | "priceAsc" | "priceDesc";
 function SortBar({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
   const item = (on: boolean) =>
-    `px-1 py-2 text-[12px] font-semibold transition ${on ? "text-[#E8264C]" : "text-ink/50"}`;
+    `px-1 py-2 text-[12px] font-semibold transition ${on ? "text-gold" : "text-ink/50"}`;
   const priceOn = sort === "priceAsc" || sort === "priceDesc";
   return (
     <div className="mb-3 flex items-center gap-4 border-b border-line/70 px-1">
@@ -739,17 +739,17 @@ export default function ProductCatalog({
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
       {/* hotline */}
-      <div className="bg-[#081221] px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
-        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">0982 576 263</b>
+      <div className="bg-black px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
+        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-gold">0982 576 263</b>
       </div>
 
       {/* header — bộ sưu tập là trang chính của luồng khách lẻ */}
       <header className="bg-navy px-4 pb-3 pt-3.5 text-center">
-        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
+        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-white">
           Doran King
         </a>
         <div className="mt-0.5 text-[10px] italic tracking-wide text-cream/55">Bánh Trung Thu thủ công cao cấp</div>
-        <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-[#E8C877]/85">
+        <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-white/70">
           <a href="/dat-hang">Đặt hàng</a>
           <a href="/tra-cuu">Tra cứu đơn</a>
         </nav>
@@ -939,7 +939,7 @@ export default function ProductCatalog({
         </button>
         <a
           href="/dat-hang"
-          className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+          className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-white"
         >
           <IconCart width={16} height={16} /> Tới giỏ
           {cartCount > 0 && (
@@ -1100,7 +1100,7 @@ export default function ProductCatalog({
                                   <button
                                     disabled={left !== 0}
                                     onClick={() => addToCart(key, line, detailQty)}
-                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${dis} ${added === key ? "border-emerald-500 bg-emerald-500 text-white" : "border-[#E8264C] bg-white text-[#E8264C]"}`}
+                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${dis} ${added === key ? "border-emerald-500 bg-emerald-500 text-white" : "border-gold bg-white text-gold"}`}
                                   >
                                     {added === key ? (
                                       <>
@@ -1115,7 +1115,7 @@ export default function ProductCatalog({
                                   <button
                                     disabled={left !== 0}
                                     onClick={() => addToCart(key, line, detailQty, true)}
-                                    className={`flex flex-1 flex-col items-center justify-center rounded-full bg-[#E8264C] py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95 ${dis}`}
+                                    className={`flex flex-1 flex-col items-center justify-center rounded-full bg-gold py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95 ${dis}`}
                                   >
                                     Mua ngay
                                     <span className="text-[10px] font-medium normal-case opacity-90">
@@ -1187,7 +1187,7 @@ export default function ProductCatalog({
                                 <>
                                   <button
                                     onClick={() => addToCart(key2, line, detailQty)}
-                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key2 ? "border-emerald-500 bg-emerald-500 text-white" : "border-[#E8264C] bg-white text-[#E8264C]"}`}
+                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key2 ? "border-emerald-500 bg-emerald-500 text-white" : "border-gold bg-white text-gold"}`}
                                   >
                                     {added === key2 ? (
                                       <>
@@ -1201,7 +1201,7 @@ export default function ProductCatalog({
                                   </button>
                                   <button
                                     onClick={() => addToCart(key2, line, detailQty, true)}
-                                    className="flex flex-1 flex-col items-center justify-center rounded-full bg-[#E8264C] py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95"
+                                    className="flex flex-1 flex-col items-center justify-center rounded-full bg-gold py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95"
                                   >
                                     Mua ngay
                                     <span className="text-[10px] font-medium normal-case opacity-90">
@@ -1262,7 +1262,7 @@ export default function ProductCatalog({
                                   name: `${detail.name} · ${o.name}`,
                                 })
                               }
-                              className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                              className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-white"}`}
                             >
                               {added === key ? (
                                 <>
