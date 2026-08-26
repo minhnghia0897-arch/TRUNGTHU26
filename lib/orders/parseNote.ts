@@ -30,6 +30,8 @@ export interface ParsedNote {
   qty?: number;
   /** Vị bánh dò được (cho set tự chọn) — chỉ để ghi vào ghi chú đơn. */
   flavors?: string[];
+  /** Vị kèm SỐ BÁNH nhắn cạnh nó ("lava x2") — để dựng đúng ruột hộp. */
+  flavorPicks?: { id: string; name: string; qty: number }[];
   /** Tiền khách đã cọc / chuyển trước. */
   prepaid?: number;
   /** Tổng tiền khách chốt (chỉ để đối chiếu — giá thật do danh mục quyết). */
@@ -185,6 +187,11 @@ export function parseOrderNote(
     if (hit && !seen.has(f.name)) {
       seen.add(f.name);
       (out.flavors ??= []).push(f.name);
+      // số bánh đứng NGAY SAU tên vị ("lava trung muoi x2") — chỉ nhìn sát
+      // đuôi, nhìn xa là vớ nhầm số của vị bên cạnh.
+      const after = flatText.slice(flatText.indexOf(hit) + hit.length, flatText.indexOf(hit) + hit.length + 8);
+      const q = after.match(/^\s*(?:x|×|\*)\s*(\d{1,2})/);
+      (out.flavorPicks ??= []).push({ id: f.id, name: f.name, qty: q ? Math.max(1, Number(q[1])) : 1 });
     }
   }
 

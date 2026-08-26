@@ -16,6 +16,7 @@ import {
   comboPickPool,
   describePickedFlavors,
 } from "@/lib/pricing";
+import QuickOrderChat from "@/components/QuickOrderChat";
 import {
   IconLotus,
   IconCrown,
@@ -654,6 +655,8 @@ export default function ProductCatalog({
   // mô tả đầy đủ và danh sách vị của từng loại nhân nằm ở đây.
   const [detail, setDetail] = useState<Combo | null>(null);
   const [sort, setSort] = useState<SortKey>("rec");
+  // Ô "đặt nhanh": khách dán tin nhắn, hệ thống đọc rồi điền sẵn trang đặt hàng.
+  const [quickChat, setQuickChat] = useState(false);
   // Số hộp khách chỉnh trong popup chi tiết (kiểu ô "Số lượng" của TikTok).
   const [detailQty, setDetailQty] = useState(1);
   useEffect(() => setDetailQty(1), [detail?.id]);
@@ -928,6 +931,12 @@ export default function ProductCatalog({
         <a href="/tra-cuu" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
           Tra cứu đơn
         </a>
+        <button
+          onClick={() => setQuickChat(true)}
+          className="flex items-center gap-1 rounded-full border border-gold bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gold-deep transition active:scale-95"
+        >
+          ⚡ Đặt nhanh
+        </button>
         <a
           href="/dat-hang"
           className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
@@ -1275,6 +1284,16 @@ export default function ProductCatalog({
             </div>
           </div>
         </div>
+      )}
+
+      {quickChat && (
+        <QuickOrderChat
+          boxes={boxes}
+          flavors={flavors}
+          combos={combos}
+          region={region}
+          onClose={() => setQuickChat(false)}
+        />
       )}
 
       {lightbox && (
