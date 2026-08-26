@@ -25,7 +25,9 @@ import {
   IconPlus,
 } from "@/components/icons";
 import OrderDetailModal, { type HistoryEntry } from "@/components/OrderDetailModal";
-import CreateOrderModal from "@/components/CreateOrderModal";
+import CreateOrderModal, { type CreateOrderPrefill } from "@/components/CreateOrderModal";
+import NoteToOrder from "@/components/NoteToOrder";
+import { type ParsedNote } from "@/lib/orders/parseNote";
 import ExportButton from "@/components/ExportButton";
 import OrdersStateBanner from "@/components/OrdersStateBanner";
 import { useOrders, stamp } from "@/components/useOrders";
@@ -97,6 +99,9 @@ export default function OrdersTable({
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Ô "dán ghi chú → thành đơn": đọc xong thì mở form tạo đơn với bản điền sẵn.
+  const [showNote, setShowNote] = useState(false);
+  const [prefill, setPrefill] = useState<CreateOrderPrefill | null>(null);
 
   // Kho do MÁY CHỦ cộng trừ theo trạng thái (lib/orders/orderStore.ts). Bản cũ
   // làm ở đây và ghi vào localStorage — tức ghi vào chỗ không ai đọc, nên huỷ
@@ -283,6 +288,13 @@ export default function OrdersTable({
           className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[13px] font-medium text-white hover:bg-blue-700"
         >
           <IconPlus width={15} height={15} /> Tạo đơn
+        </button>
+        <button
+          onClick={() => setShowNote(true)}
+          title="Dán tin nhắn của khách, hệ thống tự điền form tạo đơn"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-[13px] font-medium text-blue-700 hover:bg-blue-100"
+        >
+          ⚡ Ghi chú → đơn
         </button>
         <div className="relative ml-auto w-full max-w-md">
           <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" width={16} height={16} />
@@ -567,14 +579,47 @@ export default function OrdersTable({
         </div>
       )}
 
-      {/* form tạo đơn mới */}
+      {/* form tạo đơn mới — mở tay hoặc từ ô đọc ghi chú (có bản điền sẵn) */}
       {showCreate && (
         <CreateOrderModal
           boxes={boxes}
           flavors={flavors}
           combos={combos}
+          initial={prefill ?? undefined}
           onCreate={createOrder}
-          onClose={() => setShowCreate(false)}
+          onClose={() => {
+            setShowCreate(false);
+            setPrefill(null);
+          }}
+        />
+      )}
+
+      {/* ô dán ghi chú cho AI đọc thành đơn */}
+      {showNote && (
+        <NoteToOrder
+          boxes={boxes}
+          flavors={flavors}
+          combos={combos}
+          regionHint={warehouse === "vn" ? "vn" : "kr"}
+          onClose={() => setShowNote(false)}
+          onConfirm={(p: ParsedNote, raw: string) => {
+            setPrefill({
+              source: "facebook",
+              region: p.region,
+              itemKey: p.itemKey,
+              qty: p.qty,
+              customer: p.customer,
+              phone: p.phone,
+              address: p.address,
+              paid: p.prepaid,
+              expected: p.date,
+              // Không đọc ra gì thì giữ NGUYÊN VĂN ghi chú — thà thừa chữ còn
+              // hơn rơi mất lời dặn của khách.
+              note: p.note ?? raw,
+            });
+            setShowNote(false);
+            setShowCreate(true);
+          }}
         />
       )}
 

@@ -10,34 +10,51 @@ import { IconXCircle, IconPlus } from "@/components/icons";
 const CARRIERS: Carrier[] = ["", "Viettel", "GHN", "GHTK", "CJ", "Vinaphone", "Vietnamobile"];
 const STATUSES: Status[] = [...PIPELINE];
 
+/** Giá trị điền sẵn — ô AI đọc ghi chú đổ vào đây, người duyệt sửa nốt. */
+export interface CreateOrderPrefill {
+  source?: OrderSource;
+  region?: "vn" | "kr";
+  itemKey?: string;
+  qty?: number;
+  customer?: string;
+  phone?: string;
+  address?: string;
+  paid?: number;
+  expected?: string;
+  note?: string;
+}
+
 export default function CreateOrderModal({
   boxes,
   flavors,
   combos,
+  initial,
   onCreate,
   onClose,
 }: {
   boxes: Box[];
   flavors: Flavor[];
   combos: Combo[];
+  /** Điền sẵn form (từ ô đọc ghi chú). Không có thì form trống như cũ. */
+  initial?: CreateOrderPrefill;
   onCreate: (o: Omit<OrderRow, "id">) => void;
   onClose: () => void;
 }) {
-  const [source, setSource] = useState<OrderSource>("web");
-  const [region, setRegion] = useState<"vn" | "kr">("kr");
+  const [source, setSource] = useState<OrderSource>(initial?.source ?? "web");
+  const [region, setRegion] = useState<"vn" | "kr">(initial?.region ?? "kr");
   const [status, setStatus] = useState<Status>("Mới");
-  const [itemKey, setItemKey] = useState("");
-  const [prodQty, setProdQty] = useState(1);
-  const [customer, setCustomer] = useState("");
-  const [phone, setPhone] = useState("");
+  const [itemKey, setItemKey] = useState(initial?.itemKey ?? "");
+  const [prodQty, setProdQty] = useState(initial?.qty ?? 1);
+  const [customer, setCustomer] = useState(initial?.customer ?? "");
+  const [phone, setPhone] = useState(initial?.phone ?? "");
   const [carrier, setCarrier] = useState<Carrier>("");
   const [recipient, setRecipient] = useState("");
-  const [address, setAddress] = useState("");
-  const [paid, setPaid] = useState(0); // đã cọc; COD suy ra
+  const [address, setAddress] = useState(initial?.address ?? "");
+  const [paid, setPaid] = useState(initial?.paid ?? 0); // đã cọc; COD suy ra
   const [shipFee, setShipFee] = useState(0); // phí ship THU CỦA KHÁCH
   const [cuoc, setCuoc] = useState(0); // cước trả hãng vận chuyển
-  const [expected, setExpected] = useState("");
-  const [note, setNote] = useState("");
+  const [expected, setExpected] = useState(initial?.expected ?? "");
+  const [note, setNote] = useState(initial?.note ?? "");
   const [err, setErr] = useState("");
 
   const cur = region === "kr" ? "₩" : "đ";
