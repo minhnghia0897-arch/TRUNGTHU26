@@ -91,17 +91,21 @@ function moneyAfter(text: string, labels: RegExp): number | null {
  * có hai số (khách + người nhận) thì người duyệt tự phân, đoán bừa là gán nhầm.
  */
 function findPhone(text: string): { phone: string; region?: Region } | null {
-  const m = text.match(/(?:\+?84|\+?82|0)[\d .\-]{7,13}\d/);
-  if (!m) return null;
-  const digits = m[0].replace(/\D/g, "");
-  if (digits.length < 9 || digits.length > 12) return null;
-  const region: Region | undefined =
-    digits.startsWith("010") || digits.startsWith("8210") || digits.startsWith("82")
-      ? "kr"
-      : digits.startsWith("0") || digits.startsWith("84")
-        ? "vn"
-        : undefined;
-  return { phone: m[0].trim(), region };
+  // Quét MỌI ứng viên và bỏ qua cụm không đủ số — địa chỉ Hàn đầy cụm số kiểu
+  // "04352 305호", vớ phải nó rồi bỏ cuộc là SĐT thật đứng sau không bao giờ
+  // được nhìn tới.
+  for (const m of text.matchAll(/(?:\+?8[24]|0)[\d .\-]{7,13}\d/g)) {
+    const digits = m[0].replace(/\D/g, "");
+    if (digits.length < 9 || digits.length > 12) continue;
+    const region: Region | undefined =
+      digits.startsWith("010") || digits.startsWith("8210") || digits.startsWith("82")
+        ? "kr"
+        : digits.startsWith("0") || digits.startsWith("84")
+          ? "vn"
+          : undefined;
+    return { phone: m[0].trim(), region };
+  }
+  return null;
 }
 
 // ---- ngày giao -------------------------------------------------------------
@@ -167,7 +171,11 @@ export function parseOrderNote(
     out.itemKey = it.key;
     out.itemLabel = it.label;
     const around = flatText.slice(Math.max(0, flatText.indexOf(hit) - 12), flatText.indexOf(hit) + hit.length + 12);
-    const q = around.match(/(?:x|×|sl\s*)(\d{1,2})/) ?? around.match(/(\d{1,2})\s*(?:hop|set|phan|cai)/);
+    // Số phải đứng RỜI (không dính vào số khác): "…7564 set kim ngoc cac" mà
+    // không chặn thì đuôi SĐT thành "64 set" — đơn 64 hộp.
+    const q =
+      around.match(/(?:^|[^\d])(?:x|×|sl\s*)(\d{1,2})(?!\d)/) ??
+      around.match(/(?:^|[^\d])(\d{1,2})\s*(?:hop|set|phan|cai)/);
     out.qty = q ? Math.max(1, Number(q[1])) : 1;
     rawLines.forEach((l, i) => {
       if (flat(l).includes(hit)) used.add(i);
@@ -207,12 +215,19 @@ export function parseOrderNote(
   // 6. Địa chỉ: ưu tiên dòng có nhãn "đc/địa chỉ", rồi tới dòng trông giống
   // địa chỉ nhất (có tên đường/quận/phường… hoặc dài bất thường).
   const labeled = rawLines.findIndex((l) => /^(dc|d\/c|dia chi|add(ress)?)\b/.test(flat(l)));
-  const addrIdx =
-    labeled >= 0 ? labeled : rawLines.findIndex((l, i) => !used.has(i) && !/\d{9,}/.test(l.replace(/\D/g, "")) && looksLikeAddress(l));
+  // Chỉ gạt dòng có CỤM 9+ chữ số LIỀN NHAU (đó là SĐT). Trước đây gộp hết chữ
+  // số của dòng lại rồi mới đếm, nên địa chỉ Hàn "대로84길 21-13, 04352 305호"
+  // cộng dồn đủ 9 số và bị loại oan.
+  // Địa chỉ Hangul nhận thẳng: dòng có chữ Hàn kèm chữ số gần như chắc chắn là
+  // địa chỉ (so trên DÒNG GỐC — flat() tách chữ Hàn thành jamo nên so trượt).
+  const isAddrLine = (l: string) =>
+    !/\d{9,}/.test(l) && (looksLikeAddress(l) || (/[가-힣]/.test(l) && /\d/.test(l)));
+  const addrIdx = labeled >= 0 ? labeled : rawLines.findIndex((l, i) => !used.has(i) && isAddrLine(l));
   if (addrIdx >= 0) {
     out.address = rawLines[addrIdx].replace(/^(đc|dc|d\/c|địa chỉ|dia chi|add(?:ress)?)\s*[:\-]?\s*/i, "").trim();
     used.add(addrIdx);
-    if (!out.region && /-dong|-gu|seoul|busan|incheon|suwon|ansan/.test(flat(out.address))) out.region = "kr";
+    if (!out.region && (/[가-힣]/.test(out.address) || /-dong|-gu|seoul|busan|incheon|suwon|ansan/.test(flat(out.address))))
+      out.region = "kr";
   }
 
   // 7a. Tên khách hay nằm CHUNG DÒNG với SĐT ("Chị Hoa 010-…", "098… - An"):
