@@ -24,10 +24,15 @@ export interface ParsedNote {
   address?: string;
   /** Vùng giao suy từ SĐT/địa chỉ. Không chắc thì thiếu — form giữ mặc định. */
   region?: Region;
-  /** Món khớp được trong danh mục đang bán. */
+  /** Món ĐẦU TIÊN khớp danh mục — giữ cho chỗ gọi chỉ nhận một món (form tạo đơn tay). */
   itemKey?: string;
   itemLabel?: string;
   qty?: number;
+  /** TẤT CẢ món khớp được — một tin nhắn đặt mấy set là chuyện thường. */
+  items?: { key: string; label: string; qty: number }[];
+  /** Đoạn chữ trông như đặt món ("1 set mini") mà danh mục KHÔNG có — hiện ra
+   *  cho người xem xử, không bịa thành món khác và càng không thành tên. */
+  unknownItems?: string[];
   /** Vị bánh dò được (cho set tự chọn) — chỉ để ghi vào ghi chú đơn. */
   flavors?: string[];
   /** Vị kèm SỐ BÁNH nhắn cạnh nó ("lava x2") — để dựng đúng ruột hộp. */
@@ -161,27 +166,58 @@ export function parseOrderNote(
   const items = sellableItems(cat.combos, cat.boxes, cat.flavors, region);
   const byLen = [...items].sort((a, b) => flat(b.label).length - flat(a.label).length);
   const flatText = flat(text);
+  // Một tin nhắn đặt MẤY món là chuyện thường ("set kim ngoc cac" + "1 hộp sắc
+  // đỏ") nên khớp hết chứ không dừng ở món đầu. Mỗi món chiếm một KHOẢNG CHỮ
+  // riêng — khoảng đã thuộc món này thì món khác (tên ngắn hơn, lồng bên trong)
+  // không được nhận nữa, kẻo "Kim Ngọc Các" đẻ thêm một món "Các" nào đó.
+  const claimed: Array<[number, number]> = [];
+  const overlaps = (a: number, b: number) => claimed.some(([x, y]) => a < y && x < b);
   for (const it of byLen) {
     // bỏ đuôi "(lẻ)" và tách "set · lựa chọn" để khớp được cả tên cụt
     const names = [flat(it.label.replace(/\s*\(lẻ\)\s*/, "")), ...it.label.split("·").map(flat)].filter(
       (n) => n.length >= 4,
     );
-    const hit = names.find((n) => flatText.includes(n));
+    let hit: string | undefined;
+    let pos = -1;
+    for (const n of names) {
+      const i = flatText.indexOf(n);
+      if (i >= 0 && !overlaps(i, i + n.length)) {
+        hit = n;
+        pos = i;
+        break;
+      }
+    }
     if (!hit) continue;
-    out.itemKey = it.key;
-    out.itemLabel = it.label;
-    const around = flatText.slice(Math.max(0, flatText.indexOf(hit) - 12), flatText.indexOf(hit) + hit.length + 12);
+    claimed.push([pos, pos + hit.length]);
+    const around = flatText.slice(Math.max(0, pos - 12), pos + hit.length + 12);
     // Số phải đứng RỜI (không dính vào số khác): "…7564 set kim ngoc cac" mà
     // không chặn thì đuôi SĐT thành "64 set" — đơn 64 hộp.
     const q =
       around.match(/(?:^|[^\d])(?:x|×|sl\s*)(\d{1,2})(?!\d)/) ??
       around.match(/(?:^|[^\d])(\d{1,2})\s*(?:hop|set|phan|cai)/);
-    out.qty = q ? Math.max(1, Number(q[1])) : 1;
+    (out.items ??= []).push({ key: it.key, label: it.label, qty: q ? Math.max(1, Number(q[1])) : 1 });
     rawLines.forEach((l, i) => {
-      if (flat(l).includes(hit)) used.add(i);
+      if (flat(l).includes(hit!)) used.add(i);
     });
-    break;
   }
+  if (out.items?.length) {
+    out.itemKey = out.items[0].key;
+    out.itemLabel = out.items[0].label;
+    out.qty = out.items[0].qty;
+  }
+
+  // Dòng TRÔNG NHƯ đặt món (có chữ set/hộp/bánh/combo/mini/lẻ) mà không khớp
+  // món nào trong danh mục → giữ riêng để hiện "chưa nhận ra". Không bịa thành
+  // món khác, và tuyệt đối không để nó lọt xuống thành TÊN khách ở bước sau.
+  const PRODUCTISH = /(^|\s)(set|hop|banh|combo|mini|le|qua)(\s|$)|x\s?\d/;
+  rawLines.forEach((l, i) => {
+    if (used.has(i)) return;
+    const fl = flat(l);
+    if (PRODUCTISH.test(fl) && !looksLikeAddress(l) && !/\d{9,}/.test(l)) {
+      (out.unknownItems ??= []).push(l);
+      used.add(i);
+    }
+  });
 
   // 3. Vị bánh (cho set tự chọn) — dò MỌI vị xuất hiện, giữ nguyên thứ tự nhắn.
   // Khách hay nhắn tên cụt ("lava trứng muối" thay vì "Lava Trứng Muối Chảy")
@@ -253,8 +289,15 @@ export function parseOrderNote(
     : rawLines.findIndex((l) => /^(ten|khach|kh|nguoi (dat|nhan))\b/.test(flat(l)));
   let nameIdx = nameLabeled;
   if (nameIdx < 0 && !out.customer)
+    // Tên người thì KHÔNG có chữ số và không có từ ngữ hàng hoá — "1 set mini"
+    // từng bị nhận nhầm làm tên chỉ vì nó ngắn.
     nameIdx = rawLines.findIndex(
-      (l, i) => !used.has(i) && flat(l).split(" ").length <= 5 && !/\d{4,}/.test(l) && !looksLikeAddress(l),
+      (l, i) =>
+        !used.has(i) &&
+        flat(l).split(" ").length <= 5 &&
+        !/\d/.test(l) &&
+        !/(^|\s)(set|hop|banh|combo|mini|le|qua|vi)(\s|$)/.test(flat(l)) &&
+        !looksLikeAddress(l),
     );
   if (nameIdx >= 0) {
     const v = rawLines[nameIdx].replace(/^(tên|ten|khách|khach|kh|người đặt|nguoi dat|người nhận|nguoi nhan)\s*[:\-]?\s*/i, "").trim();
@@ -267,7 +310,8 @@ export function parseOrderNote(
   // 8. Còn lại → ghi chú, kèm vị đã dò để bên đóng gói nhìn thấy.
   const leftover = rawLines.filter((_, i) => !used.has(i)).join(" · ");
   const flavorNote = out.flavors?.length ? `Vị: ${out.flavors.join(", ")}` : "";
-  out.note = [flavorNote, leftover].filter(Boolean).join(" — ") || undefined;
+  const unknownNote = out.unknownItems?.length ? `Khách nhắn thêm: ${out.unknownItems.join(" · ")}` : "";
+  out.note = [flavorNote, unknownNote, leftover].filter(Boolean).join(" — ") || undefined;
 
   return out;
 }

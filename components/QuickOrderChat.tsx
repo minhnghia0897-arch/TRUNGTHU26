@@ -94,12 +94,12 @@ export default function QuickOrderChat({
       note: parsed.note ?? "",
     };
 
-    // --- món vào giỏ (nếu đọc ra) ---
-    if (parsed.itemKey) {
-      const items = sellableItems(combos, boxes, flavors, buyRegion);
-      const it = items.find((x) => x.key === parsed.itemKey);
+    // --- món vào giỏ: TẤT CẢ món đã khớp, mỗi món một dòng giỏ ---
+    const items = sellableItems(combos, boxes, flavors, buyRegion);
+    for (const pi of parsed.items ?? []) {
+      const it = items.find((x) => x.key === pi.key);
       if (it) {
-        const qty = parsed.qty ?? 1;
+        const qty = pi.qty;
         if (it.comboId) {
           const combo = combos.find((c) => c.id === it.comboId);
           const need = combo ? comboPickCount(combo) : 0;
@@ -171,9 +171,7 @@ export default function QuickOrderChat({
     </div>
   );
 
-  const matchedItem = parsed?.itemKey
-    ? sellableItems(combos, boxes, flavors, parsed.region ?? region).find((x) => x.key === parsed.itemKey)
-    : undefined;
+  const catalogItems = sellableItems(combos, boxes, flavors, parsed?.region ?? region);
 
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50" onClick={onClose}>
@@ -221,11 +219,19 @@ export default function QuickOrderChat({
                 <Row
                   label="Món"
                   value={
-                    matchedItem
-                      ? `${matchedItem.label} ×${parsed.qty ?? 1} — ${formatMoney(matchedItem.price, parsed.region ?? region)}/hộp`
+                    parsed.items?.length
+                      ? parsed.items
+                          .map((pi) => {
+                            const it = catalogItems.find((x) => x.key === pi.key);
+                            return `${pi.label} ×${pi.qty}${it ? ` — ${formatMoney(it.price, parsed.region ?? region)}/hộp` : ""}`;
+                          })
+                          .join(" · ")
                       : undefined
                   }
                 />
+                {parsed.unknownItems && parsed.unknownItems.length > 0 && (
+                  <Row label="Chưa nhận ra" value={`"${parsed.unknownItems.join('" · "')}" — shop sẽ đọc trong ghi chú`} />
+                )}
                 {parsed.flavors && parsed.flavors.length > 0 && (
                   <Row
                     label="Vị bánh"

@@ -603,6 +603,12 @@ export default function OrdersTable({
           regionHint={warehouse === "vn" ? "vn" : "kr"}
           onClose={() => setShowNote(false)}
           onConfirm={(p: ParsedNote, raw: string) => {
+            // Form tạo đơn tay chỉ có MỘT dòng món — món thứ hai trở đi ghi vào
+            // ghi chú để người tạo thấy mà tách đơn/thêm tay, không lặng lẽ rơi.
+            const extra = (p.items ?? [])
+              .slice(1)
+              .map((it) => `${it.label} ×${it.qty}`)
+              .join(", ");
             setPrefill({
               source: "facebook",
               region: p.region,
@@ -615,7 +621,7 @@ export default function OrdersTable({
               expected: p.date,
               // Không đọc ra gì thì giữ NGUYÊN VĂN ghi chú — thà thừa chữ còn
               // hơn rơi mất lời dặn của khách.
-              note: p.note ?? raw,
+              note: [extra && `Món thêm: ${extra}`, p.note ?? raw].filter(Boolean).join(" — "),
             });
             setShowNote(false);
             setShowCreate(true);

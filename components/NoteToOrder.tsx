@@ -105,8 +105,15 @@ export default function NoteToOrder({
                 <Row label="Địa chỉ" value={parsed.address} />
                 <Row
                   label="Món"
-                  value={parsed.itemLabel ? `${parsed.itemLabel} ×${parsed.qty ?? 1}` : undefined}
+                  value={
+                    parsed.items?.length
+                      ? parsed.items.map((pi) => `${pi.label} ×${pi.qty}`).join(" · ")
+                      : undefined
+                  }
                 />
+                {parsed.unknownItems && parsed.unknownItems.length > 0 && (
+                  <Row label="Chưa nhận ra" value={`"${parsed.unknownItems.join('" · "')}" — không có trong danh mục`} />
+                )}
                 {parsed.flavors && parsed.flavors.length > 0 && (
                   <Row label="Vị bánh" value={parsed.flavors.join(", ")} />
                 )}
