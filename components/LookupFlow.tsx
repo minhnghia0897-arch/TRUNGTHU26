@@ -17,6 +17,15 @@ import type { Currency, Region } from "@/lib/types";
 //   máy chủ cũng chặn, giao diện chỉ là lớp vỏ.
 // ============================================================================
 
+interface PickLine {
+  lineId: string;
+  comboName: string;
+  qty: number;
+  pickCount: number;
+  pool: { id: string; name: string }[];
+  flavorIds: string[];
+}
+
 interface Row {
   shipmentId: string;
   orderCode: string;
@@ -36,6 +45,7 @@ interface Row {
   vc: string;
   note: string;
   amount: number;
+  picks?: PickLine[];
 }
 
 interface Draft {
@@ -44,6 +54,8 @@ interface Draft {
   address: string;
   desiredDate: string;
   note: string;
+  /** Vị đang chọn lại cho từng set tự chọn: lineId → danh sách vị (đủ số ngăn). */
+  picks: Record<string, string[]>;
 }
 
 const PAYMENT_LABEL: Record<string, string> = {
@@ -113,8 +125,24 @@ export default function LookupFlow() {
   const startEdit = (r: Row) => {
     setEditingId(r.shipmentId);
     setRowError("");
-    setDraft({ name: r.name, phone: r.phone, address: r.address, desiredDate: r.desiredDate, note: r.note });
+    setDraft({
+      name: r.name,
+      phone: r.phone,
+      address: r.address,
+      desiredDate: r.desiredDate,
+      note: r.note,
+      picks: Object.fromEntries((r.picks ?? []).map((p) => [p.lineId, [...p.flavorIds]])),
+    });
     setView("bang");
+  };
+
+  /** Vị còn thiếu/đủ của các set trong bản nháp — đủ hết mới cho Lưu. */
+  const pickState = (r: Row): { ok: boolean; label: string } => {
+    for (const p of r.picks ?? []) {
+      const n = draft?.picks[p.lineId]?.length ?? 0;
+      if (n !== p.pickCount) return { ok: false, label: `${p.comboName}: ${n}/${p.pickCount} vị` };
+    }
+    return { ok: true, label: "" };
   };
 
   const saveEdit = async () => {
@@ -125,9 +153,16 @@ export default function LookupFlow() {
       const res = await fetch("/api/lookup/update", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ phone: phone.trim(), shipmentId: editingId, edit: draft }),
+        body: JSON.stringify({
+          phone: phone.trim(),
+          shipmentId: editingId,
+          edit: {
+            ...draft,
+            picks: Object.entries(draft.picks).map(([lineId, flavorIds]) => ({ lineId, flavorIds })),
+          },
+        }),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string; locked?: boolean };
+      const data = (await res.json()) as { ok: boolean; error?: string; locked?: boolean; items?: string };
       if (!data.ok) {
         setRowError(data.error ?? "Không sửa được, thử lại giúp em.");
         // máy chủ báo khoá thì cập nhật lại dòng cho khớp sự thật
@@ -136,7 +171,20 @@ export default function LookupFlow() {
         return;
       }
       setRows((rs) =>
-        (rs ?? []).map((r) => (r.shipmentId === editingId ? { ...r, ...draft } : r)),
+        (rs ?? []).map((r) =>
+          r.shipmentId === editingId
+            ? {
+                ...r,
+                name: draft.name,
+                phone: draft.phone,
+                address: draft.address,
+                desiredDate: draft.desiredDate,
+                note: draft.note,
+                items: data.items ?? r.items,
+                picks: r.picks?.map((p) => ({ ...p, flavorIds: draft.picks[p.lineId] ?? p.flavorIds })),
+              }
+            : r,
+        ),
       );
       setSavedId(editingId);
       setTimeout(() => setSavedId(null), 2500);
@@ -375,7 +423,61 @@ export default function LookupFlow() {
                               )}
                             </td>
                             <td className={`${cell} whitespace-nowrap`}>{r.region === "kr" ? "Hàn" : "VN"}</td>
-                            <td className={`${cell} min-w-[150px]`}>{r.items}</td>
+                            <td className={`${cell} min-w-[170px]`}>
+                              {editing && r.picks?.length ? (
+                                /* đổi ruột các set tự chọn — bốc đủ số ngăn mới cho Lưu */
+                                <div className="space-y-2">
+                                  {r.picks.map((p) => {
+                                    const cur = draft?.picks[p.lineId] ?? [];
+                                    const cnt = (id: string) => cur.filter((x) => x === id).length;
+                                    const setCur = (next: string[]) =>
+                                      setDraft((d) => d && { ...d, picks: { ...d.picks, [p.lineId]: next } });
+                                    return (
+                                      <div key={p.lineId} className="rounded border border-gold/50 bg-white p-1.5">
+                                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold">
+                                          <span>
+                                            {p.comboName}
+                                            {p.qty > 1 ? ` ×${p.qty}` : ""}
+                                          </span>
+                                          <span className={cur.length === p.pickCount ? "text-emerald-600" : "text-gold-deep"}>
+                                            {cur.length}/{p.pickCount} vị
+                                          </span>
+                                        </div>
+                                        {p.pool.map((f) => (
+                                          <div key={f.id} className="flex items-center justify-between gap-1 py-0.5 text-[11px]">
+                                            <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                                            <span className="flex flex-none items-center gap-1">
+                                              <button
+                                                onClick={() => {
+                                                  const i = cur.indexOf(f.id);
+                                                  if (i >= 0) setCur([...cur.slice(0, i), ...cur.slice(i + 1)]);
+                                                }}
+                                                disabled={!cnt(f.id)}
+                                                className="grid h-5 w-5 place-items-center rounded-full border border-line disabled:opacity-30"
+                                              >
+                                                −
+                                              </button>
+                                              <span className={`w-4 text-center ${cnt(f.id) ? "font-bold text-gold-deep" : "opacity-40"}`}>
+                                                {cnt(f.id)}
+                                              </span>
+                                              <button
+                                                onClick={() => cur.length < p.pickCount && setCur([...cur, f.id])}
+                                                disabled={cur.length >= p.pickCount}
+                                                className="grid h-5 w-5 place-items-center rounded-full border border-gold text-gold-deep disabled:opacity-30"
+                                              >
+                                                +
+                                              </button>
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                r.items
+                              )}
+                            </td>
                             <td className={`${cell} whitespace-nowrap`}>
                               {editing ? (
                                 <input type="date" className={inputCls} value={draft?.desiredDate ?? ""} onChange={(e) => setDraft((d) => d && { ...d, desiredDate: e.target.value })} />
@@ -399,7 +501,8 @@ export default function LookupFlow() {
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => void saveEdit()}
-                                    disabled={saving}
+                                    disabled={saving || !pickState(r).ok}
+                                    title={pickState(r).ok ? "" : `Bốc đủ vị đã: ${pickState(r).label}`}
                                     className="rounded bg-gold px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-60"
                                   >
                                     {saving ? "…" : "Lưu"}
@@ -437,8 +540,9 @@ export default function LookupFlow() {
                     </tbody>
                   </table>
                   <div className="border-t border-line bg-cream-soft/60 px-3 py-2 text-[11px] opacity-70">
-                    Sửa được tên · SĐT · địa chỉ · hẹn giao · ghi chú khi đơn chưa giao. Từ lúc shop
-                    cho đi giao (🔒) muốn đổi gì nhắn shop. Đổi món/số lượng cũng nhắn shop.
+                    Sửa được tên · SĐT · địa chỉ · hẹn giao · ghi chú · vị bánh của set tự chọn khi
+                    đơn chưa giao (đổi vị không đổi giá). Từ lúc shop cho đi giao (🔒) muốn đổi gì
+                    nhắn shop. Đổi món/số lượng cũng nhắn shop.
                   </div>
                 </div>
               ) : (
