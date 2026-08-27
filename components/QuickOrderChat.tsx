@@ -105,7 +105,9 @@ export default function QuickOrderChat({
           const need = combo ? comboPickCount(combo) : 0;
           let flavorIds = combo?.flavor_ids ?? [];
           if (combo && need) {
-            const picked = (parsed.flavorPicks ?? [])
+            // vị gắn riêng cho món này (nhắn sau tên set nào thì của set đó);
+            // tin nhắn kiểu cũ không tách theo set thì dùng danh sách chung
+            const picked = ((pi.flavorPicks ?? parsed.flavorPicks) ?? [])
               .filter((f) => combo.flavor_ids.includes(f.id))
               .flatMap((f) => Array.from({ length: f.qty }, () => f.id));
             const pool = comboPickPool(combo, flavors);

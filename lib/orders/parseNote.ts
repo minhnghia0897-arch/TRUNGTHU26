@@ -1,4 +1,4 @@
-import { sellableItems } from "@/lib/pricing";
+import { sellableItems, comboPickCount } from "@/lib/pricing";
 import type { Box, Combo, Flavor, Region } from "@/lib/types";
 
 // ============================================================================
@@ -28,8 +28,10 @@ export interface ParsedNote {
   itemKey?: string;
   itemLabel?: string;
   qty?: number;
-  /** TẤT CẢ món khớp được — một tin nhắn đặt mấy set là chuyện thường. */
-  items?: { key: string; label: string; qty: number }[];
+  /** TẤT CẢ món khớp được — một tin nhắn đặt mấy set là chuyện thường.
+   *  Vị nhắn SAU tên set nào thì gắn vào set đó (`flavorPicks` riêng từng món)
+   *  — "set A (lava x2…) set B (matcha x2…)" dựng đúng ruột từng hộp. */
+  items?: { key: string; label: string; qty: number; flavorPicks?: { id: string; name: string; qty: number }[] }[];
   /** Đoạn chữ trông như đặt món ("1 set mini") mà danh mục KHÔNG có — hiện ra
    *  cho người xem xử, không bịa thành món khác và càng không thành tên. */
   unknownItems?: string[];
@@ -57,6 +59,41 @@ const flat = (s: string) =>
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+
+/** Tên gọi quen miệng của khách → chữ có thật trong tên vị. Thay TRƯỚC khi so
+ *  khớp để "matcha" tự hiểu là "trà xanh". Chỉ thu nạp từ đã nghe khách dùng
+ *  thật — bịa thêm là khớp lung tung. */
+const ALIAS: Array<[RegExp, string]> = [
+  [/\bmatcha\b/g, "tra xanh"],
+  [/\bso co la\b/g, "socola"],
+  [/\bchoco(?:late)?\b/g, "socola"],
+];
+const aliased = (s: string) => ALIAS.reduce((x, [re, to]) => x.replace(re, to), s);
+
+/** Hai từ chỉ lệch nhau ≤1 ký tự (gõ vội: "tham cam" ~ "thap cam"). Chỉ dám
+ *  áp cho từ dài ≥4 ký tự — từ ngắn lệch 1 là thành từ khác hẳn. */
+function near1(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < 4 || b.length < 4 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
 
 // ---- tiền ------------------------------------------------------------------
 /**
@@ -169,7 +206,7 @@ export function parseOrderNote(
   // GIỮ dấu xuống dòng khi ép phẳng: mỗi dòng là một câu riêng của khách. Ép
   // hết thành một dòng thì "…Kim Ngọc Các⏎2 set Sắc Đỏ" đọc ra "các 2 set" —
   // món dòng trên ăn trộm số lượng của món dòng dưới.
-  const flatText = text.split("\n").map(flat).join("\n");
+  const flatText = aliased(text.split("\n").map(flat).join("\n"));
 
   /** Từ chỉ đơn vị bán ("2 hộp", "1 bộ") — dùng cho cả đọc số lượng lẫn nhận
    *  diện cụm-giống-món. */
@@ -285,27 +322,105 @@ export function parseOrderNote(
   // Dòng TRÔNG NHƯ đặt món (có chữ set/hộp/bánh/combo/mini/lẻ) mà không khớp
   // món nào trong danh mục → giữ riêng để hiện "chưa nhận ra". Không bịa thành
   // món khác, và tuyệt đối không để nó lọt xuống thành TÊN khách ở bước sau.
-  // 3. Vị bánh (cho set tự chọn) — dò MỌI vị xuất hiện, giữ nguyên thứ tự nhắn.
-  // Khách hay nhắn tên cụt ("lava trứng muối" thay vì "Lava Trứng Muối Chảy")
-  // nên so cả các ĐOẠN ĐẦU của tên vị, từ dài xuống ngắn, tối thiểu 2 chữ và
-  // 8 ký tự — ngắn hơn nữa là "trà xanh" của vị này dính sang set kia.
-  const seen = new Set<string>();
-  const flavorHits: string[] = [];
-  for (const f of cat.flavors) {
-    const words = flat(f.name).split(" ");
-    const prefixes = words.map((_, i) => words.slice(0, words.length - i).join(" "));
-    const hit = prefixes.find((n) => n.length >= 8 && n.split(" ").length >= 2 && flatText.includes(n));
-    if (hit && !seen.has(f.name)) {
-      flavorHits.push(hit);
-      seen.add(f.name);
-      (out.flavors ??= []).push(f.name);
-      // số bánh đứng NGAY SAU tên vị ("lava trung muoi x2") — chỉ nhìn sát
-      // đuôi, nhìn xa là vớ nhầm số của vị bên cạnh.
-      const after = flatText.slice(flatText.indexOf(hit) + hit.length, flatText.indexOf(hit) + hit.length + 8);
-      const q = after.match(/^\s*(?:x|×|\*)\s*(\d{1,2})/);
-      (out.flavorPicks ??= []).push({ id: f.id, name: f.name, qty: q ? Math.max(1, Number(q[1])) : 1 });
+  // 3. Vị bánh — khách gọi vị bằng đủ kiểu tên tắt ("lava", "deo kem",
+  // "kem cheese", "ga quay") nên so theo TỔ HỢP: mọi cụm-từ-liền-nhau trong
+  // tên vị đều là cách gọi hợp lệ, chấp nhận lệch 1 ký tự cho từ dài ("tham
+  // cam" ~ "thap cam"), và từ điển gọi quen miệng (matcha = trà xanh).
+  //
+  // Chống lẫn bằng NGỮ CẢNH VỎ HỘP: đã khớp set khách-tự-chọn-vị thì chỉ xét
+  // vị trong ruột set đó — "socola" giữa câu đặt Kim Ngọc Các chỉ có thể là
+  // Socola Dừa Chảy, không lẫn Socola Mochi của set mini. Một cụm mà vẫn hợp
+  // với 2+ vị ("trứng muối" dính 3 vị) thì THÀ BỎ QUA, không đoán.
+  const pickPoolIds = new Set(
+    cat.combos
+      .filter((c) => comboPickCount(c) > 0 && matched.some((m) => m.key === c.id))
+      .flatMap((c) => c.flavor_ids),
+  );
+  const candFlavors = pickPoolIds.size ? cat.flavors.filter((f) => pickPoolIds.has(f.id)) : cat.flavors;
+  const flavorWords = candFlavors.map((f) => ({ f, ws: flat(f.name).split(/[^a-z0-9]+/).filter(Boolean) }));
+
+  // Các từ của bài kèm vị trí — so cụm theo ranh giới từ, không cắt giữa chữ.
+  // GẠT dòng SĐT/địa chỉ/chữ Hàn khỏi vòng dò vị (cùng luật với bước món lạ):
+  // "đường Nguyễn Thị Thập" mà không gạt là thành vị Thập Cẩm.
+  const textWords: { w: string; pos: number }[] = [];
+  {
+    const rawL = text.split("\n");
+    let off = 0;
+    flatText.split("\n").forEach((lf, i) => {
+      const raw = rawL[i] ?? "";
+      const skip = /\d{9,}/.test(raw) || ADDR_HINT.test(lf) || /[가-힣]/.test(raw);
+      if (!skip) for (const m of lf.matchAll(/[a-z0-9]+/g)) textWords.push({ w: m[0], pos: off + m.index! });
+      off += lf.length + 1;
+    });
+  }
+
+  const fClaimed: Array<[number, number]> = [];
+  const fTaken = (a: number, b: number) =>
+    fClaimed.some(([x, y]) => a < y && x < b) || claimed.some(([x, y]) => a < y && x < b);
+  const flavorClaims: { f: Flavor; pos: number; end: number; text: string }[] = [];
+  const maxLen = Math.max(0, ...flavorWords.map((x) => x.ws.length));
+  // cụm dài nhận trước để "lava trứng muối chảy" không bị "lava" xé lẻ
+  for (let len = maxLen; len >= 1; len--) {
+    for (let t = 0; t + len <= textWords.length; t++) {
+      const first = textWords[t];
+      const last = textWords[t + len - 1];
+      const end = last.pos + last.w.length;
+      const span = flatText.slice(first.pos, end);
+      // cụm phải nằm gọn một dòng và chưa thuộc về món/vị nào khác
+      if (span.includes("\n") || fTaken(first.pos, end)) continue;
+      const win = textWords.slice(t, t + len).map((x) => x.w);
+      const names = new Set<string>();
+      let hitF: Flavor | undefined;
+      for (const { f, ws } of flavorWords) {
+        if (len > ws.length) continue;
+        // một từ đơn phải dài ≥4 ký tự ("lava"), trừ khi là TRỌN tên vị ("Cốm")
+        if (len === 1 && win[0].length < 4 && !(ws.length === 1 && ws[0] === win[0])) continue;
+        let ok = false;
+        for (let k = 0; !ok && k + len <= ws.length; k++)
+          ok = win.every((w, d) => w === ws[k + d] || near1(w, ws[k + d]));
+        if (ok) {
+          names.add(f.name);
+          hitF = f;
+        }
+      }
+      if (names.size !== 1 || !hitF) continue;
+      fClaimed.push([first.pos, end]);
+      flavorClaims.push({ f: hitF, pos: first.pos, end, text: span });
     }
   }
+  flavorClaims.sort((a, b) => a.pos - b.pos);
+
+  const seen = new Set<string>();
+  const flavorHits: string[] = [];
+  /** Vị gắn theo SET khách-tự-chọn đứng TRƯỚC gần nhất trong tin nhắn. */
+  const perItem = new Map<string, { id: string; name: string; qty: number }[]>();
+  const pickItemOf = (p: number) =>
+    matched
+      .filter((m) => m.pos < p && cat.combos.some((c) => c.id === m.key && comboPickCount(c) > 0))
+      .sort((a, b) => b.pos - a.pos)[0];
+  for (const c of flavorClaims) {
+    flavorHits.push(c.text);
+    // số bánh đứng NGAY SAU tên vị ("lava x2") — chỉ nhìn sát đuôi cùng dòng,
+    // nhìn xa là vớ nhầm số của vị bên cạnh.
+    const after = flatText.slice(c.end, c.end + 8).split("\n")[0];
+    const q = after.match(/^\s*(?:x|×|\*)\s*(\d{1,2})/);
+    const qty = q ? Math.max(1, Number(q[1])) : 1;
+    if (!seen.has(c.f.name)) {
+      seen.add(c.f.name);
+      (out.flavors ??= []).push(c.f.name);
+      (out.flavorPicks ??= []).push({ id: c.f.id, name: c.f.name, qty });
+      const owner = pickItemOf(c.pos);
+      if (owner) {
+        const arr = perItem.get(owner.key) ?? [];
+        if (!arr.some((x) => x.name === c.f.name)) arr.push({ id: c.f.id, name: c.f.name, qty });
+        perItem.set(owner.key, arr);
+      }
+    }
+  }
+  out.items?.forEach((it) => {
+    const fp = perItem.get(it.key);
+    if (fp?.length) it.flavorPicks = fp;
+  });
 
   // Xét theo CỤM (tách bởi , + ; /), và trong mỗi cụm GỌT phần đã hiểu (tên
   // món/vị + số lượng dính kèm) rồi mới xét phần THỪA. Không được bỏ qua cả
@@ -319,7 +434,9 @@ export function parseOrderNote(
     // Không dùng luật "≥6 từ là địa chỉ" ở đây — dòng đặt nhiều món cũng dài.
     if (/\d{9,}/.test(l) || ADDR_HINT.test(flat(l)) || /[가-힣]/.test(l)) return;
     for (const seg of l.split(/[,;+/]|\bva\b/)) {
-      const fl = flat(seg);
+      // cùng phép đổi tên quen miệng như lúc khớp — "matcha" đã hoá "tra xanh"
+      // trong flavorHits, cụm gốc phải đổi theo thì mới gọt trúng
+      const fl = aliased(flat(seg));
       if (!fl) continue;
       // Gọt mỗi tên đã khớp (món lẫn vị) kèm bộ đếm dính quanh nó: "2 set" /
       // "set" đứng trước, "x2" / "2 hộp" đứng sau. Số đứng trước chỉ gọt khi
