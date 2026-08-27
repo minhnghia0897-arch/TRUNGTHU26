@@ -70,6 +70,7 @@ interface Override {
   active?: boolean;
   flavorIds?: string[]; // bánh cho vào set (Hộp/Combo)
   pickCount?: number; // số vị khách tự chọn trong flavorIds (chỉ Combo, §0025)
+  shortName?: string; // tên gọn của vị cho chỗ hiển thị chật (chỉ Vị, §0026)
   removed?: boolean; // đã xoá (ẩn khỏi danh sách, còn khôi phục được)
 }
 
@@ -94,6 +95,7 @@ interface Product {
   active: boolean;
   flavorIds?: string[];
   pickCount?: number;
+  shortName?: string;
 }
 
 /** Override (kiểu của màn hình) → thân yêu cầu API. Bỏ 2 trường cũ image/stock. */
@@ -172,6 +174,7 @@ export default function ProductsAdmin({
     })),
     ...flavors.map((f) => ({
       key: `flavor:${f.id}`, type: "Vị" as const, premium: f.premium, name: f.name,
+      shortName: f.short_name ?? "",
       priceVn: f.price_vn, priceKr: f.price_kr, active: f.active,
       ...common(f),
     })),
@@ -199,6 +202,7 @@ export default function ProductsAdmin({
       active: o.active ?? p.active,
       flavorIds: o.flavorIds ?? p.flavorIds,
       pickCount: o.pickCount ?? p.pickCount,
+      shortName: o.shortName ?? p.shortName,
     };
   });
   // tách sản phẩm gốc đã xoá vào thùng rác (còn khôi phục được)
@@ -529,6 +533,7 @@ function EditModal({
   const [active, setActive] = useState(product.active);
   const [flavorIds, setFlavorIds] = useState<string[]>(product.flavorIds ?? []);
   const [pickCount, setPickCount] = useState(product.pickCount ?? 0);
+  const [shortName, setShortName] = useState(product.shortName ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
   const hasSet = product.type === "Hộp" || product.type === "Combo";
   const MAX = MAX_PRODUCT_IMAGES;
@@ -655,6 +660,8 @@ function EditModal({
       flavorIds: hasSet ? flavorIds : undefined,
       // Chỉ set mới có cột này; gửi kèm cho hộp/vị là câu UPDATE hỏng cả.
       pickCount: product.type === "Combo" ? pickCount : undefined,
+      // Tên gọn chỉ có ở bảng vị (§0026).
+      shortName: product.type === "Vị" ? shortName.trim() : undefined,
     });
   };
 
@@ -743,6 +750,16 @@ function EditModal({
             <L label="Danh mục"><input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="VD: 3d, 2d…" className={inp} /></L>
           </div>
           <L label="Tên sản phẩm *"><input value={name} onChange={(e) => setName(e.target.value)} className={inp} /></L>
+          {product.type === "Vị" && (
+            <L label="Tên gọn (hiện ở khay chọn vị, dòng đơn — trống thì dùng tên đầy đủ)">
+              <input
+                value={shortName}
+                onChange={(e) => setShortName(e.target.value)}
+                placeholder='VD "Lava", "Thập Cẩm"'
+                className={inp}
+              />
+            </L>
+          )}
 
           {/* giá */}
           <div className="grid grid-cols-2 gap-3">

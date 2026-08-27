@@ -74,14 +74,14 @@ const phoneCandidates = (rawPhone: string): string[] =>
 // ngay trên bộ nhớ — đủ để xem trọn luồng đại lý mà không cần đơn thật.
 let demoRows: ManageRow[] | null = null;
 
-/** Ruột 6 vị 150g của set tự chọn — chỉ dùng cho bộ đơn mẫu. */
+/** Ruột 6 vị 150g của set tự chọn (TÊN GỌN) — chỉ dùng cho bộ đơn mẫu. */
 const DEMO_POOL = [
-  { id: "f1", name: "Trà Xanh Đậu Đỏ Kem Cheese" },
-  { id: "f2", name: "Socola Dừa Chảy" },
-  { id: "f3", name: "Đậu Xanh Hạt Dưa Trứng Muối" },
-  { id: "f4", name: "Lava Trứng Muối Chảy" },
-  { id: "f5", name: "Dẻo Kem Trứng Muối" },
-  { id: "f6", name: "Thập Cẩm Gà Quay" },
+  { id: "f1", name: "Matcha Trà Xanh" },
+  { id: "f2", name: "Socola Dừa" },
+  { id: "f3", name: "Đậu Xanh" },
+  { id: "f4", name: "Lava" },
+  { id: "f5", name: "Dẻo" },
+  { id: "f6", name: "Thập Cẩm" },
 ];
 
 const describeIds = (ids: string[], pool: { id: string; name: string }[]): string => {
@@ -236,8 +236,9 @@ export async function findManagedOrders(rawPhone: string): Promise<ManageResult>
   const poolFlavorIds = [...new Set([...comboMap.values()].flatMap((c) => c.flavor_ids))];
   const flavorName = new Map<string, string>();
   if (poolFlavorIds.length) {
-    const { data: fs } = await sb.from("flavor").select("id, name").in("id", poolFlavorIds);
-    for (const f of (fs ?? []) as { id: string; name: string }[]) flavorName.set(f.id, f.name);
+    const { data: fs } = await sb.from("flavor").select("id, name, short_name").in("id", poolFlavorIds);
+    for (const f of (fs ?? []) as { id: string; name: string; short_name: string | null }[])
+      flavorName.set(f.id, f.short_name?.trim() || f.name);
   }
 
   const rows: ManageRow[] = [];
@@ -431,8 +432,9 @@ export async function updateManagedParcel(
     const fIds = [...new Set(lines.flatMap((l) => l.flavors ?? []))];
     const fName = new Map<string, string>();
     if (fIds.length) {
-      const { data: fs } = await sb.from("flavor").select("id, name").in("id", fIds);
-      for (const f of (fs ?? []) as { id: string; name: string }[]) fName.set(f.id, f.name);
+      const { data: fs } = await sb.from("flavor").select("id, name, short_name").in("id", fIds);
+      for (const f of (fs ?? []) as { id: string; name: string; short_name: string | null }[])
+        fName.set(f.id, f.short_name?.trim() || f.name);
     }
     newSummary = lines
       .map((l) => {

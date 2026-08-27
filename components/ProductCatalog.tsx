@@ -15,6 +15,7 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  flavorShortName,
 } from "@/lib/pricing";
 import QuickOrderChat from "@/components/QuickOrderChat";
 import {
@@ -1035,7 +1036,8 @@ export default function ProductCatalog({
                           const f = pool.find((x) => x.id === id);
                           return {
                             id,
-                            name: f?.name ?? "Vị",
+                            // tên gọn — ngăn khay bé xíu, tên đầy đủ tràn hết chữ
+                            name: f ? flavorShortName(f) : "Vị",
                             img: imagesOf(`flavor:${id}`)[0],
                           };
                         })}
@@ -1048,7 +1050,7 @@ export default function ProductCatalog({
                         {pool.map((f) => (
                           <FlavorRow
                             key={f.id}
-                            name={f.name}
+                            name={flavorShortName(f)}
                             img={imagesOf(`flavor:${f.id}`)[0]}
                             right={
                               <PickStepper

@@ -94,18 +94,24 @@ export function validateComboPick(
   return { ok: true };
 }
 
+/** Tên gọn của vị cho chỗ hiển thị chật — trống thì lấy tên đầy đủ. */
+export const flavorShortName = (f: Flavor): string => f.short_name?.trim() || f.name;
+
 /**
- * Gộp danh sách vị đã bốc thành một dòng chữ: "Trà Xanh ×2 · Lava Trứng Muối".
+ * Gộp danh sách vị đã bốc thành một dòng chữ: "Lava ×2 · Dẻo".
  *
  * Gộp trùng chứ không liệt kê lặp, vì dòng này đi thẳng vào tóm tắt đơn và tin
- * nhắn xác nhận — đọc "Trà Xanh · Trà Xanh" thì tưởng bị lỗi.
+ * nhắn xác nhận — đọc "Trà Xanh · Trà Xanh" thì tưởng bị lỗi. Dùng TÊN GỌN
+ * (shop đặt ở Dashboard) — "(Lava Trứng Muối Chảy · Dẻo Kem Trứng Muối · …)"
+ * dài tới mức che hết phần còn lại của dòng đơn.
  */
 export function describePickedFlavors(flavorIds: string[], flavors: Flavor[]): string {
   const count = new Map<string, number>();
   for (const id of flavorIds ?? []) count.set(id, (count.get(id) ?? 0) + 1);
   return [...count.entries()]
     .map(([id, n]) => {
-      const name = flavors.find((f) => f.id === id)?.name ?? "Vị đã xoá";
+      const f = flavors.find((x) => x.id === id);
+      const name = f ? flavorShortName(f) : "Vị đã xoá";
       return n > 1 ? `${name} ×${n}` : name;
     })
     .join(" · ");

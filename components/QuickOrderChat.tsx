@@ -7,6 +7,7 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  flavorShortName,
   type CartLine,
 } from "@/lib/pricing";
 import { formatMoney } from "@/lib/money";
@@ -238,7 +239,12 @@ export default function QuickOrderChat({
                   <Row
                     label="Vị bánh"
                     value={(parsed.flavorPicks ?? [])
-                      .map((f) => (f.qty > 1 ? `${f.name} ×${f.qty}` : f.name))
+                      .map((p) => {
+                        // tên gọn cho dễ soát ("Lava ×2" thay vì cả cụm dài)
+                        const f = flavors.find((x) => x.id === p.id);
+                        const nm = f ? flavorShortName(f) : p.name;
+                        return p.qty > 1 ? `${nm} ×${p.qty}` : nm;
+                      })
                       .join(" · ")}
                   />
                 )}

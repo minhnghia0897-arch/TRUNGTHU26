@@ -47,6 +47,9 @@ export interface Box {
 export interface Flavor {
   id: string;
   name: string;
+  /** Tên gọn cho chỗ hiển thị chật (chuỗi sản phẩm, khay 4 ngăn, bảng đại lý)
+   *  — "Lava" thay vì "Lava Trứng Muối Chảy". Trống thì dùng tên đầy đủ. */
+  short_name?: string;
   description?: string;
   weight: 150 | 60;
   premium: boolean;

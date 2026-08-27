@@ -337,7 +337,14 @@ export function parseOrderNote(
       .flatMap((c) => c.flavor_ids),
   );
   const candFlavors = pickPoolIds.size ? cat.flavors.filter((f) => pickPoolIds.has(f.id)) : cat.flavors;
-  const flavorWords = candFlavors.map((f) => ({ f, ws: flat(f.name).split(/[^a-z0-9]+/).filter(Boolean) }));
+  // Mỗi vị có thể được gọi bằng TÊN ĐẦY ĐỦ hoặc TÊN GỌN shop đặt ("Dẻo") —
+  // cả hai đều là bộ từ hợp lệ để so cụm.
+  const flavorWords = candFlavors.map((f) => ({
+    f,
+    wss: [...new Set([f.name, f.short_name?.trim() || ""].filter(Boolean))].map((n) =>
+      flat(n).split(/[^a-z0-9]+/).filter(Boolean),
+    ),
+  }));
 
   // Các từ của bài kèm vị trí — so cụm theo ranh giới từ, không cắt giữa chữ.
   // GẠT dòng SĐT/địa chỉ/chữ Hàn khỏi vòng dò vị (cùng luật với bước món lạ):
@@ -358,7 +365,7 @@ export function parseOrderNote(
   const fTaken = (a: number, b: number) =>
     fClaimed.some(([x, y]) => a < y && x < b) || claimed.some(([x, y]) => a < y && x < b);
   const flavorClaims: { f: Flavor; pos: number; end: number; text: string }[] = [];
-  const maxLen = Math.max(0, ...flavorWords.map((x) => x.ws.length));
+  const maxLen = Math.max(0, ...flavorWords.flatMap((x) => x.wss.map((ws) => ws.length)));
   // cụm dài nhận trước để "lava trứng muối chảy" không bị "lava" xé lẻ
   for (let len = maxLen; len >= 1; len--) {
     for (let t = 0; t + len <= textWords.length; t++) {
@@ -371,13 +378,16 @@ export function parseOrderNote(
       const win = textWords.slice(t, t + len).map((x) => x.w);
       const names = new Set<string>();
       let hitF: Flavor | undefined;
-      for (const { f, ws } of flavorWords) {
-        if (len > ws.length) continue;
-        // một từ đơn phải dài ≥4 ký tự ("lava"), trừ khi là TRỌN tên vị ("Cốm")
-        if (len === 1 && win[0].length < 4 && !(ws.length === 1 && ws[0] === win[0])) continue;
+      for (const { f, wss } of flavorWords) {
         let ok = false;
-        for (let k = 0; !ok && k + len <= ws.length; k++)
-          ok = win.every((w, d) => w === ws[k + d] || near1(w, ws[k + d]));
+        for (const ws of wss) {
+          if (ok || len > ws.length) continue;
+          // một từ đơn phải dài ≥4 ký tự ("lava"), trừ khi là TRỌN một tên của
+          // vị — tên đầy đủ ("Cốm") hay tên gọn ("Dẻo") đều tính
+          if (len === 1 && win[0].length < 4 && !(ws.length === 1 && ws[0] === win[0])) continue;
+          for (let k = 0; !ok && k + len <= ws.length; k++)
+            ok = win.every((w, d) => w === ws[k + d] || near1(w, ws[k + d]));
+        }
         if (ok) {
           names.add(f.name);
           hitF = f;
