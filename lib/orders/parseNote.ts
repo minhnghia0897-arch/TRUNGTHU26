@@ -243,10 +243,14 @@ export function parseOrderNote(
       // RỜI (không dính vào số khác): "…7564 set kim ngoc cac" mà không chặn
       // thì đuôi SĐT thành "64 set" — đơn 64 hộp.
       const qm =
-        // "x2" / "× 2" / "*2" / "sl 2" / "sl: 2" — trước hoặc sau tên
-        (before + " " + after).match(new RegExp(`(?:^|[^\\d])(?:x|×|\\*|sl\\s*:?\\s*)\\s*(\\d{1,2})(?!\\d)`)) ??
+        // "tên x2" / "tên sl: 2" — bộ đếm NGAY SAU tên. Ưu tiên phía sau:
+        // "sắc đỏ x2 kim ngọc các x1" thì "x2" đứng trước "kim ngọc các"
+        // là của sắc đỏ, không được vớ.
+        after.match(new RegExp(`^\\s*(?:x|×|\\*|sl\\s*:?\\s*)\\s*(\\d{1,2})(?!\\d)`)) ??
         // "kim ngọc các 2 set" — số + đơn vị NGAY SAU tên
         after.match(new RegExp(`^\\s*(\\d{1,2})\\s*(?:${UNIT})`)) ??
+        // "x2 kim ngọc các" — bộ đếm dính NGAY TRƯỚC tên
+        before.match(new RegExp(`(?:x|×|\\*|sl\\s*:?\\s*)\\s*(\\d{1,2})\\s*$`)) ??
         // "2 set kim ngọc các" / "02 hộp …" — số (+ đơn vị) NGAY TRƯỚC tên
         before.match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})?\\s*(?:qua\\s*)?$`)) ??
         // "2 hộp⏎Kim Ngọc Các" — số + đơn vị đứng CUỐI DÒNG TRÊN, tên xuống
@@ -303,32 +307,48 @@ export function parseOrderNote(
     }
   }
 
-  // Xét theo CỤM (tách bởi , + ; /) chứ không theo cả dòng: "2 set sắc đỏ +
-  // 1 set mini" thì "sắc đỏ" đã vào giỏ nhưng "1 set mini" vẫn phải lòi ra là
-  // chưa nhận, không được nấp sau món đã khớp cùng dòng.
+  // Xét theo CỤM (tách bởi , + ; /), và trong mỗi cụm GỌT phần đã hiểu (tên
+  // món/vị + số lượng dính kèm) rồi mới xét phần THỪA. Không được bỏ qua cả
+  // cụm chỉ vì nó chứa món đã khớp: "set kim ngọc các x2 mini x1" không có
+  // dấu phẩy nên cả dòng là một cụm — "mini x1" vẫn phải lòi ra là chưa nhận,
+  // biến mất không dấu vết là khách tưởng đã đặt được.
   const PRODUCTISH = new RegExp(`(^|\\s)(\\d+\\s*)?(${UNIT}|mini|le|qua)(\\s|$)|x\\s?\\d`);
+  const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   rawLines.forEach((l, i) => {
     // Gạt dòng SĐT và dòng có dấu hiệu địa chỉ THẬT (tên đường/quận/chữ Hàn).
     // Không dùng luật "≥6 từ là địa chỉ" ở đây — dòng đặt nhiều món cũng dài.
     if (/\d{9,}/.test(l) || ADDR_HINT.test(flat(l)) || /[가-힣]/.test(l)) return;
     for (const seg of l.split(/[,;+/]|\bva\b/)) {
       const fl = flat(seg);
-      if (!fl || !PRODUCTISH.test(fl)) continue;
-      if (hits.some((h) => fl.includes(h))) continue; // cụm này là món đã khớp
-      // cụm là LỰA CHỌN VỊ của set ("vị lava trứng muối x2") thì không phải món lạ
-      if (flavorHits.some((h) => fl.includes(h))) continue;
-      // cụm chỉ toàn từ đơn vị + số ("2 set") mà đứng cạnh cụm món đã khớp —
+      if (!fl) continue;
+      // Gọt mỗi tên đã khớp (món lẫn vị) kèm bộ đếm dính quanh nó: "2 set" /
+      // "set" đứng trước, "x2" / "2 hộp" đứng sau. Số đứng trước chỉ gọt khi
+      // có từ đơn vị theo sau — số trơ ("x1" của món lạ đứng cạnh) để yên.
+      let residue = fl;
+      for (const h of [...hits, ...flavorHits])
+        residue = residue.replace(
+          new RegExp(
+            `(?:(?:\\d{1,2}\\s*)?(?:${UNIT})\\s*)?${escRe(h)}(?:\\s*(?:x|×|\\*|sl\\s*:?)\\s*\\d{1,2}|\\s*\\d{1,2}\\s*(?:${UNIT}))?`,
+            "g",
+          ),
+          " ",
+        );
+      // dọn ký hiệu đếm mồ côi còn sót sau khi gọt ("x" mất số)
+      residue = residue.replace(/(^|\s)[x×*](?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
+      if (!residue || !PRODUCTISH.test(residue)) continue;
+      // phần thừa chỉ toàn từ đơn vị + số ("2 set") mà đứng cạnh món đã khớp —
       // cùng dòng HOẶC dòng kề (khách gõ vội "2 hộp⏎Kim Ngọc Các") — thì là
       // phần số lượng, không phải món lạ; đánh dấu đã tiêu để khỏi rơi vào ghi chú
       const near = [rawLines[i - 1], l, rawLines[i + 1]].filter(Boolean).map((x) => flat(x!));
-      if (new RegExp(`^(\\d+|${UNIT}|qua|\\s)+$`).test(fl) && hits.some((h) => near.some((x) => x.includes(h)))) {
+      if (new RegExp(`^(\\d+|${UNIT}|qua|\\s)+$`).test(residue) && hits.some((h) => near.some((x) => x.includes(h)))) {
         used.add(i);
         continue;
       }
-      (out.unknownItems ??= []).push(seg.trim());
+      // Cụm còn nguyên (không gọt được gì) thì giữ nguyên văn có dấu của khách;
+      // cụm đã gọt thì chỉ đưa được phần thừa dạng không dấu.
+      (out.unknownItems ??= []).push(residue === fl ? seg.trim() : residue);
       used.add(i);
     }
-    if (used.has(i)) return;
   });
 
 
