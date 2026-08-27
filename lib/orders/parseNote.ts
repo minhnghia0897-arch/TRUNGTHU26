@@ -166,19 +166,32 @@ export function parseOrderNote(
   // combo), vị lẻ tên ngắn ("cốm"), nhiều món một dòng tách bằng , + ;.
   const items = sellableItems(cat.combos, cat.boxes, cat.flavors, region);
   const byLen = [...items].sort((a, b) => flat(b.label).length - flat(a.label).length);
-  const flatText = flat(text);
+  // GIỮ dấu xuống dòng khi ép phẳng: mỗi dòng là một câu riêng của khách. Ép
+  // hết thành một dòng thì "…Kim Ngọc Các⏎2 set Sắc Đỏ" đọc ra "các 2 set" —
+  // món dòng trên ăn trộm số lượng của món dòng dưới.
+  const flatText = text.split("\n").map(flat).join("\n");
 
   /** Từ chỉ đơn vị bán ("2 hộp", "1 bộ") — dùng cho cả đọc số lượng lẫn nhận
    *  diện cụm-giống-món. */
   const UNIT = "hop|set|bo|combo|phan|cai|goi|banh";
   const NUMWORD: Record<string, number> = { mot: 1, hai: 2, ba: 3, bon: 4, nam: 5, sau: 6, bay: 7, tam: 8, chin: 9, muoi: 10 };
 
-  /** Tìm tên món trong bài theo RANH GIỚI TỪ — "com" không được ăn vào giữa
-   *  "combo", nhờ vậy vị tên ngắn ("Cốm") mới dám cho khớp. */
-  const findWord = (needle: string): number => {
+  /** Tìm MỌI chỗ tên món xuất hiện, theo RANH GIỚI TỪ — "com" không được ăn
+   *  vào giữa "combo", nhờ vậy vị tên ngắn ("Cốm") mới dám cho khớp. Trả về
+   *  tất cả vị trí vì khách có thể nhắc cùng một món ở hai dòng ("1 hộp X giao
+   *  Q7… thêm 1 hộp X giao Q1") — chỉ bắt lần đầu là mất nửa đơn. */
+  const findWordAll = (needle: string): number[] => {
     const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const m = flatText.match(new RegExp(`(^|[^a-z0-9])${esc}($|[^a-z0-9])`));
-    return m ? m.index! + m[1].length : -1;
+    const re = new RegExp(`(^|[^a-z0-9])${esc}($|[^a-z0-9])`, "g");
+    const res: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(flatText))) {
+      res.push(m.index + m[1].length);
+      // Lùi con trỏ về ngay sau tên (bỏ ký tự ranh giới đuôi) để lần khớp sau
+      // vẫn dùng được ký tự đó làm ranh giới đầu.
+      re.lastIndex = m.index + m[1].length + needle.length;
+    }
+    return res;
   };
 
   // Một tin nhắn đặt MẤY món là chuyện thường nên khớp hết chứ không dừng ở
@@ -205,43 +218,55 @@ export function parseOrderNote(
         .filter((pfx) => pfx !== n && pfx.split(" ").length >= 2 && pfx.length >= 8);
     });
     const names = [...new Set([...base, ...prefixes])].sort((a, b) => b.length - a.length);
-    let hit: string | undefined;
-    let pos = -1;
+    // Gom MỌI lần món này xuất hiện (tên đủ lẫn tên cụt), không chồng lên nhau
+    // và không lấn khoảng đã thuộc món khác.
+    const occs: Array<[number, number]> = [];
     for (const n of names) {
-      const i = findWord(n);
-      if (i >= 0 && !overlaps(i, i + n.length)) {
-        hit = n;
-        pos = i;
-        break;
+      for (const i of findWordAll(n)) {
+        const j = i + n.length;
+        if (!overlaps(i, j) && !occs.some(([x, y]) => i < y && x < j)) occs.push([i, j]);
       }
     }
-    if (!hit) continue;
-    claimed.push([pos, pos + hit.length]);
-    hits.push(hit);
-    const before = flatText.slice(Math.max(0, pos - 14), pos);
-    const after = flatText.slice(pos + hit.length, pos + hit.length + 14);
-    // Đọc số lượng quanh chỗ khớp, thử lần lượt các kiểu viết. Số phải đứng
-    // RỜI (không dính vào số khác): "…7564 set kim ngoc cac" mà không chặn thì
-    // đuôi SĐT thành "64 set" — đơn 64 hộp.
-    const qm =
-      // "x2" / "× 2" / "*2" / "sl 2" / "sl: 2" — trước hoặc sau tên
-      (before + " " + after).match(new RegExp(`(?:^|[^\\d])(?:x|×|\\*|sl\\s*:?\\s*)\\s*(\\d{1,2})(?!\\d)`)) ??
-      // "kim ngọc các 2 set" — số + đơn vị NGAY SAU tên
-      after.match(new RegExp(`^\\s*(\\d{1,2})\\s*(?:${UNIT})`)) ??
-      // "2 set kim ngọc các" / "02 hộp …" — số (+ đơn vị) NGAY TRƯỚC tên
-      before.match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})?\\s*(?:qua\\s*)?$`)) ??
-      // "2 hộp/2 set" đứng đâu đó sát tên
-      (before + " " + after).match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})`));
-    let qty = qm ? Number(qm[1]) : 0;
-    if (!qty) {
-      // số bằng chữ: "hai hộp sắc đỏ", "kim ngọc các lấy ba set"
-      const wm = (before + " " + after).match(new RegExp(`(?:^|\\s)(${Object.keys(NUMWORD).join("|")})\\s*(?:${UNIT})`));
-      if (wm) qty = NUMWORD[wm[1]];
+    if (!occs.length) continue;
+    let total = 0;
+    for (const [pos, end] of occs.sort((a, b) => a[0] - b[0])) {
+      claimed.push([pos, end]);
+      const hit = flatText.slice(pos, end);
+      hits.push(hit);
+      // Cửa sổ đọc số lượng CHẶN Ở DẤU XUỐNG DÒNG: số đứng đầu dòng dưới là
+      // của món dòng dưới, không phải của món này.
+      const rawBefore = flatText.slice(Math.max(0, pos - 14), pos);
+      const nl = rawBefore.lastIndexOf("\n");
+      const before = nl >= 0 ? rawBefore.slice(nl + 1) : rawBefore;
+      const after = flatText.slice(end, end + 14).split("\n")[0];
+      // Đọc số lượng quanh chỗ khớp, thử lần lượt các kiểu viết. Số phải đứng
+      // RỜI (không dính vào số khác): "…7564 set kim ngoc cac" mà không chặn
+      // thì đuôi SĐT thành "64 set" — đơn 64 hộp.
+      const qm =
+        // "x2" / "× 2" / "*2" / "sl 2" / "sl: 2" — trước hoặc sau tên
+        (before + " " + after).match(new RegExp(`(?:^|[^\\d])(?:x|×|\\*|sl\\s*:?\\s*)\\s*(\\d{1,2})(?!\\d)`)) ??
+        // "kim ngọc các 2 set" — số + đơn vị NGAY SAU tên
+        after.match(new RegExp(`^\\s*(\\d{1,2})\\s*(?:${UNIT})`)) ??
+        // "2 set kim ngọc các" / "02 hộp …" — số (+ đơn vị) NGAY TRƯỚC tên
+        before.match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})?\\s*(?:qua\\s*)?$`)) ??
+        // "2 hộp⏎Kim Ngọc Các" — số + đơn vị đứng CUỐI DÒNG TRÊN, tên xuống
+        // dòng. Bắt buộc có từ đơn vị: số trơ cuối dòng trên (số nhà, tầng…)
+        // thì không được tính.
+        rawBefore.match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})\\s*\\n\\s*$`)) ??
+        // "2 hộp/2 set" đứng đâu đó sát tên, cùng dòng
+        (before + " " + after).match(new RegExp(`(?:^|[^\\d])(\\d{1,2})\\s*(?:${UNIT})`));
+      let qty = qm ? Number(qm[1]) : 0;
+      if (!qty) {
+        // số bằng chữ: "hai hộp sắc đỏ", "kim ngọc các lấy ba set"
+        const wm = (before + " " + after).match(new RegExp(`(?:^|\\s)(${Object.keys(NUMWORD).join("|")})\\s*(?:${UNIT})`));
+        if (wm) qty = NUMWORD[wm[1]];
+      }
+      total += Math.max(1, qty || 1);
+      rawLines.forEach((l, i) => {
+        if (flat(l).includes(hit)) used.add(i);
+      });
     }
-    matched.push({ key: it.key, label: it.label, qty: Math.max(1, qty || 1), pos });
-    rawLines.forEach((l, i) => {
-      if (flat(l).includes(hit!)) used.add(i);
-    });
+    matched.push({ key: it.key, label: it.label, qty: total, pos: occs[0][0] });
   }
   // Xếp theo thứ tự xuất hiện trong tin nhắn — vòng khớp chạy theo độ dài tên
   // nên không tự có thứ tự này.
@@ -292,9 +317,14 @@ export function parseOrderNote(
       if (hits.some((h) => fl.includes(h))) continue; // cụm này là món đã khớp
       // cụm là LỰA CHỌN VỊ của set ("vị lava trứng muối x2") thì không phải món lạ
       if (flavorHits.some((h) => fl.includes(h))) continue;
-      // cụm chỉ toàn từ đơn vị + số ("2 set") mà đứng cạnh cụm món đã khớp thì
-      // là phần số lượng, không phải món lạ
-      if (new RegExp(`^(\\d+|${UNIT}|qua|\\s)+$`).test(fl) && hits.some((h) => flat(l).includes(h))) continue;
+      // cụm chỉ toàn từ đơn vị + số ("2 set") mà đứng cạnh cụm món đã khớp —
+      // cùng dòng HOẶC dòng kề (khách gõ vội "2 hộp⏎Kim Ngọc Các") — thì là
+      // phần số lượng, không phải món lạ; đánh dấu đã tiêu để khỏi rơi vào ghi chú
+      const near = [rawLines[i - 1], l, rawLines[i + 1]].filter(Boolean).map((x) => flat(x!));
+      if (new RegExp(`^(\\d+|${UNIT}|qua|\\s)+$`).test(fl) && hits.some((h) => near.some((x) => x.includes(h)))) {
+        used.add(i);
+        continue;
+      }
       (out.unknownItems ??= []).push(seg.trim());
       used.add(i);
     }
@@ -307,8 +337,13 @@ export function parseOrderNote(
   out.total = moneyAfter(text, /tong(?:\s*(?:tien|bill|cong))?|thanh\s*tien|gia(?:\s*tien)?/) ?? undefined;
 
   // 5. Ngày giao — chỉ đọc khi có chữ dặn giao, kẻo vớ nhầm ngày trong địa chỉ.
+  // XOÁ các cụm SĐT khỏi bài trước: "010-1111-2222" đẻ ra "10/11" — ngày giả
+  // nhưng hợp lệ, không xoá là nó chen lên trước ngày thật.
   if (/giao|nhan\s*hang|ship\s*ngay|trc\s*ngay|truoc\s*ngay/.test(flatText)) {
-    out.date = findDate(text) ?? undefined;
+    const noPhones = text.replace(/(?:\+?8[24]|0)[\d .\-]{7,13}\d/g, (m) =>
+      m.replace(/\D/g, "").length >= 9 ? " " : m,
+    );
+    out.date = findDate(noPhones) ?? undefined;
   }
 
   // 6. Địa chỉ: ưu tiên dòng có nhãn "đc/địa chỉ", rồi tới dòng trông giống
