@@ -1,4 +1,4 @@
-import type { Box, Combo, Flavor, Region, Warehouse } from "./types";
+import type { Box, Combo, Flavor, FlavorPreset, Region, Warehouse } from "./types";
 import { convertToBuyerCurrency, currencyOf } from "./money";
 
 // ============================================================================
@@ -92,6 +92,64 @@ export function validateComboPick(
     if (!pool.some((f) => f.id === id))
       return { ok: false, error: `Có vị không nằm trong danh sách của set "${combo.name}".` };
   return { ok: true };
+}
+
+/**
+ * Bộ vị sẵn của set — chỉ giữ bộ HỢP LỆ: đủ đúng số ngăn và mọi vị còn bán.
+ *
+ * Shop sửa danh mục (tắt một vị, đổi số ngăn) thì bộ cũ thành sai; hiện nó ra
+ * cho khách bấm là bấm xong máy chủ từ chối, khách không hiểu vì sao. Thà giấu.
+ */
+export function comboPresets(combo: Combo, flavors: Flavor[]): FlavorPreset[] {
+  const need = comboPickCount(combo);
+  if (!need) return [];
+  const pool = comboPickPool(combo, flavors);
+  return (combo.flavor_presets ?? []).filter(
+    (p) =>
+      (p?.flavor_ids?.length ?? 0) === need &&
+      p.flavor_ids.every((id) => pool.some((f) => f.id === id)),
+  );
+}
+
+/** So hai bộ vị theo KIỂU TÚI: cùng số lượng từng vị, không xét thứ tự bấm. */
+const sameBag = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false;
+  const count = new Map<string, number>();
+  for (const id of a) count.set(id, (count.get(id) ?? 0) + 1);
+  for (const id of b) {
+    const n = count.get(id);
+    if (!n) return false;
+    count.set(id, n - 1);
+  }
+  return true;
+};
+
+/**
+ * Khách bốc trùng khít bộ nào thì trả tên bộ đó ("SET A"), không thì undefined.
+ *
+ * So theo KIỂU TÚI chứ không theo thứ tự: bấm SET A rồi bỏ một vị ra thêm lại
+ * vẫn là SET A — với bên đóng gói thì hai hộp đó giống hệt nhau.
+ */
+export function matchComboPreset(
+  combo: Combo,
+  flavorIds: string[],
+  flavors: Flavor[],
+): string | undefined {
+  return comboPresets(combo, flavors).find((p) => sameBag(p.flavor_ids, flavorIds ?? []))?.name;
+}
+
+/**
+ * Ruột hộp ghi trên đơn: "SET A (Lava · Matcha…)" hay "Tự chọn: Lava ×2 · Dẻo…".
+ *
+ * Bên đóng gói cần biết nhét bánh gì; shop cần biết khách bấm bộ sẵn hay tự
+ * bốc. Nên ghi CẢ HAI, chứ không chỉ mỗi tên bộ — bộ có thể được sửa về sau,
+ * còn tờ đơn thì phải nói đúng cái đã chốt lúc đặt.
+ */
+export function describeComboPick(combo: Combo, flavorIds: string[], flavors: Flavor[]): string {
+  const list = describePickedFlavors(flavorIds ?? [], flavors);
+  const preset = matchComboPreset(combo, flavorIds, flavors);
+  if (preset) return `${preset}: ${list}`;
+  return (combo.flavor_presets?.length ?? 0) > 0 ? `Tự chọn: ${list}` : list;
 }
 
 /** Tên gọn của vị cho chỗ hiển thị chật — trống thì lấy tên đầy đủ. */

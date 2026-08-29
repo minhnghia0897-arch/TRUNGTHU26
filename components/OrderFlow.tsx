@@ -17,6 +17,7 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  describeComboPick,
 } from "@/lib/pricing";
 import { saveWebOrder } from "@/lib/webOrders";
 import { normalizePhone } from "@/lib/phone";
@@ -182,7 +183,7 @@ export default function OrderFlow({
     // RIÊNG của khách — không tra ngược danh mục, vì danh mục chỉ giữ danh sách
     // 6 vị được phép chứ không biết khách bốc 4 vị nào.
     const c0 = combos.find((c) => c.id === it.comboId);
-    if (c0 && comboPickCount(c0)) return describePickedFlavors(it.flavorIds ?? [], flavors);
+    if (c0 && comboPickCount(c0)) return describeComboPick(c0, it.flavorIds ?? [], flavors);
     if (it.comboId && it.variantName) {
       const v = combos
         .find((c) => c.id === it.comboId)

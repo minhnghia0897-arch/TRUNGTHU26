@@ -7,6 +7,7 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  describeComboPick,
   flavorShortName,
   type CartLine,
 } from "@/lib/pricing";
@@ -124,7 +125,7 @@ export default function QuickOrderChat({
             comboId: it.comboId,
             variantName: it.variantName,
             flavorIds,
-            flavorText: need ? describePickedFlavors(flavorIds, flavors) : undefined,
+            flavorText: need && combo ? describeComboPick(combo, flavorIds, flavors) : undefined,
             qty,
             unitPrice: it.price,
             name: it.label,

@@ -9,7 +9,7 @@ import {
   comboOptions,
   comboPrice,
   comboPickCount,
-  describePickedFlavors,
+  describeComboPick,
   validateBoxFill,
   validateComboPick,
   shipFeeForRegion,
@@ -237,7 +237,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       // Set khách tự chọn: phải ghi rõ khách chọn vị nào, không thì bên đóng
       // gói cầm tờ đơn ghi mỗi tên set mà không biết nhét bánh gì vào hộp.
       const pick =
-        c && comboPickCount(c) ? ` (${describePickedFlavors(l.flavorIds ?? [], flavors)})` : "";
+        c && comboPickCount(c) ? ` (${describeComboPick(c, l.flavorIds ?? [], flavors)})` : "";
       return `${c?.name ?? "Set"}${opt}${times}${pick}`;
     }
     const box = boxes.find((b) => b.id === l.boxId);

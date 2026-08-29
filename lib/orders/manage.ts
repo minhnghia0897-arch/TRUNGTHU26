@@ -31,6 +31,8 @@ export interface PickLine {
   pickCount: number;
   pool: { id: string; name: string }[];
   flavorIds: string[];
+  /** Bộ vị bấm-một-phát của set (§0027) — rỗng nếu shop chưa đặt bộ nào. */
+  presets?: { name: string; flavorIds: string[] }[];
 }
 
 export interface ManageRow {
@@ -95,8 +97,54 @@ const describeIds = (ids: string[], pool: { id: string; name: string }[]): strin
     .join(" · ");
 };
 
+/** Dòng combo đọc lên từ database — gồm cả bộ vị sẵn (§0027). */
+interface PresetRow {
+  name: string;
+  flavor_ids: string[];
+}
+interface ComboRow {
+  id: string;
+  name: string;
+  flavor_ids: string[] | null;
+  pick_count: number | null;
+  flavor_presets: PresetRow[] | null;
+}
+
+/** So hai bộ vị theo kiểu TÚI — cùng luật với lib/pricing để hai nơi nói giống nhau. */
+const sameBag = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false;
+  const count = new Map<string, number>();
+  for (const id of a) count.set(id, (count.get(id) ?? 0) + 1);
+  for (const id of b) {
+    const n = count.get(id);
+    if (!n) return false;
+    count.set(id, n - 1);
+  }
+  return true;
+};
+
+/** "SET A: Lava · Matcha…" nếu trùng bộ sẵn, không thì "Tự chọn: …". */
+const labelPick = (
+  presets: PresetRow[],
+  flavorIds: string[],
+  pool: { id: string; name: string }[],
+): string => {
+  const list = describeIds(flavorIds, pool);
+  const hit = presets.find((p) => sameBag(p.flavor_ids, flavorIds));
+  if (hit) return `${hit.name}: ${list}`;
+  return presets.length ? `Tự chọn: ${list}` : list;
+};
+
+/** Bốn bộ vị shop chốt — bản mẫu, khớp dữ liệu thật (§0027). */
+const DEMO_PRESETS: PresetRow[] = [
+  { name: "SET A", flavor_ids: ["f4", "f1", "f6", "f3"] },
+  { name: "SET B", flavor_ids: ["f4", "f1", "f5", "f2"] },
+  { name: "SET C", flavor_ids: ["f4", "f1", "f6", "f5"] },
+  { name: "SET D", flavor_ids: ["f4", "f1", "f3", "f2"] },
+];
+
 const demoItems = (p: PickLine): string =>
-  `${p.comboName}${p.qty > 1 ? ` ×${p.qty}` : ""} (${describeIds(p.flavorIds, p.pool)})`;
+  `${p.comboName}${p.qty > 1 ? ` ×${p.qty}` : ""} (${labelPick(DEMO_PRESETS, p.flavorIds, p.pool)})`;
 
 function demoData(): ManageRow[] {
   if (demoRows) return demoRows;
@@ -140,6 +188,7 @@ function demoData(): ManageRow[] {
     pickCount: 4,
     pool: DEMO_POOL,
     flavorIds,
+    presets: DEMO_PRESETS.map((x) => ({ name: x.name, flavorIds: x.flavor_ids })),
   });
   const p1 = pick(1, "Kim Ngọc Các", 2, ["f4", "f4", "f5", "f1"]);
   const p2 = pick(2, "Vinh Hiển", 1, ["f1", "f6", "f5", "f4"]);
@@ -227,11 +276,22 @@ export async function findManagedOrders(rawPhone: string): Promise<ManageResult>
   const comboIds = [
     ...new Set(orders.flatMap((o) => o.order_line ?? []).map((l) => l.combo_id).filter(Boolean)),
   ] as string[];
-  const comboMap = new Map<string, { name: string; flavor_ids: string[]; pick_count: number }>();
+  const comboMap = new Map<
+    string,
+    { name: string; flavor_ids: string[]; pick_count: number; presets: PresetRow[] }
+  >();
   if (comboIds.length) {
-    const { data: cs } = await sb.from("combo").select("id, name, flavor_ids, pick_count").in("id", comboIds);
-    for (const c of (cs ?? []) as { id: string; name: string; flavor_ids: string[] | null; pick_count: number | null }[])
-      comboMap.set(c.id, { name: c.name, flavor_ids: c.flavor_ids ?? [], pick_count: c.pick_count ?? 0 });
+    const { data: cs } = await sb
+      .from("combo")
+      .select("id, name, flavor_ids, pick_count, flavor_presets")
+      .in("id", comboIds);
+    for (const c of (cs ?? []) as ComboRow[])
+      comboMap.set(c.id, {
+        name: c.name,
+        flavor_ids: c.flavor_ids ?? [],
+        pick_count: c.pick_count ?? 0,
+        presets: (c.flavor_presets ?? []).filter((p) => p?.flavor_ids?.length),
+      });
   }
   const poolFlavorIds = [...new Set([...comboMap.values()].flatMap((c) => c.flavor_ids))];
   const flavorName = new Map<string, string>();
@@ -259,6 +319,9 @@ export async function findManagedOrders(rawPhone: string): Promise<ManageResult>
               pickCount: c.pick_count,
               pool: c.flavor_ids.map((id) => ({ id, name: flavorName.get(id) ?? "Vị đã xoá" })),
               flavorIds: (l.flavors ?? []).filter(Boolean),
+              presets: c.presets
+                .filter((p) => p.flavor_ids.length === c.pick_count)
+                .map((p) => ({ name: p.name, flavorIds: p.flavor_ids })),
             },
           ];
         });
@@ -423,11 +486,18 @@ export async function updateManagedParcel(
     type Ln = { kind: string; combo_id: string | null; box_id: string | null; flavors: string[] | null; qty: number };
     const lines = (allLines ?? []) as Ln[];
     const comboIds = [...new Set(lines.map((l) => l.combo_id).filter(Boolean))] as string[];
-    const comboMap = new Map<string, { name: string; pick_count: number }>();
+    const comboMap = new Map<string, { name: string; pick_count: number; presets: PresetRow[] }>();
     if (comboIds.length) {
-      const { data: cs } = await sb.from("combo").select("id, name, pick_count").in("id", comboIds);
-      for (const c of (cs ?? []) as { id: string; name: string; pick_count: number | null }[])
-        comboMap.set(c.id, { name: c.name, pick_count: c.pick_count ?? 0 });
+      const { data: cs } = await sb
+        .from("combo")
+        .select("id, name, flavor_ids, pick_count, flavor_presets")
+        .in("id", comboIds);
+      for (const c of (cs ?? []) as ComboRow[])
+        comboMap.set(c.id, {
+          name: c.name,
+          pick_count: c.pick_count ?? 0,
+          presets: (c.flavor_presets ?? []).filter((p) => p?.flavor_ids?.length),
+        });
     }
     const fIds = [...new Set(lines.flatMap((l) => l.flavors ?? []))];
     const fName = new Map<string, string>();
@@ -443,7 +513,7 @@ export async function updateManagedParcel(
         if (l.kind === "combo") {
           const c = l.combo_id ? comboMap.get(l.combo_id) : undefined;
           const pick = c?.pick_count
-            ? ` (${describeIds(l.flavors ?? [], [...fName.entries()].map(([id, nm]) => ({ id, name: nm })))})`
+            ? ` (${labelPick(c.presets, l.flavors ?? [], [...fName.entries()].map(([id, nm]) => ({ id, name: nm })))})`
             : "";
           return `${c?.name ?? "Set"}${times}${pick}`;
         }
