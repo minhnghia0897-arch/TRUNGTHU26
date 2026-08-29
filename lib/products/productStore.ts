@@ -51,6 +51,8 @@ export interface ProductPatch {
   flavorIds?: string[];
   /** Số vị khách tự chọn trong `flavorIds` — chỉ set (§0025). 0 = bán bộ cố định. */
   pickCount?: number;
+  /** Tên gọn của vị (§0026) — chỉ bảng vị mới có cột này. */
+  shortName?: string;
   description?: string;
 }
 
@@ -87,6 +89,8 @@ function toColumns(kind: ProductKind, p: ProductPatch): Record<string, unknown> 
   // bảng vị là Postgres từ chối cả câu UPDATE.
   if (kind === "combo" && p.pickCount !== undefined)
     c.pick_count = Math.max(0, Math.trunc(p.pickCount));
+  // Tên gọn (§0026): chỉ bảng vị có cột — gửi sang bảng khác là UPDATE hỏng cả.
+  if (kind === "flavor" && p.shortName !== undefined) c.short_name = p.shortName.trim();
 
   return c;
 }
@@ -188,7 +192,7 @@ const SHARED_COLS = [
 const OWN_COLS: Record<ProductKind, string[]> = {
   box: ["slots", "weight", "allowed_flavor_weight", "specs"],
   combo: ["box_id", "flavor_ids", "pick_count"],
-  flavor: ["weight", "premium", "premium_surcharge_vn", "premium_surcharge_kr", "sort"],
+  flavor: ["weight", "premium", "premium_surcharge_vn", "premium_surcharge_kr", "sort", "short_name"],
 };
 
 const KIND_LABEL: Record<ProductKind, string> = { box: "Hộp", combo: "Combo", flavor: "Vị" };

@@ -5,6 +5,7 @@ import { MAX_PRODUCT_IMAGES, type Badge, type Box, type Combo, type Flavor, type
 import { formatMoney } from "@/lib/money";
 import {
   boxPrice,
+  boxBasePrice,
   flavorRetailPrice,
   flavorSurcharge,
   findFlavorByName,
@@ -14,7 +15,9 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  flavorShortName,
 } from "@/lib/pricing";
+import QuickOrderChat from "@/components/QuickOrderChat";
 import {
   IconLotus,
   IconCrown,
@@ -120,6 +123,198 @@ function FlavorRow({ name, img, right }: { name: string; img?: string; right?: R
       <span className="min-w-0 flex-1">{name}</span>
       {right}
     </li>
+  );
+}
+
+// ---------------------------------------------------------------- kiểu TikTok
+// Mấy mảnh nhỏ học theo trang shop TikTok: giá đỏ đậm, giá cũ gạch ngang, chip
+// "-N%" và "Freeship", hàng sản phẩm nằm ngang có nút Mua đỏ. Màu đỏ dùng token
+// `gold` — từ đợt đổi tông TikTok thì token đó CHÍNH LÀ đỏ #FE2C55.
+
+/**
+ * Giá cũ để gạch ngang, suy từ % giảm shop gõ ở Dashboard (ô "Giảm %").
+ *
+ * Giá BÁN THẬT vẫn là `price` — máy chủ chốt đơn không nhìn tới % giảm. Con số
+ * gạch ngang chỉ là "giá trước khuyến mãi" để hiện: price = gốc × (1 − d) nên
+ * gốc = price / (1 − d). Không đặt % giảm thì không có gì để gạch.
+ */
+function slashedPrice(price: number, discount?: number): number | null {
+  const d = discount ?? 0;
+  if (d <= 0 || d >= 100) return null;
+  return Math.round(price / (1 - d / 100));
+}
+
+/** Khối giá kiểu TikTok: [-N%] 220.000đ  ~~320.000đ~~ */
+function TikPrice({
+  price,
+  discount,
+  region,
+  big,
+}: {
+  price: number;
+  discount?: number;
+  region: Region;
+  big?: boolean;
+}) {
+  const orig = slashedPrice(price, discount);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+      {orig !== null && (
+        <span className="rounded bg-gold px-1 py-[1px] text-[10px] font-bold leading-tight text-white">
+          -{Math.round(discount!)}%
+        </span>
+      )}
+      <span className={`font-bold text-gold ${big ? "text-[21px]" : "text-[16px]"} leading-tight`}>
+        {formatMoney(price, region)}
+      </span>
+      {orig !== null && (
+        <span className="text-[11.5px] text-ink/40 line-through">{formatMoney(orig, region)}</span>
+      )}
+    </div>
+  );
+}
+
+/** Chip Freeship / Giảm giá — hàng chip dưới tên sản phẩm. */
+function TikChips({ freeship, discount }: { freeship: boolean; discount?: number }) {
+  if (!freeship && !(discount && discount > 0)) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {discount != null && discount > 0 && (
+        <span className="rounded border border-gold/40 bg-gold/5 px-1.5 py-[1px] text-[9.5px] font-semibold text-gold">
+          ⚡ Flash Sale
+        </span>
+      )}
+      {freeship && (
+        <span className="rounded border border-teal-500/40 bg-teal-500/5 px-1.5 py-[1px] text-[9.5px] font-semibold text-teal-600">
+          🚚 Freeship
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Một hàng sản phẩm kiểu danh sách TikTok Shop: ảnh vuông trái, phải là tên →
+ * chip → giá đỏ + giá gạch → nút Mua đỏ góc dưới.
+ *
+ * Cả ba tab dùng chung một hàng này nên trang trên dưới đều một nhịp — khác
+ * nhau mỗi nút hành động (Mua thẳng / mở màn chọn vị / sang trang tự chọn).
+ */
+function TikRow({
+  img,
+  name,
+  desc,
+  badge,
+  price,
+  discount,
+  freeship,
+  region,
+  actionLabel,
+  actionDone,
+  onOpen,
+  onAction,
+  href,
+}: {
+  img?: string;
+  name: string;
+  desc?: string;
+  badge?: Badge;
+  price: number;
+  discount?: number;
+  freeship: boolean;
+  region: Region;
+  actionLabel: string;
+  actionDone?: boolean;
+  onOpen?: () => void;
+  onAction?: () => void;
+  href?: string;
+}) {
+  const btn = `rounded-lg px-4 py-1.5 text-[12px] font-semibold transition active:scale-95 ${actionDone ? "bg-emerald-500 text-white" : "bg-gold text-white"}`;
+  return (
+    <article className="flex gap-3 rounded-card bg-white p-2.5 shadow-card">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative h-[108px] w-[108px] flex-none overflow-hidden rounded-lg bg-cream-soft"
+      >
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={img} alt={name} className="h-full w-full object-cover" />
+        ) : (
+          <span className="grid h-full w-full place-items-center text-gold/50">
+            <IconLotus width={34} height={34} />
+          </span>
+        )}
+        {badge === "best_seller" && (
+          <span className="absolute left-0 top-0 rounded-br-lg bg-gradient-to-r from-gold to-gold-deep px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-white">
+            Best seller
+          </span>
+        )}
+        {badge === "must_try" && (
+          <span className="absolute left-0 top-0 rounded-br-lg bg-navy px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-cream">
+            Must try
+          </span>
+        )}
+      </button>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <button type="button" onClick={onOpen} className="text-left">
+          <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-navy">{name}</h3>
+        </button>
+        {desc && <p className="mt-0.5 line-clamp-1 text-[10.5px] text-ink/45">{desc}</p>}
+        <TikChips freeship={freeship} discount={discount} />
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1.5">
+          <TikPrice price={price} discount={discount} region={region} />
+          {href ? (
+            <a href={href} className={btn}>
+              {actionLabel}
+            </a>
+          ) : (
+            <button type="button" onClick={onAction} className={btn}>
+              {actionDone ? "✓ Đã thêm" : actionLabel}
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/** Thanh sắp xếp: Đề xuất | Bán chạy | Giá ↕ — học theo dải lọc của TikTok. */
+type SortKey = "rec" | "hot" | "priceAsc" | "priceDesc";
+function SortBar({ sort, onChange }: { sort: SortKey; onChange: (s: SortKey) => void }) {
+  const item = (on: boolean) =>
+    `px-1 py-2 text-[12px] font-semibold transition ${on ? "text-gold" : "text-ink/50"}`;
+  const priceOn = sort === "priceAsc" || sort === "priceDesc";
+  return (
+    <div className="mb-3 flex items-center gap-4 border-b border-line/70 px-1">
+      <button type="button" onClick={() => onChange("rec")} className={item(sort === "rec")}>
+        Đề xuất
+      </button>
+      <button type="button" onClick={() => onChange("hot")} className={item(sort === "hot")}>
+        Bán chạy
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(sort === "priceAsc" ? "priceDesc" : "priceAsc")}
+        className={item(priceOn)}
+      >
+        Giá {sort === "priceAsc" ? "↑" : sort === "priceDesc" ? "↓" : "↕"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Sắp danh sách theo thanh trên. "Bán chạy" xếp theo huy hiệu shop tự gắn
+ * (best seller trước) — trang bán không có số lượt bán thật để mà xếp, và bịa
+ * ra con số "đã bán" là nói dối khách.
+ */
+function sortRows<T>(rows: T[], sort: SortKey, price: (x: T) => number, badge: (x: T) => Badge | undefined): T[] {
+  if (sort === "rec") return rows;
+  const rank = (b?: Badge) => (b === "best_seller" ? 0 : b === "must_try" ? 1 : 2);
+  return [...rows].sort((a, b) =>
+    sort === "hot" ? rank(badge(a)) - rank(badge(b)) : sort === "priceAsc" ? price(a) - price(b) : price(b) - price(a),
   );
 }
 
@@ -460,6 +655,12 @@ export default function ProductCatalog({
   // Bộ quà tặng đang mở chi tiết. Thẻ ngoài danh sách cố tình gọn — ảnh lớn,
   // mô tả đầy đủ và danh sách vị của từng loại nhân nằm ở đây.
   const [detail, setDetail] = useState<Combo | null>(null);
+  const [sort, setSort] = useState<SortKey>("rec");
+  // Ô "đặt nhanh": khách dán tin nhắn, hệ thống đọc rồi điền sẵn trang đặt hàng.
+  const [quickChat, setQuickChat] = useState(false);
+  // Số hộp khách chỉnh trong popup chi tiết (kiểu ô "Số lượng" của TikTok).
+  const [detailQty, setDetailQty] = useState(1);
+  useEffect(() => setDetailQty(1), [detail?.id]);
 
   // Set cho khách tự chọn vị (§0025): id vị → số bánh khách đã bốc.
   // Xoá sạch mỗi lần mở set khác — không thì set sau thừa hưởng lựa chọn của
@@ -500,7 +701,12 @@ export default function ProductCatalog({
   }, [detail]);
 
   /** Thêm vào giỏ ngay tại trang: trùng món thì cộng dồn số lượng, không chuyển trang. */
-  function addToCart(key: string, line: Omit<CartLine, "uid" | "qty" | "recipientUids">) {
+  function addToCart(
+    key: string,
+    line: Omit<CartLine, "uid" | "qty" | "recipientUids">,
+    qty = 1,
+    buyNow = false,
+  ) {
     const blob = readCart();
     const cart = [...(blob.cart ?? [])];
     // So CẢ danh sách vị chứ không chỉ vị đầu: set khách tự chọn thì hai hộp
@@ -515,8 +721,8 @@ export default function ProductCatalog({
         l.variantName === line.variantName &&
         sameFlavors(l.flavorIds, line.flavorIds),
     );
-    if (same >= 0) cart[same] = { ...cart[same], qty: cart[same].qty + 1 };
-    else cart.push({ ...line, uid: nextUid(cart), qty: 1, recipientUids: [] });
+    if (same >= 0) cart[same] = { ...cart[same], qty: cart[same].qty + qty };
+    else cart.push({ ...line, uid: nextUid(cart), qty, recipientUids: [] });
 
     try {
       localStorage.setItem(CART_KEY, JSON.stringify({ ...blob, cart, buyerRegion: region }));
@@ -526,22 +732,25 @@ export default function ProductCatalog({
     setCartCount(countCart(cart));
     setAdded(key);
     setTimeout(() => setAdded((k) => (k === key ? "" : k)), 1400);
+    // "Mua ngay" kiểu TikTok: bỏ vào giỏ xong đi thẳng sang trang đặt hàng,
+    // không bắt khách tự mò tới nút giỏ.
+    if (buyNow) window.location.href = "/dat-hang";
   }
 
   return (
     <main className="mx-auto min-h-screen max-w-app bg-cream pb-24">
       {/* hotline */}
-      <div className="bg-[#081221] px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
-        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-[#E8C877]">0982 576 263</b>
+      <div className="bg-black px-3 py-2 text-center text-[11px] tracking-wide text-cream/80">
+        Giao toàn quốc VN &amp; Hàn Quốc · Hotline <b className="text-gold">0982 576 263</b>
       </div>
 
       {/* header — bộ sưu tập là trang chính của luồng khách lẻ */}
       <header className="bg-navy px-4 pb-3 pt-3.5 text-center">
-        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-[#E8C877]">
+        <a href="/san-pham" className="title-heritage text-base tracking-[0.18em] !text-white">
           Doran King
         </a>
         <div className="mt-0.5 text-[10px] italic tracking-wide text-cream/55">Bánh Trung Thu thủ công cao cấp</div>
-        <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-[#E8C877]/85">
+        <nav className="mt-2.5 flex justify-center gap-6 text-[11px] uppercase tracking-widest text-white/70">
           <a href="/dat-hang">Đặt hàng</a>
           <a href="/tra-cuu">Tra cứu đơn</a>
         </nav>
@@ -591,217 +800,130 @@ export default function ProductCatalog({
         )}
         {/* HỘP TỰ CHỌN */}
         {tab === "box" && (
-          <div className="grid grid-cols-2 gap-3">
-            {boxes.map((b) => (
-              <article key={b.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                <ImageArea
+          <>
+            <SortBar sort={sort} onChange={setSort} />
+            <div className="space-y-2.5">
+              {sortRows(boxes, sort, (b) => boxBasePrice(b, region), (b) => b.badge).map((b) => (
+                <TikRow
+                  key={b.id}
+                  img={imagesOf(`box:${b.id}`)[0]}
+                  name={b.name}
+                  desc={b.description}
                   badge={b.badge}
-                  w={b.weight}
-                  images={imagesOf(`box:${b.id}`)}
-                  alt={b.name}
-                  onOpen={(i) => setLightbox({ images: imagesOf(`box:${b.id}`), index: i, title: b.name })}
+                  price={boxBasePrice(b, region)}
+                  discount={b.discount}
+                  freeship={!b.charge_ship}
+                  region={region}
+                  actionLabel="Tự chọn vị"
+                  href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
+                  onOpen={() =>
+                    imagesOf(`box:${b.id}`).length
+                      ? setLightbox({ images: imagesOf(`box:${b.id}`), index: 0, title: b.name })
+                      : undefined
+                  }
                 />
-                <div className="flex flex-1 flex-col p-3 text-center">
-                  <h3 className="text-[13px] font-semibold leading-tight text-navy">{b.name}</h3>
-                  {b.description && <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{b.description}</p>}
-                  <div className="mt-auto pt-2">
-                    <div className="price-lg text-[15px]">
-                      {formatMoney(region === "vn" ? b.price_vn : b.price_kr, region)}
-                      <span className="unit"> / hộp</span>
-                    </div>
-                    <a
-                      href={`/dat-hang?box=${b.id}&region=${region}&express=1`}
-                      className="mt-2 flex items-center justify-center gap-1 rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep"
-                    >
-                      Tự chọn vị <IconArrowRight width={12} height={12} />
-                    </a>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/* COMBO */}
         {tab === "combo" && (
-          <div className="grid grid-cols-2 gap-3">
-            {sellableCombos.map((c) => {
-              const price = comboPrice(c, boxes, flavors, region);
-              // Không suy được giá (hộp quy cách đã tắt, set chưa đặt giá) thì
-              // giấu hẳn thẻ. Trước đây lùi về boxes[0] nên bày giá của hộp khác.
-              if (price === null) return null;
-              // Hộp chỉ còn là quy cách và thường đã tắt bán, nên có thể không
-              // có trong `boxes`. Không mượn hộp khác — chỉ bỏ chip khối lượng.
-              const b = boxes.find((x) => x.id === c.box_id);
-              const opts = comboOptions(c, region);
-              // card 2 cột hẹp → gộp tên vị thành 1 dòng thay vì chip rời.
-              // Set tự chọn thì đây là danh sách được chọn, không phải ruột hộp
-              // — nói rõ để khách không tưởng hộp có đủ cả 6 bánh.
-              const flavorLine = c.flavor_ids
-                .map((fid) => flavors.find((x) => x.id === fid)?.name)
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <article key={c.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                  <ImageArea
-                    // Huy hiệu đọc từ dữ liệu. Trước đây hardcode "best_seller"
-                    // nên MỌI bộ quà tặng đều đeo Best Seller — nói sai với khách.
+          <>
+            <SortBar sort={sort} onChange={setSort} />
+            <div className="space-y-2.5">
+              {sortRows(
+                sellableCombos,
+                sort,
+                (c) => comboPrice(c, boxes, flavors, region) ?? 0,
+                (c) => c.badge,
+              ).map((c) => {
+                const price = comboPrice(c, boxes, flavors, region);
+                if (price === null) return null;
+                const opts = comboOptions(c, region);
+                const pick = comboPickCount(c);
+                // Vị trong set — set tự chọn thì đó là danh sách được chọn.
+                const flavorLine = c.flavor_ids
+                  .map((fid) => flavors.find((x) => x.id === fid)?.name)
+                  .filter(Boolean)
+                  .join(" · ");
+                const desc =
+                  c.description || (pick ? `Chọn ${pick} trong: ${flavorLine}` : flavorLine);
+                // Set cần chọn thêm (vị / loại nhân) thì nút Mua mở popup; set cố
+                // định một giá thì Mua bỏ thẳng vào giỏ như TikTok.
+                const needDetail = pick > 0 || opts.length > 0;
+                const key = `combo:${c.id}`;
+                return (
+                  <TikRow
+                    key={c.id}
+                    img={imagesOf(key)[0]}
+                    name={c.name}
+                    desc={desc}
                     badge={c.badge}
-                    w={b?.weight}
-                    images={imagesOf(`combo:${c.id}`)}
-                    alt={c.name}
+                    price={price}
+                    discount={c.discount}
+                    freeship={!c.charge_ship}
+                    region={region}
+                    actionLabel={pick ? `Chọn ${pick} vị` : "Mua"}
+                    actionDone={added === key}
                     onOpen={() => setDetail(c)}
-                    onEmptyClick={() => setDetail(c)}
+                    onAction={() =>
+                      needDetail
+                        ? setDetail(c)
+                        : addToCart(key, {
+                            kind: "combo",
+                            boxId: c.box_id ?? undefined,
+                            comboId: c.id,
+                            flavorIds: c.flavor_ids,
+                            unitPrice: price,
+                            name: c.name,
+                          })
+                    }
                   />
-                  <div className="flex flex-1 flex-col p-3 text-center">
-                    <button
-                      onClick={() => setDetail(c)}
-                      className="text-[13px] font-semibold leading-tight text-navy underline-offset-2 hover:underline"
-                    >
-                      {c.name}
-                    </button>
-                    {(c.description || flavorLine) && (
-                      <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">
-                        {c.description || (comboPickCount(c) ? `Chọn ${comboPickCount(c)} trong: ${flavorLine}` : flavorLine)}
-                      </p>
-                    )}
-                    <div className="mt-auto pt-2">
-                      <div className="price-lg text-[15px]">
-                        {opts.length > 1 && <span className="unit">từ </span>}
-                        {formatMoney(price, region)}
-                        <span className="unit"> / hộp</span>
-                      </div>
-
-                      {comboPickCount(c) ? (
-                        // Set khách tự chọn vị: không thêm thẳng vào giỏ được
-                        // vì chưa biết khách muốn vị nào. Thẻ ngoài chỉ mời vào
-                        // trong chọn.
-                        <button
-                          onClick={() => setDetail(c)}
-                          className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-gold py-1.5 text-[11px] font-semibold uppercase tracking-wide text-navy-deep transition active:scale-95"
-                        >
-                          Chọn {comboPickCount(c)} vị
-                          <IconArrowRight width={12} height={12} />
-                        </button>
-                      ) : opts.length ? (
-                        // Set nhiều lựa chọn: mỗi loại nhân một nút, kèm giá của
-                        // chính nó — khách thấy ngay chênh lệch, không phải bấm vào
-                        // rồi mới biết.
-                        <div className="mt-2 space-y-1.5">
-                          {opts.map((o) => {
-                            const key = `combo:${c.id}:${o.name}`;
-                            return (
-                              <button
-                                key={o.name}
-                                title={o.contents}
-                                onClick={() =>
-                                  addToCart(key, {
-                                    kind: "combo",
-                                    boxId: c.box_id ?? undefined,
-                                    comboId: c.id,
-                                    variantName: o.name,
-                                    flavorIds: c.flavor_ids,
-                                    unitPrice: o.price,
-                                    name: `${c.name} · ${o.name}`,
-                                  })
-                                }
-                                className={`flex w-full flex-col items-center rounded-xl px-2 py-1.5 text-[10.5px] font-semibold leading-tight transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-cream-soft text-navy hover:bg-gold/25"}`}
-                              >
-                                {added === key ? (
-                                  <span className="flex items-center gap-1">
-                                    <IconCheck width={12} height={12} /> Đã thêm
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span>{o.name}</span>
-                                    <span className="text-[11px] font-bold text-gold-deep">
-                                      {formatMoney(o.price, region)}
-                                    </span>
-                                  </>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            addToCart(`combo:${c.id}`, {
-                              kind: "combo",
-                              boxId: c.box_id ?? undefined,
-                              comboId: c.id,
-                              flavorIds: c.flavor_ids,
-                              unitPrice: price,
-                              name: c.name,
-                            })
-                          }
-                          className={`mt-2 flex w-full items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${c.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
-                        >
-                          {added === `combo:${c.id}` ? (
-                            <>
-                              <IconCheck width={12} height={12} /> Đã thêm
-                            </>
-                          ) : (
-                            <>
-                              <IconCart width={12} height={12} /> Thêm vào giỏ
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* MUA LẺ */}
         {tab === "la" && (
-          <div className="grid grid-cols-2 gap-3">
-            {retailFlavors.map((f) => (
-              <article key={f.id} className="flex flex-col overflow-hidden rounded-card bg-white shadow-card">
-                <ImageArea
-                  badge={f.badge}
-                  w={f.weight}
-                  images={imagesOf(`flavor:${f.id}`)}
-                  alt={f.name}
-                  onOpen={(i) => setLightbox({ images: imagesOf(`flavor:${f.id}`), index: i, title: f.name })}
-                />
-                <div className="flex flex-1 flex-col p-3 text-center">
-                  <h3 className="text-[13px] font-semibold leading-tight text-navy">{f.name}</h3>
-                  <p className="mt-1 line-clamp-2 text-[10.5px] text-ink/55">{f.description}</p>
-                  <div className="mt-auto pt-2">
-                    <div className="price-lg text-[15px]">{formatMoney(flavorRetailPrice(f, region), region)}</div>
-                    {f.premium && (
-                      <div className="text-[9.5px] text-ink/45">+{formatMoney(flavorSurcharge(f, region), region)} trong hộp</div>
-                    )}
-                    <button
-                      onClick={() =>
-                        addToCart(`la:${f.id}`, {
-                          kind: "la",
-                          flavorIds: [f.id],
-                          unitPrice: flavorRetailPrice(f, region),
-                          name: f.name + " (lẻ)",
-                        })
-                      }
-                      className={`mt-2 flex w-full items-center justify-center gap-1 rounded-full py-1.5 text-[11px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `la:${f.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
-                    >
-                      {added === `la:${f.id}` ? (
-                        <>
-                          <IconCheck width={12} height={12} /> Đã thêm
-                        </>
-                      ) : (
-                        <>
-                          <IconCart width={12} height={12} /> Thêm vào giỏ
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
+          <>
+            <SortBar sort={sort} onChange={setSort} />
+            <div className="space-y-2.5">
+              {sortRows(retailFlavors, sort, (f) => flavorRetailPrice(f, region), (f) => f.badge).map((f) => {
+                const key = `la:${f.id}`;
+                return (
+                  <TikRow
+                    key={f.id}
+                    img={imagesOf(`flavor:${f.id}`)[0]}
+                    name={`${f.name} (lẻ)`}
+                    desc={f.description}
+                    badge={f.badge}
+                    price={flavorRetailPrice(f, region)}
+                    discount={f.discount}
+                    freeship={!f.charge_ship}
+                    region={region}
+                    actionLabel="Mua"
+                    actionDone={added === key}
+                    onOpen={() =>
+                      imagesOf(`flavor:${f.id}`).length
+                        ? setLightbox({ images: imagesOf(`flavor:${f.id}`), index: 0, title: f.name })
+                        : undefined
+                    }
+                    onAction={() =>
+                      addToCart(key, {
+                        kind: "la",
+                        flavorIds: [f.id],
+                        unitPrice: flavorRetailPrice(f, region),
+                        name: f.name + " (lẻ)",
+                      })
+                    }
+                  />
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -810,9 +932,15 @@ export default function ProductCatalog({
         <a href="/tra-cuu" className="flex-1 text-[11px] font-medium uppercase tracking-wide text-navy/70">
           Tra cứu đơn
         </a>
+        <button
+          onClick={() => setQuickChat(true)}
+          className="flex items-center gap-1 rounded-full border border-gold bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gold-deep transition active:scale-95"
+        >
+          ⚡ Đặt nhanh
+        </button>
         <a
           href="/dat-hang"
-          className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-navy-deep"
+          className="relative flex items-center gap-1.5 rounded-full bg-gold px-5 py-3 text-xs font-semibold uppercase tracking-wide text-white"
         >
           <IconCart width={16} height={16} /> Tới giỏ
           {cartCount > 0 && (
@@ -871,6 +999,7 @@ export default function ProductCatalog({
               {detail.description && (
                 <p className="mt-2 text-[12.5px] leading-relaxed text-ink/70">{detail.description}</p>
               )}
+              <TikChips freeship={!detail.charge_ship} discount={detail.discount} />
 
               {(() => {
                 const opts = comboOptions(detail, region);
@@ -907,7 +1036,8 @@ export default function ProductCatalog({
                           const f = pool.find((x) => x.id === id);
                           return {
                             id,
-                            name: f?.name ?? "Vị",
+                            // tên gọn — ngăn khay bé xíu, tên đầy đủ tràn hết chữ
+                            name: f ? flavorShortName(f) : "Vị",
                             img: imagesOf(`flavor:${id}`)[0],
                           };
                         })}
@@ -920,7 +1050,7 @@ export default function ProductCatalog({
                         {pool.map((f) => (
                           <FlavorRow
                             key={f.id}
-                            name={f.name}
+                            name={flavorShortName(f)}
                             img={imagesOf(`flavor:${f.id}`)[0]}
                             right={
                               <PickStepper
@@ -944,35 +1074,60 @@ export default function ProductCatalog({
                         // lên mới thấy nút.
                         <div className="sticky bottom-0 -mx-4 mt-5 border-t border-line bg-cream px-4 pb-1 pt-3">
                           <div className="flex items-center justify-between gap-3">
-                            <div className="price-lg text-[17px]">
-                              {formatMoney(price, region)}
-                              <span className="unit"> / hộp</span>
+                            <TikPrice price={price} discount={detail.discount} region={region} big />
+                            <div className="flex items-center gap-1.5 text-[12px] text-ink/60">
+                              Số lượng
+                              <PickStepper
+                                qty={detailQty}
+                                canAdd
+                                onChange={(d) => setDetailQty((q) => Math.max(1, q + d))}
+                              />
                             </div>
-                            <button
-                              disabled={left !== 0}
-                              onClick={() =>
-                                addToCart(key, {
-                                  kind: "combo",
-                                  boxId: detail.box_id ?? undefined,
-                                  comboId: detail.id,
-                                  flavorIds: chose,
-                                  flavorText: describePickedFlavors(chose, flavors),
-                                  unitPrice: price,
-                                  name: detail.name,
-                                })
-                              }
-                              className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink/40 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
-                            >
-                              {added === key ? (
+                          </div>
+                          <div className="mt-2 flex gap-2">
+                            {(() => {
+                              const line = {
+                                kind: "combo" as const,
+                                boxId: detail.box_id ?? undefined,
+                                comboId: detail.id,
+                                flavorIds: chose,
+                                flavorText: describePickedFlavors(chose, flavors),
+                                unitPrice: price,
+                                name: detail.name,
+                              };
+                              const dis =
+                                "disabled:cursor-not-allowed disabled:border-line disabled:bg-line disabled:text-ink/40";
+                              return (
                                 <>
-                                  <IconCheck width={13} height={13} /> Đã thêm
+                                  <button
+                                    disabled={left !== 0}
+                                    onClick={() => addToCart(key, line, detailQty)}
+                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${dis} ${added === key ? "border-emerald-500 bg-emerald-500 text-white" : "border-gold bg-white text-gold"}`}
+                                  >
+                                    {added === key ? (
+                                      <>
+                                        <IconCheck width={13} height={13} /> Đã thêm
+                                      </>
+                                    ) : (
+                                      <>
+                                        <IconCart width={13} height={13} /> Thêm vào giỏ
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    disabled={left !== 0}
+                                    onClick={() => addToCart(key, line, detailQty, true)}
+                                    className={`flex flex-1 flex-col items-center justify-center rounded-full bg-gold py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95 ${dis}`}
+                                  >
+                                    Mua ngay
+                                    <span className="text-[10px] font-medium normal-case opacity-90">
+                                      {formatMoney(price * detailQty, region)}
+                                      {!detail.charge_ship && " · Freeship"}
+                                    </span>
+                                  </button>
                                 </>
-                              ) : (
-                                <>
-                                  <IconCart width={13} height={13} /> Thêm vào giỏ
-                                </>
-                              )}
-                            </button>
+                              );
+                            })()}
                           </div>
                           <p className="mt-1.5 min-h-[16px] text-[11px] text-ink/50">
                             {left > 0
@@ -1007,34 +1162,59 @@ export default function ProductCatalog({
                         </div>
                       )}
                       {price !== null && (
-                        <div className="mt-5 flex items-center justify-between gap-3 rounded-card bg-white p-3.5 shadow-card">
-                          <div className="price-lg text-[17px]">
-                            {formatMoney(price, region)}
-                            <span className="unit"> / hộp</span>
+                        <div className="mt-5 rounded-card bg-white p-3.5 shadow-card">
+                          <div className="flex items-center justify-between gap-3">
+                            <TikPrice price={price} discount={detail.discount} region={region} big />
+                            <div className="flex items-center gap-1.5 text-[12px] text-ink/60">
+                              Số lượng
+                              <PickStepper
+                                qty={detailQty}
+                                canAdd
+                                onChange={(d) => setDetailQty((q) => Math.max(1, q + d))}
+                              />
+                            </div>
                           </div>
-                          <button
-                            onClick={() =>
-                              addToCart(`combo:${detail.id}`, {
-                                kind: "combo",
+                          <div className="mt-2.5 flex gap-2">
+                            {(() => {
+                              const key2 = `combo:${detail.id}`;
+                              const line = {
+                                kind: "combo" as const,
                                 boxId: detail.box_id ?? undefined,
                                 comboId: detail.id,
                                 flavorIds: detail.flavor_ids,
                                 unitPrice: price,
                                 name: detail.name,
-                              })
-                            }
-                            className={`flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === `combo:${detail.id}` ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
-                          >
-                            {added === `combo:${detail.id}` ? (
-                              <>
-                                <IconCheck width={13} height={13} /> Đã thêm
-                              </>
-                            ) : (
-                              <>
-                                <IconCart width={13} height={13} /> Thêm vào giỏ
-                              </>
-                            )}
-                          </button>
+                              };
+                              return (
+                                <>
+                                  <button
+                                    onClick={() => addToCart(key2, line, detailQty)}
+                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key2 ? "border-emerald-500 bg-emerald-500 text-white" : "border-gold bg-white text-gold"}`}
+                                  >
+                                    {added === key2 ? (
+                                      <>
+                                        <IconCheck width={13} height={13} /> Đã thêm
+                                      </>
+                                    ) : (
+                                      <>
+                                        <IconCart width={13} height={13} /> Thêm vào giỏ
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => addToCart(key2, line, detailQty, true)}
+                                    className="flex flex-1 flex-col items-center justify-center rounded-full bg-gold py-1.5 text-[12px] font-bold uppercase tracking-wide text-white transition active:scale-95"
+                                  >
+                                    Mua ngay
+                                    <span className="text-[10px] font-medium normal-case opacity-90">
+                                      {formatMoney(price * detailQty, region)}
+                                      {!detail.charge_ship && " · Freeship"}
+                                    </span>
+                                  </button>
+                                </>
+                              );
+                            })()}
+                          </div>
                         </div>
                       )}
                     </>
@@ -1084,7 +1264,7 @@ export default function ProductCatalog({
                                   name: `${detail.name} · ${o.name}`,
                                 })
                               }
-                              className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-navy-deep"}`}
+                              className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-[12px] font-semibold uppercase tracking-wide transition active:scale-95 ${added === key ? "bg-emerald-500 text-white" : "bg-gold text-white"}`}
                             >
                               {added === key ? (
                                 <>
@@ -1106,6 +1286,16 @@ export default function ProductCatalog({
             </div>
           </div>
         </div>
+      )}
+
+      {quickChat && (
+        <QuickOrderChat
+          boxes={boxes}
+          flavors={flavors}
+          combos={combos}
+          region={region}
+          onClose={() => setQuickChat(false)}
+        />
       )}
 
       {lightbox && (

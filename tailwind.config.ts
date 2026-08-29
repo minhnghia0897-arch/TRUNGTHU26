@@ -1,6 +1,9 @@
 import type { Config } from "tailwindcss";
 
-// Design tokens — refresh 2026: kem + gold + navy (giữ tên token cũ để toàn app đổi tông).
+// Design tokens — refresh 2026: tông TikTok Shop (nền trắng, đen than, đỏ hồng).
+// GIỮ NGUYÊN TÊN token cũ (navy/gold/cream…) để toàn app đổi tông một lượt —
+// đúng cách lần đổi kem-gold-navy đã làm. Bảng màu gốc của TikTok:
+//   đen than #161823 · đỏ hồng #FE2C55 · aqua #25F4EE · nền trắng.
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -10,16 +13,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // "maroon" giờ là navy sâu — màu dark chủ đạo (header, badge, chữ tiêu đề)
-        maroon: "#1C2B45",
-        "maroon-deep": "#14203A",
-        navy: "#1C2B45",
-        cream: "#F5F5F5",
-        "cream-soft": "#FAFAFA",
-        gold: "#C6A24C",
-        "gold-deep": "#A9822B",
-        ink: "#2B2620",
-        line: "#E7DCC6",
+        // "navy"/"maroon" giờ là đen than TikTok — màu dark chủ đạo (header, badge)
+        maroon: "#161823",
+        "maroon-deep": "#000000",
+        navy: "#161823",
+        cream: "#FFFFFF",
+        "cream-soft": "#F8F8F8",
+        // "gold" giờ là đỏ hồng TikTok — màu nhấn/CTA; bản deep để chữ trên nền trắng
+        gold: "#FE2C55",
+        "gold-deep": "#D9224A",
+        ink: "#161823",
+        line: "#E3E3E4",
       },
       fontFamily: {
         // toàn bộ dùng Be Vietnam Pro
@@ -39,7 +43,7 @@ const config: Config = {
         wide2: "0.12em",
       },
       boxShadow: {
-        card: "0 6px 20px -8px rgba(28,43,69,0.18)",
+        card: "0 6px 20px -8px rgba(22,24,35,0.16)",
       },
       keyframes: {
         shimmer: {

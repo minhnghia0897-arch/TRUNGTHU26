@@ -2,14 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tông TikTok Shop — cùng giá trị với tailwind.config.ts, đổi là đổi CẢ HAI. */
 :root {
-  --navy: #1c2b45;
-  --navy-deep: #14203a;
-  --cream: #f5f5f5;
-  --gold: #c6a24c;
-  --gold-deep: #a9822b;
-  --ink: #2b2620;
-  --line: #e7dac3;
+  --navy: #161823;
+  --navy-deep: #000000;
+  --cream: #ffffff;
+  --gold: #fe2c55;
+  --gold-deep: #d9224a;
+  --ink: #161823;
+  --line: #e3e3e4;
 }
 
 html,
@@ -59,7 +60,7 @@ body {
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: #e6e2d8;
+  background: #ececec;
   border-radius: 8px;
 }
 .skeleton::after {

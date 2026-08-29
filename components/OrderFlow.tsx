@@ -719,7 +719,7 @@ export default function OrderFlow({
         <a href="/san-pham" aria-label="Về trang chủ" className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-cream/70 hover:text-gold">
           <span className="text-base leading-none">←</span> Trang chủ
         </a>
-        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-[#E8C877] hover:!text-gold">Doran King</a>
+        <a href="/san-pham" className="title-heritage absolute left-1/2 -translate-x-1/2 text-base tracking-[0.18em] !text-white hover:!text-gold">Doran King</a>
       </header>
 
       {/* stepper */}
@@ -734,7 +734,7 @@ export default function OrderFlow({
               className={`flex-1 py-2 text-center text-[9px] uppercase tracking-wide ${active ? "text-gold opacity-100" : "opacity-50"}`}
             >
               <div
-                className={`mx-auto mb-1 flex h-[18px] w-[18px] items-center justify-center rounded-full border font-serif text-[10px] ${doneStep ? "border-gold bg-gold text-maroon-deep" : "border-current"}`}
+                className={`mx-auto mb-1 flex h-[18px] w-[18px] items-center justify-center rounded-full border font-serif text-[10px] ${doneStep ? "border-gold bg-gold text-white" : "border-current"}`}
               >
                 {doneStep ? "✓" : n}
               </div>
@@ -755,7 +755,7 @@ export default function OrderFlow({
                 <p className="text-[13px] opacity-60">Giỏ đang trống.</p>
                 <a
                   href="/san-pham"
-                  className="mt-3 inline-block rounded-full bg-gold px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-maroon-deep"
+                  className="mt-3 inline-block rounded-full bg-gold px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-white"
                 >
                   Xem bộ sưu tập
                 </a>
@@ -799,7 +799,7 @@ export default function OrderFlow({
                         <IconPlus width={14} height={14} />
                       </button>
                     </div>
-                    <span className="font-serif text-[15px] font-semibold text-maroon-deep">
+                    <span className="font-serif text-[15px] font-semibold text-white">
                       {fmt(it.unitPrice * it.qty)}
                     </span>
                   </div>
@@ -848,7 +848,7 @@ export default function OrderFlow({
                 ) : (
                   <div className="font-serif text-[13px] uppercase tracking-wide text-maroon">{box.name}</div>
                 )}
-                <span className="font-serif font-semibold text-maroon-deep">{fmt(builderTotal)}</span>
+                <span className="font-serif font-semibold text-white">{fmt(builderTotal)}</span>
               </div>
               {box.description && (
                 <p className="mt-1 text-[11px] opacity-65">{box.description}</p>
@@ -906,7 +906,7 @@ export default function OrderFlow({
             </div>
             <button
               onClick={addBox}
-              className="mt-3 w-full rounded bg-gold py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep"
+              className="mt-3 w-full rounded bg-gold py-3 font-serif text-xs font-semibold uppercase tracking-widest text-white"
             >
               Thêm hộp vào giỏ
             </button>
@@ -942,7 +942,7 @@ export default function OrderFlow({
                         <button onClick={() => setQty(it.uid, 1)} aria-label="Tăng" className="grid h-7 w-7 place-items-center text-maroon hover:bg-cream"><IconPlus width={12} height={12} /></button>
                       </div>
                     )}
-                    <span className="font-serif text-[13px] font-semibold text-maroon-deep">{fmt(it.unitPrice * lineTotalQty(it))}</span>
+                    <span className="font-serif text-[13px] font-semibold text-white">{fmt(it.unitPrice * lineTotalQty(it))}</span>
                   </div>
                 </div>
               ))}
@@ -966,7 +966,7 @@ export default function OrderFlow({
                 <Label>Ngày muốn nhận</Label>
                 <input type="date" value={exDate} onChange={(e) => r0 && setR(r0.uid, "desiredDate", e.target.value)} className="w-full rounded border border-line bg-white p-2.5 text-sm" />
                 {suggestedDate && (
-                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}>
+                  <button type="button" onClick={() => r0 && setR(r0.uid, "desiredDate", suggestedDate)} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${exDate === suggestedDate ? "border-gold bg-gold text-white" : "border-gold bg-gold/5 text-gold-deep hover:bg-gold/15"}`}>
                     <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
                   </button>
                 )}
@@ -1206,7 +1206,7 @@ export default function OrderFlow({
             </div>
 
             {/* ===== THANH TOÁN (trang riêng sau khi đặt) ===== */}
-            <div className="mt-4 rounded-lg border-2 border-gold bg-[#fffdf7] p-4">
+            <div className="mt-4 rounded-lg border-2 border-gold bg-gold/5 p-4">
               <div className="flex items-center justify-between">
                 <span className="eyebrow">Thanh toán</span>
                 <span className="font-serif text-[18px] font-bold text-maroon">{fmt(done.grandTotal)}</span>
@@ -1214,11 +1214,11 @@ export default function OrderFlow({
               <div className="mt-2 flex items-center justify-between rounded border border-gold/50 bg-white px-2.5 py-1.5 text-[12px]">
                 <span className="opacity-60">Nội dung CK</span>
                 <span className="flex items-center gap-2">
-                  <b className="font-serif tracking-wide text-maroon-deep">{done.transferCode}</b>
+                  <b className="font-serif tracking-wide text-white">{done.transferCode}</b>
                   <CopyBtn value={done.transferCode} />
                 </span>
               </div>
-              <p className="mt-2 text-[11px] text-[#b8862f]">Chuyển tới <b>một trong hai</b> tài khoản dưới · ghi đúng nội dung CK ở trên.</p>
+              <p className="mt-2 text-[11px] text-gold-deep">Chuyển tới <b>một trong hai</b> tài khoản dưới · ghi đúng nội dung CK ở trên.</p>
               {/* TK Hàn ĐỨNG TRƯỚC: khách trả tiền Hàn là chủ yếu, nên cái hay
                   dùng phải nằm trên, không bắt cuộn qua cái ít dùng. */}
               <div className="mt-3">
@@ -1283,7 +1283,7 @@ export default function OrderFlow({
               </button>
               <a
                 href="/tra-cuu"
-                className="inline-flex items-center justify-center rounded bg-gold px-4 py-3 font-serif text-xs font-semibold uppercase tracking-wide text-maroon-deep transition active:scale-95"
+                className="inline-flex items-center justify-center rounded bg-gold px-4 py-3 font-serif text-xs font-semibold uppercase tracking-wide text-white transition active:scale-95"
               >
                 Theo dõi đơn
               </a>
@@ -1296,7 +1296,7 @@ export default function OrderFlow({
       {/* toast sau khi copy để gửi qua Zalo */}
       {shareHint === "zalo" && (
         <div className="fixed inset-x-0 bottom-[68px] z-30 mx-auto max-w-app px-4">
-          <div className="rounded-lg border border-gold bg-[#fff8ec] px-3 py-2 text-center text-[12px] text-[#b8862f] shadow">
+          <div className="rounded-lg border border-gold bg-gold/5 px-3 py-2 text-center text-[12px] text-gold-deep shadow">
             Đã copy nội dung đơn — dán vào khung chat Zalo rồi gửi nhé.
           </div>
         </div>
@@ -1337,7 +1337,7 @@ export default function OrderFlow({
               target="_blank"
               rel="noreferrer"
               onClick={() => setShareOpen(false)}
-              className="mt-2 block rounded-lg bg-gold py-3 text-center font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep"
+              className="mt-2 block rounded-lg bg-gold py-3 text-center font-serif text-xs font-bold uppercase tracking-wide text-white"
             >
               Mở Messenger fanpage
             </a>
@@ -1368,7 +1368,7 @@ export default function OrderFlow({
           </button>
           <button
             onClick={expressReview}
-            className="rounded-lg bg-gold px-5 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep"
+            className="rounded-lg bg-gold px-5 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-white"
           >
             Đặt hàng
           </button>
@@ -1392,7 +1392,7 @@ export default function OrderFlow({
           <button
             onClick={submit}
             disabled={submitting}
-            className="rounded-lg bg-gold px-4 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-maroon-deep disabled:opacity-40"
+            className="rounded-lg bg-gold px-4 py-2.5 font-serif text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
           >
             {submitting ? "Đang tạo…" : "Xác nhận đặt đơn"}
           </button>
@@ -1420,7 +1420,7 @@ export default function OrderFlow({
             <button
               onClick={next}
               disabled={submitting}
-              className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-maroon-deep disabled:opacity-40"
+              className="rounded bg-gold px-5 py-3 font-serif text-xs font-semibold uppercase tracking-widest text-white disabled:opacity-40"
             >
               {step === 3 ? (submitting ? "Đang tạo…" : "Xác nhận đặt đơn") : "Tiếp"}
             </button>
@@ -1501,11 +1501,11 @@ function BankCard({
   qrHasAmount?: boolean;
 }) {
   return (
-    <div className={`rounded-lg border p-4 ${primary ? "border-gold bg-[#fffdf7]" : "border-line bg-white"}`}>
+    <div className={`rounded-lg border p-4 ${primary ? "border-gold bg-gold/5" : "border-line bg-white"}`}>
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold text-maroon">{data.title}</span>
         {primary && (
-          <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-maroon-deep">Nên dùng</span>
+          <span className="rounded-sm bg-gold px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">Nên dùng</span>
         )}
       </div>
 
@@ -1537,7 +1537,7 @@ function BankCard({
         <div className="flex items-center justify-between gap-2">
           <span className="opacity-60">Số tài khoản</span>
           <span className="flex items-center gap-2">
-            <b className="font-serif tracking-wide text-maroon-deep">{data.number}</b>
+            <b className="font-serif tracking-wide text-white">{data.number}</b>
             <CopyBtn value={data.number.replace(/\s/g, "")} />
           </span>
         </div>
@@ -1669,7 +1669,7 @@ function RecipientsEditor({
             <button
               type="button"
               onClick={() => setR(r.uid, "desiredDate", suggestedDate)}
-              className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-maroon-deep" : "border-gold bg-[#fff8ec] text-[#b8862f] hover:bg-gold/15"}`}
+              className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] transition active:scale-95 ${r.desiredDate === suggestedDate ? "border-gold bg-gold text-white" : "border-gold bg-gold/5 text-gold-deep hover:bg-gold/15"}`}
             >
               <IconMoon width={12} height={12} /> Trước Trung Thu 1 tuần · {suggestedDDMM}
             </button>
@@ -1773,7 +1773,7 @@ function RecipientBlocks({
               {r.desiredDate ? ` · nhận ${r.desiredDate.slice(8, 10)}/${r.desiredDate.slice(5, 7)}/${r.desiredDate.slice(0, 4)}` : ""}
             </div>
             {r.note?.trim() && (
-              <div className="mt-1 rounded border border-dashed border-gold/50 bg-[#fff8ec] px-2 py-1 text-[11px] text-[#8a6a24]">
+              <div className="mt-1 rounded border border-dashed border-gold/50 bg-gold/5 px-2 py-1 text-[11px] text-[#8a6a24]">
                 📝 {r.note.trim()}
               </div>
             )}
@@ -1788,7 +1788,7 @@ function RecipientBlocks({
                         <span className="block text-[10px] text-ink/55">{lineFlavors(it)}</span>
                       )}
                     </span>
-                    <span className="flex-none font-serif text-maroon-deep">{fmt(it.unitPrice * q)}</span>
+                    <span className="flex-none font-serif text-white">{fmt(it.unitPrice * q)}</span>
                   </div>
                 );
               })}

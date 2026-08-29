@@ -1,15 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { findOrdersByPhone, isLookupConfigured } from "@/lib/orders/lookup";
+import { findManagedOrders } from "@/lib/orders/manage";
 import { tooMany, clientIp } from "@/lib/rateLimit";
 
-// Tra cứu đơn theo SĐT — công khai, KHÔNG qua middleware đăng nhập.
-// Vì công khai nên phải chặn dò danh bạ: giới hạn số lần gọi theo IP và theo SĐT
-// (bộ đếm dùng chung ở lib/rateLimit).
+// Bảng đơn cho người đặt nhiều đơn (KOL/đại lý) — công khai, chìa khoá là SĐT
+// người đặt nên rate-limit như trang tra cứu.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const MAX_PER_IP = 12; // một người tra vài số là bình thường
-const MAX_PER_PHONE = 5; // cùng một số bị tra dồn dập → gần như chắc chắn là dò
 
 export async function POST(req: NextRequest) {
   let phone = "";
@@ -21,21 +17,18 @@ export async function POST(req: NextRequest) {
   if (phone.length < 6)
     return NextResponse.json({ ok: false, error: "Nhập số điện thoại đã đặt hàng." }, { status: 400 });
 
-  if (tooMany(`ip:${clientIp(req)}`, MAX_PER_IP) || tooMany(`phone:${phone}`, MAX_PER_PHONE))
+  if (tooMany(`mip:${clientIp(req)}`, 12) || tooMany(`mphone:${phone}`, 5))
     return NextResponse.json(
       { ok: false, error: "Anh/chị tra hơi nhanh, đợi một phút rồi thử lại giúp em." },
       { status: 429 },
     );
 
-  if (!isLookupConfigured())
-    return NextResponse.json({ ok: true, configured: false, orders: [] });
-
   try {
-    const orders = await findOrdersByPhone(phone);
-    return NextResponse.json({ ok: true, configured: true, orders });
+    const result = await findManagedOrders(phone);
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Không tra cứu được.";
-    console.error("LOOKUP_FAILED", message);
+    console.error("MANAGE_LOOKUP_FAILED", message);
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 }
