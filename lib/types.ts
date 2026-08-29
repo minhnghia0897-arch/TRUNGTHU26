@@ -44,6 +44,12 @@ export interface Box {
   active: boolean;
 }
 
+/** Bộ vị bấm-một-phát cho set khách tự chọn: "SET A" = 4 vị định sẵn. */
+export interface FlavorPreset {
+  name: string;
+  flavor_ids: string[];
+}
+
 export interface Flavor {
   id: string;
   name: string;
@@ -120,6 +126,14 @@ export interface Combo {
    * bật chọn vị là các lựa chọn nhân cố định ngừng hiệu lực (xem `comboOptions`).
    */
   pick_count?: number;
+  /**
+   * Bộ vị bấm-một-phát cho set tự chọn (§0027): "SET A" = 4 vị định sẵn.
+   *
+   * Chỉ là ĐƯỜNG TẮT — bấm vào là điền đủ ngăn, khách vẫn sửa lại từng vị được.
+   * Rỗng = chỉ có tự chọn. Vị trong bộ phải nằm trong `flavor_ids`, không thì
+   * bấm vào ra bộ không hợp lệ và máy chủ từ chối lúc đặt.
+   */
+  flavor_presets?: FlavorPreset[];
   /**
    * Giá bán của set. Có giá = giá đó là giá bán, hộp chỉ còn là quy cách.
    * Thiếu = suy từ hộp như nếp cũ (combo = hộp tự chọn đã điền sẵn).

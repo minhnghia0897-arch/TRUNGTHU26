@@ -24,6 +24,8 @@ interface PickLine {
   pickCount: number;
   pool: { id: string; name: string }[];
   flavorIds: string[];
+  /** Bộ vị bấm-một-phát của set (SET A…D) — rỗng thì chỉ có tự bốc. */
+  presets?: { name: string; flavorIds: string[] }[];
 }
 
 interface Row {
@@ -74,6 +76,19 @@ const day = (iso: string) => {
 };
 
 const regionOf = (c: Currency): Region => (c === "vnd" ? "vn" : "kr");
+
+/** Hai bộ vị giống nhau theo kiểu TÚI (không xét thứ tự) — cùng luật với máy chủ. */
+const sameBag = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false;
+  const count = new Map<string, number>();
+  for (const id of a) count.set(id, (count.get(id) ?? 0) + 1);
+  for (const id of b) {
+    const n = count.get(id);
+    if (!n) return false;
+    count.set(id, n - 1);
+  }
+  return true;
+};
 
 export default function LookupFlow() {
   const [phone, setPhone] = useState("");
@@ -443,6 +458,28 @@ export default function LookupFlow() {
                                             {cur.length}/{p.pickCount} vị
                                           </span>
                                         </div>
+                                        {/* bấm một bộ là đủ cả khay; bấm lại bộ đang chọn để bốc tay */}
+                                        {!!p.presets?.length && (
+                                          <div className="mb-1.5 flex flex-wrap gap-1">
+                                            {p.presets.map((ps) => {
+                                              const on = sameBag(ps.flavorIds, cur);
+                                              return (
+                                                <button
+                                                  key={ps.name}
+                                                  onClick={() => setCur(on ? [] : [...ps.flavorIds])}
+                                                  title={ps.flavorIds
+                                                    .map((id) => p.pool.find((f) => f.id === id)?.name ?? "Vị")
+                                                    .join(" · ")}
+                                                  className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${
+                                                    on ? "border-gold bg-gold text-white" : "border-line text-navy"
+                                                  }`}
+                                                >
+                                                  {ps.name}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                         {p.pool.map((f) => (
                                           <div key={f.id} className="flex items-center justify-between gap-1 py-0.5 text-[11px]">
                                             <span className="min-w-0 flex-1 truncate">{f.name}</span>

@@ -15,6 +15,9 @@ import {
   comboPickCount,
   comboPickPool,
   describePickedFlavors,
+  describeComboPick,
+  comboPresets,
+  matchComboPreset,
   flavorShortName,
 } from "@/lib/pricing";
 import QuickOrderChat from "@/components/QuickOrderChat";
@@ -1027,8 +1030,51 @@ export default function ProductCatalog({
                         </div>
                       </div>
                       <p className="mt-1 text-[11.5px] text-ink/50">
-                        Thích vị nào lấy vị đó, lấy trùng cũng được — chọn nào cũng cùng một giá.
+                        Bấm một bộ có sẵn cho nhanh, hoặc tự bốc từng vị bên dưới — lấy trùng cũng
+                        được, chọn kiểu nào cũng cùng một giá.
                       </p>
+
+                      {(() => {
+                        // Bộ vị bấm-một-phát (§0027): một chạm là đủ cả khay.
+                        // Bấm lại bộ đang chọn = bỏ chọn, về khay trống để tự bốc.
+                        const presets = comboPresets(detail, flavors);
+                        if (!presets.length) return null;
+                        const active = matchComboPreset(detail, chose, flavors);
+                        return (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {presets.map((p) => {
+                              const on = active === p.name;
+                              return (
+                                <button
+                                  key={p.name}
+                                  type="button"
+                                  onClick={() =>
+                                    setPicks(
+                                      on
+                                        ? {}
+                                        : p.flavor_ids.reduce<Record<string, number>>(
+                                            (m, id) => ({ ...m, [id]: (m[id] ?? 0) + 1 }),
+                                            {},
+                                          ),
+                                    )
+                                  }
+                                  title={describePickedFlavors(p.flavor_ids, flavors)}
+                                  className={`rounded-full border px-3 py-1.5 text-[11.5px] font-semibold transition active:scale-95 ${
+                                    on
+                                      ? "border-gold bg-gold text-white"
+                                      : "border-line bg-white text-navy hover:border-gold"
+                                  }`}
+                                >
+                                  {p.name}
+                                  <span className={`ml-1.5 font-normal ${on ? "text-white/85" : "text-ink/45"}`}>
+                                    {describePickedFlavors(p.flavor_ids, flavors)}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       <PickTray
                         slots={need}
@@ -1091,7 +1137,7 @@ export default function ProductCatalog({
                                 boxId: detail.box_id ?? undefined,
                                 comboId: detail.id,
                                 flavorIds: chose,
-                                flavorText: describePickedFlavors(chose, flavors),
+                                flavorText: describeComboPick(detail, chose, flavors),
                                 unitPrice: price,
                                 name: detail.name,
                               };
