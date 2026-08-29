@@ -17,16 +17,35 @@ import {
 import { currencyOf } from "@/lib/money";
 import type { Region } from "@/lib/types";
 
-/** Dòng đơn → tiêu hao kho theo khoá sản phẩm. Cùng quy ước với parseKey(). */
-function linesToConsume(lines: { kind: string; comboId?: string; boxId?: string; flavorIds?: string[]; qty: number }[]) {
+/**
+ * Dòng đơn → tiêu hao kho theo khoá sản phẩm. Cùng quy ước với parseKey().
+ *
+ * SET KHÁCH TỰ CHỌN VỊ trừ HAI tầng (§0027): một suất set (vỏ hộp, thiệp, quy
+ * cách) VÀ từng cái bánh khách bốc. Bán 100 hộp mà chỉ trừ set thì web vẫn báo
+ * "còn 98 set" trong khi lò đã hết Lava — tới lúc đóng hàng mới biết.
+ *
+ * Set RUỘT CỐ ĐỊNH vẫn chỉ trừ set như cũ: shop đếm sẵn theo hộp, không đếm
+ * theo bánh, đụng vào là tồn vị tụt âm oan.
+ *
+ * `consume` này cũng là thứ đường HOÀN KHO đọc lúc huỷ đơn, nên hoàn trả lại
+ * đủ cả set lẫn từng vị mà không phải sửa thêm chỗ nào.
+ */
+function linesToConsume(
+  lines: { kind: string; comboId?: string; boxId?: string; flavorIds?: string[]; qty: number }[],
+  pickCombos: Set<string>,
+) {
   const c: Record<string, number> = {};
   const add = (k: string | undefined, n: number) => {
     if (!k || n <= 0) return;
     c[k] = (c[k] ?? 0) + n;
   };
   for (const l of lines) {
-    if (l.kind === "combo" && l.comboId) add(`combo:${l.comboId}`, l.qty);
-    else if (l.kind === "box" && l.boxId) add(`box:${l.boxId}`, l.qty);
+    if (l.kind === "combo" && l.comboId) {
+      add(`combo:${l.comboId}`, l.qty);
+      // bốc trùng vị thì trừ đúng số lần trùng: "Lava ×2" = 2 cái Lava/hộp
+      if (pickCombos.has(l.comboId))
+        for (const id of l.flavorIds ?? []) add(`flavor:${id}`, l.qty);
+    } else if (l.kind === "box" && l.boxId) add(`box:${l.boxId}`, l.qty);
     else if (l.kind === "la" && l.flavorIds?.[0]) add(`flavor:${l.flavorIds[0]}`, l.qty);
   }
   return c;
@@ -248,6 +267,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return `${base}${times}${vi.length ? ` (${vi.join(", ")})` : ""}`;
   };
 
+  // Set nào cho khách tự chọn vị — chỉ những set này mới trừ kho theo từng
+  // cái bánh; set ruột cố định giữ nếp đếm theo hộp.
+  const pickComboIds = new Set(combos.filter((c) => comboPickCount(c) > 0).map((c) => c.id));
+
   // --- phí ship + handling theo recipient, quy đổi qua fx snapshot ---
   // Tiền của MỌI kiện đều ở tiền tệ NGƯỜI ĐẶT (§5: một đơn một tiền tệ).
   // Kho giao là chuyện khác, nằm ở trường `region` — hai trục không trộn.
@@ -284,7 +307,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         handling: fee.handling,
         fee: fee.shipping + fee.handling,
         total: sub + fee.shipping + fee.handling,
-        consume: linesToConsume(mine),
+        consume: linesToConsume(mine, pickComboIds),
       };
     })
     .filter((x): x is OrderParcel => x !== null);
@@ -480,13 +503,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     // khách nên chủ shop không bao giờ thấy số tồn thay đổi.
     // Không chặn khi hết hàng — tồn xuống âm và bảng điều hành báo đỏ, hợp với
     // mùa Trung Thu đặt trước nhiều.
+    // Trừ đúng những gì đã ghi vào `consume` của từng kiện — một nguồn sự thật
+    // duy nhất, nên lúc huỷ đơn hoàn lại khớp từng con số, không lệch.
     const moves: StockMove[] = [];
-    for (const l of pricedLines) {
-      if (l.kind === "combo" && l.comboId) moves.push({ kind: "combo", id: l.comboId, qty: l.qty });
-      else if (l.kind === "box" && l.boxId) moves.push({ kind: "box", id: l.boxId, qty: l.qty });
-      else if (l.kind === "la" && l.flavorIds?.[0])
-        moves.push({ kind: "flavor", id: l.flavorIds[0], qty: l.qty });
-    }
+    for (const p of shipments)
+      for (const [key, qty] of Object.entries(p.consume)) {
+        const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+        if (kind === "combo" || kind === "box" || kind === "flavor")
+          moves.push({ kind, id, qty });
+      }
     await adjustStock(moves, -1);
 
     // Ghi lại token đã sinh ra đơn nào — để không dùng lại nhầm và để đối soát.
